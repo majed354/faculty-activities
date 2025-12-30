@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قسم القراءات | لوحة الأنشطة العلمية</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- PapaParse for CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- خلفية متحركة -->
+    <div class="animated-bg">
+        <div class="floating-shape shape-1"></div>
+        <div class="floating-shape shape-2"></div>
+        <div class="floating-shape shape-3"></div>
+        <div class="geometric-pattern"></div>
+    </div>
+
+    <!-- الشريط العلوي -->
+    <header class="main-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="30" cy="30" r="28" stroke="currentColor" stroke-width="2"/>
+                        <path d="M30 8 L30 52 M8 30 L52 30" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+                        <circle cx="30" cy="30" r="18" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="30" cy="30" r="8" fill="currentColor"/>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>قسم القراءات</h1>
+                    <p>جامعة أم القرى</p>
+                </div>
+            </div>
+            
+            <div class="header-controls">
+                <div class="year-selector">
+                    <label for="yearSelect">السنة الأكاديمية</label>
+                    <select id="yearSelect"></select>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- التنقل الرئيسي -->
+    <nav class="main-nav">
+        <div class="nav-container">
+            <button class="nav-btn active" data-tab="dashboard">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">لوحة المعلومات</span>
+            </button>
+            <button class="nav-btn" data-tab="quality">
+                <span class="nav-icon">📈</span>
+                <span class="nav-text">مؤشرات الجودة</span>
+            </button>
+            <button class="nav-btn" data-tab="theses">
+                <span class="nav-icon">📚</span>
+                <span class="nav-text">الإشراف العلمي</span>
+            </button>
+            <button class="nav-btn" data-tab="publications">
+                <span class="nav-icon">📝</span>
+                <span class="nav-text">البحوث</span>
+            </button>
+            <button class="nav-btn" data-tab="events">
+                <span class="nav-icon">🎯</span>
+                <span class="nav-text">الفعاليات</span>
+            </button>
+            <button class="nav-btn" data-tab="awards">
+                <span class="nav-icon">🏆</span>
+                <span class="nav-text">الجوائز</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- المحتوى الرئيسي -->
+    <main class="main-content">
+        
+        <!-- ===== لوحة المعلومات ===== -->
+        <section id="dashboard" class="tab-content active">
+            <!-- الإحصائيات السريعة -->
+            <div class="quick-stats">
+                <div class="stat-card stat-faculty">
+                    <div class="stat-icon">👨‍🏫</div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="totalFaculty">0</span>
+                        <span class="stat-label">عضو هيئة تدريس</span>
+                    </div>
+                    <div class="stat-decoration"></div>
+                </div>
+                <div class="stat-card stat-publications">
+                    <div class="stat-icon">📄</div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="totalPublications">0</span>
+                        <span class="stat-label">بحث منشور</span>
+                    </div>
+                    <div class="stat-decoration"></div>
+                </div>
+                <div class="stat-card stat-theses">
+                    <div class="stat-icon">🎓</div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="totalTheses">0</span>
+                        <span class="stat-label">رسالة علمية</span>
+                    </div>
+                    <div class="stat-decoration"></div>
+                </div>
+                <div class="stat-card stat-events">
+                    <div class="stat-icon">📅</div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="totalEvents">0</span>
+                        <span class="stat-label">فعالية علمية</span>
+                    </div>
+                    <div class="stat-decoration"></div>
+                </div>
+            </div>
+
+            <!-- القسم الرئيسي: المتصدرون + آخر النشاطات -->
+            <div class="dashboard-grid">
+                <!-- المتصدرون -->
+                <div class="dashboard-card leaderboard-card">
+                    <div class="card-header">
+                        <h2>🏆 المتصدرون</h2>
+                        <span class="card-badge">الأكثر نشاطاً</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="podium-container">
+                            <div class="podium-item second">
+                                <div class="podium-avatar">🥈</div>
+                                <div class="podium-name" id="second-name">-</div>
+                                <div class="podium-points" id="second-points">0 نقطة</div>
+                                <div class="podium-bar"></div>
+                            </div>
+                            <div class="podium-item first">
+                                <div class="podium-crown">👑</div>
+                                <div class="podium-avatar">🥇</div>
+                                <div class="podium-name" id="first-name">-</div>
+                                <div class="podium-points" id="first-points">0 نقطة</div>
+                                <div class="podium-bar"></div>
+                            </div>
+                            <div class="podium-item third">
+                                <div class="podium-avatar">🥉</div>
+                                <div class="podium-name" id="third-name">-</div>
+                                <div class="podium-points" id="third-points">0 نقطة</div>
+                                <div class="podium-bar"></div>
+                            </div>
+                        </div>
+                        <div class="leaderboard-list" id="leaderboardList">
+                            <!-- يُملأ بـ JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- آخر النشاطات -->
+                <div class="dashboard-card activities-card">
+                    <div class="card-header">
+                        <h2>⚡ آخر النشاطات</h2>
+                        <span class="card-badge">آخر 10 أنشطة</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="activities-timeline" id="activitiesTimeline">
+                            <!-- يُملأ بـ JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- الرسوم البيانية -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>توزيع البحوث حسب الشهر</h3>
+                    <canvas id="publicationsChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>توزيع الرسائل</h3>
+                    <canvas id="thesesChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== مؤشرات الجودة والأداء ===== -->
+        <section id="quality" class="tab-content">
+            <div class="quality-header">
+                <h2>📈 مؤشرات الجودة والأداء</h2>
+                <p>مؤشرات قياس الأداء الأكاديمي وفق معايير الجودة والاعتماد</p>
+            </div>
+
+            <!-- المؤشرات الرئيسية -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">📊</span>
+                        <span class="kpi-title">نسبة النشر العلمي</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiPublishingRate">0</span>
+                        <span class="kpi-unit">%</span>
+                    </div>
+                    <div class="kpi-progress">
+                        <div class="kpi-progress-bar" id="kpiPublishingRateBar" style="width: 0%"></div>
+                    </div>
+                    <div class="kpi-description">نسبة الأعضاء الذين لديهم بحث منشور واحد على الأقل</div>
+                    <div class="kpi-formula">المعادلة: (عدد الأعضاء الناشرين ÷ إجمالي الأعضاء) × 100</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">📚</span>
+                        <span class="kpi-title">معدل البحوث لكل عضو</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiPubPerMember">0</span>
+                        <span class="kpi-unit">بحث</span>
+                    </div>
+                    <div class="kpi-gauge">
+                        <div class="gauge-fill" id="kpiPubPerMemberGauge"></div>
+                        <div class="gauge-marker"></div>
+                    </div>
+                    <div class="kpi-description">متوسط عدد البحوث المنشورة لكل عضو</div>
+                    <div class="kpi-formula">المعادلة: إجمالي البحوث ÷ عدد الأعضاء</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">📈</span>
+                        <span class="kpi-title">معدل الاقتباسات</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiCitations">0</span>
+                        <span class="kpi-unit">اقتباس/عضو</span>
+                    </div>
+                    <div class="kpi-mini-chart" id="kpiCitationsMini"></div>
+                    <div class="kpi-description">متوسط الاقتباسات التقديرية لكل عضو</div>
+                    <div class="kpi-formula">المعادلة: مجموع الاقتباسات ÷ عدد الأعضاء</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">🎓</span>
+                        <span class="kpi-title">نسبة نشر الطلاب</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiStudentPub">0</span>
+                        <span class="kpi-unit">%</span>
+                    </div>
+                    <div class="kpi-progress">
+                        <div class="kpi-progress-bar student-bar" id="kpiStudentPubBar" style="width: 0%"></div>
+                    </div>
+                    <div class="kpi-description">نسبة البحوث التي شارك فيها طلاب</div>
+                    <div class="kpi-formula">المعادلة: (بحوث الطلاب ÷ إجمالي الطلاب) × 100</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">🏅</span>
+                        <span class="kpi-title">معدل الإشراف</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiSupervision">0</span>
+                        <span class="kpi-unit">رسالة/عضو</span>
+                    </div>
+                    <div class="kpi-bars">
+                        <div class="kpi-bar-item">
+                            <span>دكتوراه</span>
+                            <div class="mini-bar"><div class="mini-bar-fill phd" id="kpiPhdBar"></div></div>
+                            <span id="kpiPhdCount">0</span>
+                        </div>
+                        <div class="kpi-bar-item">
+                            <span>ماجستير</span>
+                            <div class="mini-bar"><div class="mini-bar-fill masters" id="kpiMastersBar"></div></div>
+                            <span id="kpiMastersCount">0</span>
+                        </div>
+                    </div>
+                    <div class="kpi-description">متوسط الرسائل لكل عضو</div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">🏆</span>
+                        <span class="kpi-title">الابتكار والتميز</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiInnovation">0</span>
+                        <span class="kpi-unit">إنجاز</span>
+                    </div>
+                    <div class="kpi-icons-row" id="kpiInnovationIcons">
+                        <!-- أيقونات الجوائز والبراءات -->
+                    </div>
+                    <div class="kpi-description">إجمالي الجوائز وبراءات الاختراع</div>
+                </div>
+            </div>
+
+            <!-- رسم بياني للمقارنة -->
+            <div class="quality-chart-section">
+                <div class="chart-card large">
+                    <h3>تحليل الأداء</h3>
+                    <canvas id="qualityRadarChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== الإشراف العلمي ===== -->
+        <section id="theses" class="tab-content">
+            <div class="section-header">
+                <h2>📚 الإشراف العلمي</h2>
+                <div class="filters">
+                    <select id="thesesTypeFilter">
+                        <option value="">جميع الأنواع</option>
+                        <option value="دكتوراه">دكتوراه</option>
+                        <option value="ماجستير">ماجستير</option>
+                    </select>
+                    <select id="thesesStatusFilter">
+                        <option value="">جميع الحالات</option>
+                        <option value="منجزة">منجزة</option>
+                        <option value="جارية">جارية</option>
+                    </select>
+                </div>
+            </div>
+            <div class="data-table-container">
+                <table class="data-table" id="thesesTable">
+                    <thead>
+                        <tr>
+                            <th>النوع</th>
+                            <th>الطالب</th>
+                            <th>عنوان الرسالة</th>
+                            <th>المشرف</th>
+                            <th>الحالة</th>
+                            <th>تاريخ المناقشة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="thesesTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ===== البحوث ===== -->
+        <section id="publications" class="tab-content">
+            <div class="section-header">
+                <h2>📝 البحوث المنشورة</h2>
+                <div class="filters">
+                    <input type="text" id="pubSearch" placeholder="🔍 بحث في العناوين...">
+                    <select id="pubCitationsFilter">
+                        <option value="">جميع الاقتباسات</option>
+                        <option value="أقل من 10">أقل من 10</option>
+                        <option value="11-20">11-20</option>
+                        <option value="21-50">21-50</option>
+                        <option value="51-100">51-100</option>
+                    </select>
+                </div>
+            </div>
+            <div class="publications-grid" id="publicationsGrid">
+                <!-- يُملأ بـ JavaScript -->
+            </div>
+        </section>
+
+        <!-- ===== الفعاليات ===== -->
+        <section id="events" class="tab-content">
+            <div class="section-header">
+                <h2>🎯 الفعاليات العلمية</h2>
+                <div class="filters">
+                    <select id="eventsTypeFilter">
+                        <option value="">جميع الأنواع</option>
+                        <option value="مؤتمر">مؤتمر</option>
+                        <option value="ندوة">ندوة</option>
+                        <option value="ورشة">ورشة</option>
+                    </select>
+                </div>
+            </div>
+            <div class="events-grid" id="eventsGrid">
+                <!-- يُملأ بـ JavaScript -->
+            </div>
+        </section>
+
+        <!-- ===== الجوائز ===== -->
+        <section id="awards" class="tab-content">
+            <div class="section-header">
+                <h2>🏆 الجوائز والتكريمات</h2>
+            </div>
+            <div class="awards-showcase" id="awardsShowcase">
+                <!-- يُملأ بـ JavaScript -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- الفوتر -->
+    <footer class="main-footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <span>قسم القراءات</span>
+                <span class="separator">|</span>
+                <span>جامعة أم القرى</span>
+            </div>
+            <div class="footer-year">
+                <span id="currentYear">1446</span>هـ
+            </div>
+        </div>
+    </footer>
+
+    <!-- مؤشر التحميل -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="spinner-ring"></div>
+            <div class="spinner-ring"></div>
+            <div class="spinner-ring"></div>
+            <span>جارٍ التحميل...</span>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
