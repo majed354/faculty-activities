@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>النشاط العلمي - قسم القراءات</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- خلفية متحركة -->
+    <div class="bg-pattern"></div>
+    
+    <!-- الهيدر -->
+    <header class="main-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <div class="logo-icon">📖</div>
+                <div class="logo-text">
+                    <h1>النشاط العلمي</h1>
+                    <p>قسم القراءات - جامعة أم القرى</p>
+                </div>
+            </div>
+            <div class="year-selector">
+                <label for="yearSelect">السنة:</label>
+                <select id="yearSelect">
+                    <!-- يتم ملؤها ديناميكياً -->
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <!-- التبويبات -->
+    <nav class="tabs-nav">
+        <div class="tabs-container">
+            <button class="tab-btn active" data-tab="dashboard">
+                <span class="tab-icon">📊</span>
+                <span class="tab-text">لوحة المعلومات</span>
+            </button>
+            <button class="tab-btn" data-tab="theses">
+                <span class="tab-icon">🎓</span>
+                <span class="tab-text">الإشراف والمناقشات</span>
+            </button>
+            <button class="tab-btn" data-tab="publications">
+                <span class="tab-icon">📝</span>
+                <span class="tab-text">البحوث المنشورة</span>
+            </button>
+            <button class="tab-btn" data-tab="events">
+                <span class="tab-icon">🎤</span>
+                <span class="tab-text">الفعاليات العلمية</span>
+            </button>
+            <button class="tab-btn" data-tab="awards">
+                <span class="tab-icon">🏆</span>
+                <span class="tab-text">الجوائز والبراءات</span>
+            </button>
+            <button class="tab-btn" data-tab="leaderboard">
+                <span class="tab-icon">🏅</span>
+                <span class="tab-text">المتصدرون</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- المحتوى الرئيسي -->
+    <main class="main-content">
+        <!-- لوحة المعلومات -->
+        <section id="dashboard" class="tab-content active">
+            <div class="section-header">
+                <h2>📊 لوحة المعلومات</h2>
+                <p>نظرة شاملة على النشاط العلمي للعام المحدد</p>
+            </div>
+            
+            <!-- بطاقات KPIs -->
+            <div class="kpi-grid" id="kpiGrid">
+                <!-- يتم ملؤها ديناميكياً -->
+            </div>
+
+            <!-- إحصائيات عامة -->
+            <div class="stats-section">
+                <h3>📈 إحصائيات عامة</h3>
+                <div class="stats-grid" id="statsGrid">
+                    <!-- يتم ملؤها ديناميكياً -->
+                </div>
+            </div>
+
+            <!-- آخر الفعاليات -->
+            <div class="recent-section">
+                <h3>🕐 آخر الأنشطة</h3>
+                <div class="recent-list" id="recentActivities">
+                    <!-- يتم ملؤها ديناميكياً -->
+                </div>
+            </div>
+        </section>
+
+        <!-- الإشراف والمناقشات -->
+        <section id="theses" class="tab-content">
+            <div class="section-header">
+                <h2>🎓 الإشراف والمناقشات</h2>
+                <p>رسائل الدكتوراه ومشاريع الماجستير</p>
+            </div>
+            
+            <div class="filter-bar">
+                <select id="thesesTypeFilter">
+                    <option value="all">جميع الأنواع</option>
+                    <option value="دكتوراه">دكتوراه</option>
+                    <option value="ماجستير">ماجستير</option>
+                </select>
+                <select id="thesesStatusFilter">
+                    <option value="all">جميع الحالات</option>
+                    <option value="منجزة">منجزة</option>
+                    <option value="جارية">جارية</option>
+                </select>
+            </div>
+            
+            <div class="data-table-container">
+                <table class="data-table" id="thesesTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>النوع</th>
+                            <th>التخصص</th>
+                            <th>اسم الطالب</th>
+                            <th>عنوان الرسالة</th>
+                            <th>المشرف</th>
+                            <th>الحالة</th>
+                            <th>تاريخ المناقشة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- يتم ملؤها ديناميكياً -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- البحوث المنشورة -->
+        <section id="publications" class="tab-content">
+            <div class="section-header">
+                <h2>📝 البحوث المنشورة</h2>
+                <p>النتاج العلمي لأعضاء هيئة التدريس</p>
+            </div>
+            
+            <div class="filter-bar">
+                <input type="text" id="pubSearchInput" placeholder="ابحث في البحوث...">
+                <select id="pubCitationsFilter">
+                    <option value="all">جميع الاقتباسات</option>
+                    <option value="أقل من 10">أقل من 10</option>
+                    <option value="11-20">11-20</option>
+                    <option value="21-50">21-50</option>
+                    <option value="51-100">51-100</option>
+                    <option value="أكثر من 100">أكثر من 100</option>
+                </select>
+            </div>
+            
+            <div class="publications-grid" id="publicationsGrid">
+                <!-- يتم ملؤها ديناميكياً -->
+            </div>
+        </section>
+
+        <!-- الفعاليات العلمية -->
+        <section id="events" class="tab-content">
+            <div class="section-header">
+                <h2>🎤 الفعاليات العلمية</h2>
+                <p>المؤتمرات والندوات والورش</p>
+            </div>
+            
+            <div class="filter-bar">
+                <select id="eventsTypeFilter">
+                    <option value="all">جميع الأنواع</option>
+                    <option value="مؤتمر">مؤتمرات</option>
+                    <option value="ندوة">ندوات</option>
+                    <option value="ورشة">ورش عمل</option>
+                </select>
+                <select id="eventsParticipationFilter">
+                    <option value="all">جميع المشاركات</option>
+                    <option value="مشاركة بورقة">مشاركة بورقة</option>
+                    <option value="مشاركة">مشاركة</option>
+                    <option value="حضور">حضور</option>
+                </select>
+            </div>
+            
+            <div class="events-timeline" id="eventsTimeline">
+                <!-- يتم ملؤها ديناميكياً -->
+            </div>
+        </section>
+
+        <!-- الجوائز والبراءات -->
+        <section id="awards" class="tab-content">
+            <div class="section-header">
+                <h2>🏆 الجوائز وبراءات الاختراع</h2>
+                <p>التميز والإبداع العلمي</p>
+            </div>
+            
+            <div class="awards-grid" id="awardsGrid">
+                <!-- يتم ملؤها ديناميكياً -->
+            </div>
+        </section>
+
+        <!-- المتصدرون -->
+        <section id="leaderboard" class="tab-content">
+            <div class="section-header">
+                <h2>🏅 المتصدرون</h2>
+                <p>أعضاء هيئة التدريس الأكثر نشاطاً</p>
+            </div>
+            
+            <div class="leaderboard-container">
+                <!-- المنصة -->
+                <div class="podium" id="podium">
+                    <!-- يتم ملؤها ديناميكياً -->
+                </div>
+                
+                <!-- جدول الترتيب -->
+                <div class="leaderboard-table-container">
+                    <table class="leaderboard-table" id="leaderboardTable">
+                        <thead>
+                            <tr>
+                                <th>الترتيب</th>
+                                <th>العضو</th>
+                                <th>الرتبة</th>
+                                <th>النقاط</th>
+                                <th>البحوث</th>
+                                <th>الإشراف</th>
+                                <th>الفعاليات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- يتم ملؤها ديناميكياً -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- الفوتر -->
+    <footer class="main-footer">
+        <p>© <span id="currentYear"></span> قسم القراءات - جامعة أم القرى</p>
+        <p class="footer-note">جميع البيانات محدثة حتى تاريخ آخر تعديل</p>
+    </footer>
+
+    <!-- مكتبة PapaParse لقراءة CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
