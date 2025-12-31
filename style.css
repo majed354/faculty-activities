@@ -910,7 +910,11 @@ body {
     font-size: 0.85rem;
     transition: var(--transition-fast);
 }
-
+.filters select option {
+    background: #2d2d44;
+    color: #ffffff;
+    padding: 8px;
+}
 .filters select:focus,
 .filters input:focus {
     outline: none;
