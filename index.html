@@ -18,6 +18,7 @@
     
     <!-- Styles -->
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style-additions.css">
 </head>
 <body>
     <!-- خلفية متحركة -->
@@ -55,32 +56,28 @@
         </div>
     </header>
 
-    <!-- التنقل الرئيسي -->
+    <!-- التنقل الرئيسي - الهيكل الجديد -->
     <nav class="main-nav">
         <div class="nav-container">
             <button class="nav-btn active" data-tab="dashboard">
                 <span class="nav-icon">📊</span>
-                <span class="nav-text">لوحة المعلومات</span>
+                <span class="nav-text">الإحصائيات</span>
+            </button>
+            <button class="nav-btn" data-tab="publications">
+                <span class="nav-icon">📝</span>
+                <span class="nav-text">النشر العلمي</span>
+            </button>
+            <button class="nav-btn" data-tab="theses">
+                <span class="nav-icon">📚</span>
+                <span class="nav-text">الإشراف والمناقشة</span>
+            </button>
+            <button class="nav-btn" data-tab="events">
+                <span class="nav-icon">🎯</span>
+                <span class="nav-text">الفعاليات العلمية</span>
             </button>
             <button class="nav-btn" data-tab="quality">
                 <span class="nav-icon">📈</span>
                 <span class="nav-text">مؤشرات الجودة</span>
-            </button>
-            <button class="nav-btn" data-tab="theses">
-                <span class="nav-icon">📚</span>
-                <span class="nav-text">الإشراف العلمي</span>
-            </button>
-            <button class="nav-btn" data-tab="publications">
-                <span class="nav-icon">📝</span>
-                <span class="nav-text">البحوث</span>
-            </button>
-            <button class="nav-btn" data-tab="events">
-                <span class="nav-icon">🎯</span>
-                <span class="nav-text">الفعاليات</span>
-            </button>
-            <button class="nav-btn" data-tab="awards">
-                <span class="nav-icon">🏆</span>
-                <span class="nav-text">الجوائز</span>
             </button>
         </div>
     </nav>
@@ -88,7 +85,7 @@
     <!-- المحتوى الرئيسي -->
     <main class="main-content">
         
-        <!-- ===== لوحة المعلومات ===== -->
+        <!-- ===== الإحصائيات ===== -->
         <section id="dashboard" class="tab-content active">
             <!-- الإحصائيات السريعة -->
             <div class="quick-stats">
@@ -189,139 +186,41 @@
             </div>
         </section>
 
-        <!-- ===== مؤشرات الجودة والأداء ===== -->
-        <section id="quality" class="tab-content">
-            <div class="quality-header">
-                <h2>📈 مؤشرات الجودة والأداء</h2>
-                <p>مؤشرات قياس الأداء الأكاديمي وفق معايير الجودة والاعتماد</p>
-            </div>
-
-            <!-- المؤشرات الرئيسية -->
-            <div class="kpi-grid">
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <span class="kpi-icon">📊</span>
-                        <span class="kpi-title">نسبة النشر العلمي</span>
-                    </div>
-                    <div class="kpi-value">
-                        <span class="kpi-number" id="kpiPublishingRate">0</span>
-                        <span class="kpi-unit">%</span>
-                    </div>
-                    <div class="kpi-progress">
-                        <div class="kpi-progress-bar" id="kpiPublishingRateBar" style="width: 0%"></div>
-                    </div>
-                    <div class="kpi-description">نسبة الأعضاء الذين لديهم بحث منشور واحد على الأقل</div>
-                    <div class="kpi-formula">المعادلة: (عدد الأعضاء الناشرين ÷ إجمالي الأعضاء) × 100</div>
-                </div>
-
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <span class="kpi-icon">📚</span>
-                        <span class="kpi-title">معدل البحوث لكل عضو</span>
-                    </div>
-                    <div class="kpi-value">
-                        <span class="kpi-number" id="kpiPubPerMember">0</span>
-                        <span class="kpi-unit">بحث</span>
-                    </div>
-                    <div class="kpi-gauge">
-                        <div class="gauge-fill" id="kpiPubPerMemberGauge"></div>
-                        <div class="gauge-marker"></div>
-                    </div>
-                    <div class="kpi-description">متوسط عدد البحوث المنشورة لكل عضو</div>
-                    <div class="kpi-formula">المعادلة: إجمالي البحوث ÷ عدد الأعضاء</div>
-                </div>
-
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <span class="kpi-icon">📈</span>
-                        <span class="kpi-title">معدل الاقتباسات</span>
-                    </div>
-                    <div class="kpi-value">
-                        <span class="kpi-number" id="kpiCitations">0</span>
-                        <span class="kpi-unit">اقتباس/عضو</span>
-                    </div>
-                    <div class="kpi-mini-chart" id="kpiCitationsMini"></div>
-                    <div class="kpi-description">متوسط الاقتباسات التقديرية لكل عضو</div>
-                    <div class="kpi-formula">المعادلة: مجموع الاقتباسات ÷ عدد الأعضاء</div>
-                </div>
-
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <span class="kpi-icon">🎓</span>
-                        <span class="kpi-title">نسبة نشر الطلاب</span>
-                    </div>
-                    <div class="kpi-value">
-                        <span class="kpi-number" id="kpiStudentPub">0</span>
-                        <span class="kpi-unit">%</span>
-                    </div>
-                    <div class="kpi-progress">
-                        <div class="kpi-progress-bar student-bar" id="kpiStudentPubBar" style="width: 0%"></div>
-                    </div>
-                    <div class="kpi-description">نسبة البحوث التي شارك فيها طلاب</div>
-                    <div class="kpi-formula">المعادلة: (بحوث الطلاب ÷ إجمالي الطلاب) × 100</div>
-                </div>
-
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <span class="kpi-icon">🏅</span>
-                        <span class="kpi-title">معدل الإشراف</span>
-                    </div>
-                    <div class="kpi-value">
-                        <span class="kpi-number" id="kpiSupervision">0</span>
-                        <span class="kpi-unit">رسالة/عضو</span>
-                    </div>
-                    <div class="kpi-bars">
-                        <div class="kpi-bar-item">
-                            <span>دكتوراه</span>
-                            <div class="mini-bar"><div class="mini-bar-fill phd" id="kpiPhdBar"></div></div>
-                            <span id="kpiPhdCount">0</span>
-                        </div>
-                        <div class="kpi-bar-item">
-                            <span>ماجستير</span>
-                            <div class="mini-bar"><div class="mini-bar-fill masters" id="kpiMastersBar"></div></div>
-                            <span id="kpiMastersCount">0</span>
-                        </div>
-                    </div>
-                    <div class="kpi-description">متوسط الرسائل لكل عضو</div>
-                </div>
-
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <span class="kpi-icon">🏆</span>
-                        <span class="kpi-title">الابتكار والتميز</span>
-                    </div>
-                    <div class="kpi-value">
-                        <span class="kpi-number" id="kpiInnovation">0</span>
-                        <span class="kpi-unit">إنجاز</span>
-                    </div>
-                    <div class="kpi-icons-row" id="kpiInnovationIcons">
-                        <!-- أيقونات الجوائز والبراءات -->
-                    </div>
-                    <div class="kpi-description">إجمالي الجوائز وبراءات الاختراع</div>
+        <!-- ===== النشر العلمي ===== -->
+        <section id="publications" class="tab-content">
+            <div class="section-header">
+                <h2>📝 النشر العلمي</h2>
+                <div class="filters">
+                    <input type="text" id="pubSearch" placeholder="🔍 بحث في العناوين...">
+                    <select id="pubCitationsFilter">
+                        <option value="">جميع الاقتباسات</option>
+                        <option value="أقل من 10">أقل من 10</option>
+                        <option value="11-20">11-20</option>
+                        <option value="21-50">21-50</option>
+                        <option value="51-100">51-100</option>
+                        <option value="101-200">101-200</option>
+                        <option value="201-500">201-500</option>
+                        <option value="أكثر من 500">أكثر من 500</option>
+                    </select>
                 </div>
             </div>
-
-            <!-- رسم بياني للمقارنة -->
-            <div class="quality-chart-section">
-                <div class="chart-card large">
-                    <h3>تحليل الأداء</h3>
-                    <canvas id="qualityRadarChart"></canvas>
-                </div>
+            <div class="publications-grid" id="publicationsGrid">
+                <!-- يُملأ بـ JavaScript -->
             </div>
         </section>
 
-        <!-- ===== الإشراف العلمي ===== -->
+        <!-- ===== الإشراف والمناقشة ===== -->
         <section id="theses" class="tab-content">
             <div class="section-header">
-                <h2>📚 الإشراف العلمي</h2>
+                <h2>📚 الإشراف والمناقشة</h2>
                 <div class="filters">
                     <input type="text" id="thesesSearch" placeholder="🔍 بحث في الرسائل...">
-                  <select id="thesesTypeFilter">
+                    <select id="thesesTypeFilter">
                         <option value="">جميع البرامج</option>
                         <option value="دكتوراه-قراءات">دكتوراه القراءات</option>
                         <option value="دكتوراه-دراسات قرآنية">دكتوراه الدراسات القرآنية</option>
                         <option value="ماجستير-قراءات">ماجستير القراءات</option>
-                        <option value="ماجستير-دراسات قرآنية">ماجستير الدراسات القرآنية المعاصرة</option>
+                        <option value="ماجستير-دراسات قرآنية">ماجستير الدراسات القرآنية</option>
                     </select>
                     <select id="thesesStatusFilter">
                         <option value="">جميع الحالات</option>
@@ -348,36 +247,25 @@
             </div>
         </section>
 
-        <!-- ===== البحوث ===== -->
-        <section id="publications" class="tab-content">
-            <div class="section-header">
-                <h2>📝 البحوث المنشورة</h2>
-                <div class="filters">
-                    <input type="text" id="pubSearch" placeholder="🔍 بحث في العناوين...">
-                    <select id="pubCitationsFilter">
-                        <option value="">جميع الاقتباسات</option>
-                        <option value="أقل من 10">أقل من 10</option>
-                        <option value="11-20">11-20</option>
-                        <option value="21-50">21-50</option>
-                        <option value="51-100">51-100</option>
-                    </select>
-                </div>
-            </div>
-            <div class="publications-grid" id="publicationsGrid">
-                <!-- يُملأ بـ JavaScript -->
-            </div>
-        </section>
-
-        <!-- ===== الفعاليات ===== -->
+        <!-- ===== الفعاليات العلمية ===== -->
         <section id="events" class="tab-content">
             <div class="section-header">
                 <h2>🎯 الفعاليات العلمية</h2>
                 <div class="filters">
                     <select id="eventsTypeFilter">
-                        <option value="">جميع الأنواع</option>
+                        <option value="">جميع الأصناف</option>
                         <option value="مؤتمر">مؤتمر</option>
                         <option value="ندوة">ندوة</option>
-                        <option value="ورشة">ورشة</option>
+                        <option value="ورشة عمل">ورشة عمل</option>
+                        <option value="مناقشة علمية خارجية">مناقشة علمية خارجية</option>
+                    </select>
+                    <select id="eventsParticipationFilter">
+                        <option value="">جميع أنواع المشاركة</option>
+                        <option value="حضور">حضور</option>
+                        <option value="مشاركة">مشاركة</option>
+                        <option value="مشاركة بورقة">مشاركة بورقة</option>
+                        <option value="نشر">نشر</option>
+                        <option value="تنظيم">تنظيم</option>
                     </select>
                 </div>
             </div>
@@ -386,13 +274,129 @@
             </div>
         </section>
 
-        <!-- ===== الجوائز ===== -->
-        <section id="awards" class="tab-content">
+        <!-- ===== مؤشرات الجودة ===== -->
+        <section id="quality" class="tab-content">
             <div class="section-header">
-                <h2>🏆 الجوائز والتكريمات</h2>
+                <h2>📈 مؤشرات الجودة</h2>
             </div>
-            <div class="awards-showcase" id="awardsShowcase">
-                <!-- يُملأ بـ JavaScript -->
+            
+            <div class="kpi-grid">
+                <!-- نسبة النشر -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">📊</span>
+                        <span class="kpi-title">نسبة النشر العلمي</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiPublishingRate">0</span>
+                        <span class="kpi-unit">%</span>
+                    </div>
+                    <div class="kpi-bar-container">
+                        <div class="kpi-bar" id="kpiPublishingRateBar"></div>
+                    </div>
+                    <div class="kpi-description">نسبة الأعضاء الذين لديهم بحوث منشورة</div>
+                </div>
+
+                <!-- معدل البحوث -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">📄</span>
+                        <span class="kpi-title">معدل البحوث لكل عضو</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiPubPerMember">0</span>
+                        <span class="kpi-unit">بحث</span>
+                    </div>
+                    <div class="kpi-gauge">
+                        <div class="kpi-gauge-fill" id="kpiPubPerMemberGauge"></div>
+                    </div>
+                    <div class="kpi-description">متوسط عدد البحوث لكل عضو</div>
+                </div>
+
+                <!-- الاقتباسات -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">📈</span>
+                        <span class="kpi-title">معدل الاقتباسات</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiCitations">0</span>
+                        <span class="kpi-unit">اقتباس</span>
+                    </div>
+                    <div class="kpi-mini-chart" id="kpiCitationsMini">
+                        <!-- رسم مصغر -->
+                    </div>
+                    <div class="kpi-description">متوسط الاقتباسات لكل عضو</div>
+                </div>
+
+                <!-- نسبة نشر الطلاب -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">🎓</span>
+                        <span class="kpi-title">نسبة نشر الطلاب</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiStudentPub">0</span>
+                        <span class="kpi-unit">%</span>
+                    </div>
+                    <div class="kpi-bar-container">
+                        <div class="kpi-bar student" id="kpiStudentPubBar"></div>
+                    </div>
+                    <div class="kpi-description">نسبة البحوث المشتركة مع الطلاب</div>
+                </div>
+
+                <!-- معدل الإشراف -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">👨‍🏫</span>
+                        <span class="kpi-title">معدل الإشراف</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiSupervision">0</span>
+                        <span class="kpi-unit">رسالة</span>
+                    </div>
+                    <div class="kpi-dual-bars">
+                        <div class="kpi-dual-item">
+                            <span class="dual-label">دكتوراه</span>
+                            <div class="dual-bar-container">
+                                <div class="dual-bar phd" id="kpiPhdBar"></div>
+                            </div>
+                            <span class="dual-value" id="kpiPhdCount">0</span>
+                        </div>
+                        <div class="kpi-dual-item">
+                            <span class="dual-label">ماجستير</span>
+                            <div class="dual-bar-container">
+                                <div class="dual-bar masters" id="kpiMastersBar"></div>
+                            </div>
+                            <span class="dual-value" id="kpiMastersCount">0</span>
+                        </div>
+                    </div>
+                    <div class="kpi-description">متوسط عدد الرسائل لكل عضو</div>
+                </div>
+
+                <!-- الابتكار والتميز -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-icon">🏆</span>
+                        <span class="kpi-title">الابتكار والتميز</span>
+                    </div>
+                    <div class="kpi-value">
+                        <span class="kpi-number" id="kpiInnovation">0</span>
+                        <span class="kpi-unit">إنجاز</span>
+                    </div>
+                    <div class="kpi-icons-row" id="kpiInnovationIcons">
+                        <!-- أيقونات الجوائز والبراءات -->
+                    </div>
+                    <div class="kpi-description">إجمالي الجوائز وبراءات الاختراع</div>
+                </div>
+            </div>
+
+            <!-- رسم بياني للمقارنة -->
+            <div class="quality-chart-section">
+                <div class="chart-card large">
+                    <h3>تحليل الأداء</h3>
+                    <canvas id="qualityRadarChart"></canvas>
+                </div>
             </div>
         </section>
 
@@ -423,55 +427,67 @@
     </div>
 
     <script src="app.js"></script>
-<!-- Modal تفاصيل الرسالة -->
-<div id="thesisModal" class="modal">
-    <div class="modal-content">
-        <span class="modal-close">&times;</span>
-        <div class="thesis-details">
-            <div class="thesis-badge" id="modalBadge"></div>
-            <h2 id="modalTitle"></h2>
-            <div class="thesis-info">
-                <div class="info-item">
-                    <span class="info-label">الطالب</span>
-                    <span class="info-value" id="modalStudent"></span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">البرنامج</span>
-                    <span class="info-value" id="modalProgram"></span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">الحالة</span>
-                    <span class="info-value" id="modalStatus"></span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">تاريخ المناقشة</span>
-                    <span class="info-value" id="modalDate"></span>
-                </div>
-            </div>
-            <div class="committee-section">
-                <h3>لجنة المناقشة</h3>
-                <div class="committee-grid">
-                    <div class="committee-member">
-                        <div class="member-role">المشرف الرئيسي</div>
-                        <div class="member-name" id="modalSupervisor"></div>
+
+    <!-- Modal تفاصيل الرسالة -->
+    <div id="thesisModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <div class="thesis-details">
+                <div class="thesis-badge" id="modalBadge"></div>
+                <h2 id="modalTitle"></h2>
+                <div class="thesis-info">
+                    <div class="info-item">
+                        <span class="info-label">الطالب</span>
+                        <span class="info-value" id="modalStudent"></span>
                     </div>
-                    <div class="committee-member" id="coSupervisorSection">
-                        <div class="member-role">المشرف المشارك</div>
-                        <div class="member-name" id="modalCoSupervisor"></div>
+                    <div class="info-item">
+                        <span class="info-label">البرنامج</span>
+                        <span class="info-value" id="modalProgram"></span>
                     </div>
-                    <div class="committee-member">
-                        <div class="member-role">المناقش الأول</div>
-                        <div class="member-name" id="modalExaminer1"></div>
+                    <div class="info-item">
+                        <span class="info-label">المكان</span>
+                        <span class="info-value" id="modalLocation"></span>
                     </div>
-                    <div class="committee-member">
-                        <div class="member-role">المناقش الثاني</div>
-                        <div class="member-name" id="modalExaminer2"></div>
+                    <div class="info-item">
+                        <span class="info-label">الحالة</span>
+                        <span class="info-value" id="modalStatus"></span>
                     </div>
+                    <div class="info-item" style="grid-column: span 2;">
+                        <span class="info-label">تاريخ المناقشة</span>
+                        <span class="info-value" id="modalDate"></span>
+                    </div>
+                </div>
+                <div class="committee-section">
+                    <h3>لجنة الإشراف والمناقشة</h3>
+                    <div class="committee-grid">
+                        <div class="committee-member">
+                            <div class="member-role">المشرف الرئيسي</div>
+                            <div class="member-name" id="modalSupervisor"></div>
+                        </div>
+                        <div class="committee-member" id="coSupervisorSection">
+                            <div class="member-role">المشرف المشارك</div>
+                            <div class="member-name" id="modalCoSupervisor"></div>
+                        </div>
+                        <div class="committee-member">
+                            <div class="member-role">المناقش الأول</div>
+                            <div class="member-name" id="modalExaminer1"></div>
+                        </div>
+                        <div class="committee-member">
+                            <div class="member-role">المناقش الثاني</div>
+                            <div class="member-name" id="modalExaminer2"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- زر الطباعة -->
+                <div class="modal-actions">
+                    <button class="print-btn" onclick="printThesis()">
+                        <span>🖨️</span>
+                        <span>طباعة</span>
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-</div>
     
 </body>
 </html>
