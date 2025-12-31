@@ -42,12 +42,35 @@ function hideLoading() {
     document.getElementById('loadingOverlay').classList.remove('active');
 }
 
+// دالة اكتشاف الفاصل تلقائياً
+function detectDelimiter(text) {
+    const firstLine = text.split('\n')[0];
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    
+    if (semicolonCount > commaCount && semicolonCount > tabCount) {
+        return ';';
+    } else if (tabCount > commaCount && tabCount > semicolonCount) {
+        return '\t';
+    }
+    return ',';
+}
+
 async function loadCSV(url) {
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const text = await response.text();
-        const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+        
+        const delimiter = detectDelimiter(text);
+        console.log(`📄 ${url} → delimiter: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
+        
+        const result = Papa.parse(text, { 
+            header: true, 
+            skipEmptyLines: true,
+            delimiter: delimiter
+        });
         return result.data;
     } catch (error) {
         console.warn(`Failed to load ${url}:`, error);
