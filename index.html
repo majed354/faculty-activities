@@ -432,6 +432,14 @@
     <div id="thesisModal" class="modal">
         <div class="modal-content">
             <span class="modal-close">&times;</span>
+            <!-- زر الطباعة - أيقونة في الركن الأيسر -->
+            <button class="print-icon-btn" onclick="printThesis()" title="طباعة">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            </button>
             <div class="thesis-details">
                 <div class="thesis-badge" id="modalBadge"></div>
                 <h2 id="modalTitle"></h2>
@@ -459,31 +467,32 @@
                 </div>
                 <div class="committee-section">
                     <h3>لجنة الإشراف والمناقشة</h3>
-                    <div class="committee-grid">
-                        <div class="committee-member">
+                    <!-- المشرفون -->
+                    <div class="committee-row supervisors">
+                        <div class="committee-member supervisor-main">
+                            <div class="member-icon">👨‍🏫</div>
                             <div class="member-role">المشرف الرئيسي</div>
                             <div class="member-name" id="modalSupervisor"></div>
                         </div>
-                        <div class="committee-member" id="coSupervisorSection">
+                        <div class="committee-member supervisor-co" id="coSupervisorSection">
+                            <div class="member-icon">👨‍🏫</div>
                             <div class="member-role">المشرف المشارك</div>
                             <div class="member-name" id="modalCoSupervisor"></div>
                         </div>
-                        <div class="committee-member">
+                    </div>
+                    <!-- المناقشون -->
+                    <div class="committee-row examiners">
+                        <div class="committee-member examiner" id="examiner1Section">
+                            <div class="member-icon">📋</div>
                             <div class="member-role">المناقش الأول</div>
                             <div class="member-name" id="modalExaminer1"></div>
                         </div>
-                        <div class="committee-member">
+                        <div class="committee-member examiner" id="examiner2Section">
+                            <div class="member-icon">📋</div>
                             <div class="member-role">المناقش الثاني</div>
                             <div class="member-name" id="modalExaminer2"></div>
                         </div>
                     </div>
-                </div>
-                <!-- زر الطباعة -->
-                <div class="modal-actions">
-                    <button class="print-btn" onclick="printThesis()">
-                        <span>🖨️</span>
-                        <span>طباعة</span>
-                    </button>
                 </div>
             </div>
         </div>
