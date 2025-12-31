@@ -423,5 +423,55 @@
     </div>
 
     <script src="app.js"></script>
+<!-- Modal تفاصيل الرسالة -->
+<div id="thesisModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close">&times;</span>
+        <div class="thesis-details">
+            <div class="thesis-badge" id="modalBadge"></div>
+            <h2 id="modalTitle"></h2>
+            <div class="thesis-info">
+                <div class="info-item">
+                    <span class="info-label">الطالب</span>
+                    <span class="info-value" id="modalStudent"></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">البرنامج</span>
+                    <span class="info-value" id="modalProgram"></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">الحالة</span>
+                    <span class="info-value" id="modalStatus"></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">تاريخ المناقشة</span>
+                    <span class="info-value" id="modalDate"></span>
+                </div>
+            </div>
+            <div class="committee-section">
+                <h3>لجنة المناقشة</h3>
+                <div class="committee-grid">
+                    <div class="committee-member">
+                        <div class="member-role">المشرف الرئيسي</div>
+                        <div class="member-name" id="modalSupervisor"></div>
+                    </div>
+                    <div class="committee-member" id="coSupervisorSection">
+                        <div class="member-role">المشرف المشارك</div>
+                        <div class="member-name" id="modalCoSupervisor"></div>
+                    </div>
+                    <div class="committee-member">
+                        <div class="member-role">المناقش الأول</div>
+                        <div class="member-name" id="modalExaminer1"></div>
+                    </div>
+                    <div class="committee-member">
+                        <div class="member-role">المناقش الثاني</div>
+                        <div class="member-name" id="modalExaminer2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    
 </body>
 </html>
