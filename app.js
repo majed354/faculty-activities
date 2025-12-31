@@ -669,7 +669,10 @@ function renderTheses() {
         t.student_name.toLowerCase().includes(searchTerm) ||
         getMemberName(t.supervisor_id).toLowerCase().includes(searchTerm)
     );
-    if (typeFilter) filtered = filtered.filter(t => t.type === typeFilter);
+  if (typeFilter) {
+        const [type, specialization] = typeFilter.split('-');
+        filtered = filtered.filter(t => t.type === type && t.specialization === specialization);
+    }
     if (statusFilter) filtered = filtered.filter(t => t.status === statusFilter);
     
     filtered.forEach(thesis => {
