@@ -1,9 +1,9 @@
 {
-  "current_year": 1446,
-  "available_years": [1446, 1447],
+  "current_year": 1447,
+  "available_years": [1445, 1446, 1447],
   "calendar_type": "hijri",
   "department_name": "قسم القراءات",
-  "university_name": "جامعة أم القرى",
+  "university_name": "جامعة الطائف",
   "weights": {
     "phd_supervision": 10,
     "phd_discussion": 5,
