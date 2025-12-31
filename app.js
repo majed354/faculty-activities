@@ -661,7 +661,14 @@ function renderTheses() {
     const typeFilter = document.getElementById('thesesTypeFilter').value;
     const statusFilter = document.getElementById('thesesStatusFilter').value;
     
+   const searchTerm = document.getElementById('thesesSearch').value.toLowerCase();
+    
     let filtered = data.theses;
+    if (searchTerm) filtered = filtered.filter(t => 
+        t.title.toLowerCase().includes(searchTerm) || 
+        t.student_name.toLowerCase().includes(searchTerm) ||
+        getMemberName(t.supervisor_id).toLowerCase().includes(searchTerm)
+    );
     if (typeFilter) filtered = filtered.filter(t => t.type === typeFilter);
     if (statusFilter) filtered = filtered.filter(t => t.status === statusFilter);
     
