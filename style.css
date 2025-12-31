@@ -1411,3 +1411,131 @@ body {
         page-break-before: always;
     }
 }
+/* Modal الرسالة */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: linear-gradient(145deg, #1a1a2e, #16213e);
+    border-radius: 20px;
+    padding: 2rem;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    border: 1px solid rgba(198, 169, 98, 0.3);
+}
+
+.modal-close {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    font-size: 28px;
+    color: #888;
+    cursor: pointer;
+    transition: color 0.3s;
+}
+
+.modal-close:hover {
+    color: #fff;
+}
+
+.thesis-details {
+    text-align: center;
+}
+
+.thesis-badge {
+    display: inline-block;
+    padding: 0.5rem 1.5rem;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.thesis-badge.phd {
+    background: linear-gradient(135deg, #c6a962, #a08339);
+    color: #1a1a2e;
+}
+
+.thesis-badge.masters {
+    background: linear-gradient(135deg, #4a9d9a, #2d6a6a);
+    color: #fff;
+}
+
+.thesis-details h2 {
+    color: #fff;
+    font-size: 1.4rem;
+    line-height: 1.8;
+    margin-bottom: 1.5rem;
+}
+
+.thesis-info {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+    text-align: right;
+}
+
+.info-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1rem;
+    border-radius: 10px;
+}
+
+.info-label {
+    display: block;
+    color: #888;
+    font-size: 0.8rem;
+    margin-bottom: 0.3rem;
+}
+
+.info-value {
+    color: #fff;
+    font-size: 1rem;
+}
+
+.committee-section h3 {
+    color: var(--gold-400);
+    margin-bottom: 1rem;
+    text-align: right;
+}
+
+.committee-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.committee-member {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1rem;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.member-role {
+    color: var(--gold-400);
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+}
+
+.member-name {
+    color: #fff;
+    font-size: 0.95rem;
+}
