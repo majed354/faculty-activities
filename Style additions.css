@@ -1,0 +1,492 @@
+/* ========================================
+   أنماط إضافية - الطباعة والعناصر الجديدة
+======================================== */
+
+/* زر الطباعة في Modal */
+.modal-actions {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(198, 169, 98, 0.2);
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+.print-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 30px;
+    background: linear-gradient(135deg, var(--gold-500), var(--gold-600));
+    color: var(--primary-900);
+    border: none;
+    border-radius: var(--radius-lg);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-base);
+    box-shadow: 0 4px 15px rgba(198, 169, 98, 0.3);
+}
+
+.print-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(198, 169, 98, 0.4);
+}
+
+.print-btn:active {
+    transform: translateY(0);
+}
+
+/* شارة بحث الطالب */
+.student-badge {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 4px 12px;
+    background: linear-gradient(135deg, var(--emerald-500), var(--emerald-600));
+    color: white;
+    font-size: 0.75rem;
+    border-radius: 20px;
+    font-weight: 600;
+}
+
+/* شارة تنظيم القسم */
+.organized-badge {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 4px 10px;
+    background: linear-gradient(135deg, var(--violet-500), var(--violet-600));
+    color: white;
+    font-size: 0.7rem;
+    border-radius: 15px;
+    font-weight: 500;
+}
+
+/* نوع المناقشة الخارجية */
+.event-card.discussion {
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.event-card.discussion .event-type {
+    background: linear-gradient(135deg, var(--amber-500), var(--amber-600));
+}
+
+/* تحسينات على بطاقة الفعالية */
+.event-card .event-participation {
+    display: inline-block;
+    padding: 4px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    font-size: 0.8rem;
+    color: var(--gray-300);
+    margin-top: 8px;
+}
+
+/* تحسين Modal */
+.modal-content {
+    background: linear-gradient(145deg, #1a1a2e, #16213e);
+    border-radius: 20px;
+    padding: 2rem;
+    max-width: 700px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    border: 1px solid rgba(198, 169, 98, 0.3);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* تحسين عرض المعلومات في Modal */
+.thesis-info {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    margin-bottom: 25px;
+    text-align: right;
+}
+
+.info-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 12px;
+    border-right: 3px solid var(--gold-500);
+}
+
+/* تنسيق للمناقشات الخارجية */
+.external-discussion-badge {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #1a1a2e;
+}
+
+/* أنماط الطباعة المحسنة */
+@media print {
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    
+    body {
+        background: white !important;
+        color: black !important;
+    }
+    
+    .animated-bg,
+    .main-nav,
+    .main-header,
+    .main-footer,
+    .loading-overlay,
+    .modal-actions,
+    .print-btn {
+        display: none !important;
+    }
+    
+    .modal {
+        position: static !important;
+        display: block !important;
+        background: white !important;
+    }
+    
+    .modal-content {
+        background: white !important;
+        border: 2px solid #333 !important;
+        box-shadow: none !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 30px !important;
+    }
+    
+    .modal-close {
+        display: none !important;
+    }
+    
+    .thesis-badge {
+        background: #333 !important;
+        color: white !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+    
+    .thesis-badge.phd {
+        background: #c6a962 !important;
+        color: #1a1a2e !important;
+    }
+    
+    .thesis-badge.masters {
+        background: #4a9d9a !important;
+        color: white !important;
+    }
+    
+    .thesis-details h2 {
+        color: #1a365d !important;
+    }
+    
+    .info-item {
+        background: #f5f5f5 !important;
+        border-right: 3px solid #c6a962 !important;
+    }
+    
+    .info-label {
+        color: #666 !important;
+    }
+    
+    .info-value {
+        color: #1a1a2e !important;
+    }
+    
+    .committee-section h3 {
+        color: #c6a962 !important;
+    }
+    
+    .committee-member {
+        background: #f5f5f5 !important;
+        border: 1px solid #ddd !important;
+    }
+    
+    .member-role {
+        color: #c6a962 !important;
+    }
+    
+    .member-name {
+        color: #1a1a2e !important;
+    }
+}
+
+/* تحسينات عامة */
+.section-header h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Badge للحالة */
+.badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.badge-phd {
+    background: linear-gradient(135deg, var(--amber-500), var(--amber-600));
+    color: var(--primary-900);
+}
+
+.badge-masters {
+    background: linear-gradient(135deg, var(--sky-500), var(--sky-600));
+    color: white;
+}
+
+.badge-completed {
+    background: linear-gradient(135deg, var(--emerald-500), var(--emerald-600));
+    color: white;
+}
+
+.badge-ongoing {
+    background: linear-gradient(135deg, var(--violet-500), var(--violet-600));
+    color: white;
+}
+
+/* تحسين جدول الرسائل */
+.data-table-container {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-xl);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    background: rgba(198, 169, 98, 0.1);
+    padding: 15px;
+    text-align: right;
+    font-weight: 600;
+    color: var(--gold-400);
+    border-bottom: 2px solid rgba(198, 169, 98, 0.2);
+}
+
+.data-table td {
+    padding: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--gray-200);
+}
+
+.data-table tr:hover {
+    background: rgba(198, 169, 98, 0.05);
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* تحسين بطاقات البحوث */
+.publication-card {
+    background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    transition: var(--transition-base);
+    position: relative;
+    overflow: hidden;
+}
+
+.publication-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--emerald-500), var(--sky-500));
+}
+
+.publication-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-xl);
+    border-color: rgba(198, 169, 98, 0.3);
+}
+
+.publication-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 0.75rem;
+    line-height: 1.6;
+}
+
+.publication-journal {
+    color: var(--gold-400);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.publication-authors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.author-tag {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    color: var(--gray-300);
+}
+
+.publication-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.publication-date {
+    color: var(--gray-400);
+    font-size: 0.85rem;
+}
+
+.publication-citations {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--emerald-500);
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* شبكة البحوث */
+.publications-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+}
+
+/* شبكة الفعاليات */
+.events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+/* تحسين بطاقات الفعاليات */
+.event-card {
+    background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    transition: var(--transition-base);
+}
+
+.event-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-xl);
+}
+
+.event-card.conference {
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.event-card.seminar {
+    border-color: rgba(14, 165, 233, 0.3);
+}
+
+.event-card.workshop {
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.event-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.event-type {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: white;
+}
+
+.event-card.conference .event-type {
+    background: linear-gradient(135deg, var(--rose-500), var(--rose-600));
+}
+
+.event-card.seminar .event-type {
+    background: linear-gradient(135deg, var(--sky-500), var(--sky-600));
+}
+
+.event-card.workshop .event-type {
+    background: linear-gradient(135deg, var(--emerald-500), var(--emerald-600));
+}
+
+.event-date-box {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    text-align: center;
+}
+
+.event-day {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
+}
+
+.event-month {
+    font-size: 0.7rem;
+    color: var(--gray-400);
+    margin-top: 2px;
+}
+
+.event-body {
+    padding: 1rem;
+}
+
+.event-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+}
+
+.event-location {
+    color: var(--gray-400);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+/* تحسينات للاستجابة */
+@media (max-width: 768px) {
+    .publications-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .events-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .thesis-info {
+        grid-template-columns: 1fr;
+    }
+    
+    .committee-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .modal-content {
+        padding: 1.5rem;
+        width: 95%;
+    }
+}
