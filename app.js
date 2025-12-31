@@ -798,9 +798,10 @@ function setupTabs() {
 
 function setupFilters() {
     // فلاتر الرسائل
+   // فلاتر الرسائل
+    document.getElementById('thesesSearch').addEventListener('input', renderTheses);
     document.getElementById('thesesTypeFilter').addEventListener('change', renderTheses);
     document.getElementById('thesesStatusFilter').addEventListener('change', renderTheses);
-    
     // فلاتر البحوث
     document.getElementById('pubSearch').addEventListener('input', renderPublications);
     document.getElementById('pubCitationsFilter').addEventListener('change', renderPublications);
