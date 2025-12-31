@@ -2,40 +2,114 @@
    أنماط إضافية - الطباعة والعناصر الجديدة
 ======================================== */
 
-/* زر الطباعة في Modal */
-.modal-actions {
-    margin-top: 25px;
-    padding-top: 20px;
-    border-top: 1px solid rgba(198, 169, 98, 0.2);
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-}
-
-.print-btn {
+/* زر الطباعة - أيقونة في الركن الأيسر العلوي */
+.print-icon-btn {
+    position: absolute;
+    top: 15px;
+    left: 50px;
+    width: 40px;
+    height: 40px;
+    background: rgba(198, 169, 98, 0.15);
+    border: 1px solid rgba(198, 169, 98, 0.3);
+    border-radius: 10px;
+    color: var(--gold-400);
+    cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 30px;
-    background: linear-gradient(135deg, var(--gold-500), var(--gold-600));
-    color: var(--primary-900);
-    border: none;
-    border-radius: var(--radius-lg);
-    font-family: var(--font-body);
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
+    justify-content: center;
     transition: var(--transition-base);
-    box-shadow: 0 4px 15px rgba(198, 169, 98, 0.3);
 }
 
-.print-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(198, 169, 98, 0.4);
+.print-icon-btn:hover {
+    background: rgba(198, 169, 98, 0.3);
+    border-color: var(--gold-400);
+    transform: scale(1.1);
 }
 
-.print-btn:active {
-    transform: translateY(0);
+.print-icon-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* تنسيق لجنة الإشراف والمناقشة الجديد */
+.committee-section {
+    margin-top: 25px;
+}
+
+.committee-section h3 {
+    color: var(--gold-400);
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+.committee-row {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.committee-row.supervisors {
+    margin-bottom: 20px;
+}
+
+.committee-member {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 20px 25px;
+    border-radius: 15px;
+    text-align: center;
+    min-width: 200px;
+    max-width: 280px;
+    flex: 1;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: var(--transition-base);
+}
+
+.committee-member:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(198, 169, 98, 0.3);
+}
+
+.committee-member.supervisor-main {
+    border-color: rgba(198, 169, 98, 0.4);
+    background: linear-gradient(145deg, rgba(198, 169, 98, 0.1), rgba(198, 169, 98, 0.05));
+}
+
+.committee-member.examiner {
+    border-color: rgba(14, 165, 233, 0.3);
+    background: linear-gradient(145deg, rgba(14, 165, 233, 0.08), rgba(14, 165, 233, 0.03));
+}
+
+.member-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.member-role {
+    color: var(--gold-400);
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.committee-member.examiner .member-role {
+    color: var(--sky-400);
+}
+
+.member-name {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+/* إخفاء العناصر الفارغة */
+.committee-member[style*="display: none"] {
+    display: none !important;
 }
 
 /* شارة بحث الطالب */
@@ -136,7 +210,8 @@
     .main-footer,
     .loading-overlay,
     .modal-actions,
-    .print-btn {
+    .print-btn,
+    .print-icon-btn {
         display: none !important;
     }
     
@@ -481,12 +556,25 @@
         grid-template-columns: 1fr;
     }
     
-    .committee-grid {
-        grid-template-columns: 1fr;
+    .committee-row {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .committee-member {
+        width: 100%;
+        max-width: 300px;
     }
     
     .modal-content {
         padding: 1.5rem;
         width: 95%;
+    }
+    
+    .print-icon-btn {
+        top: 10px;
+        left: 45px;
+        width: 35px;
+        height: 35px;
     }
 }
