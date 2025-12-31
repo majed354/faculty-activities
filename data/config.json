@@ -1,0 +1,28 @@
+{
+  "current_year": 1446,
+  "available_years": [1446, 1447],
+  "calendar_type": "hijri",
+  "department_name": "قسم القراءات",
+  "university_name": "جامعة أم القرى",
+  "weights": {
+    "phd_supervision": 10,
+    "phd_discussion": 5,
+    "masters_supervision": 3,
+    "masters_discussion": 2,
+    "publication": 15,
+    "conference_paper": 8,
+    "workshop_participation": 5,
+    "event_attendance": 1,
+    "award": 10,
+    "patent": 15
+  },
+  "citations_ranges": {
+    "أقل من 10": 5,
+    "11-20": 15,
+    "21-50": 35,
+    "51-100": 75,
+    "101-200": 150,
+    "201-500": 350,
+    "أكثر من 500": 600
+  }
+}
