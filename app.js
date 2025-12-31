@@ -805,21 +805,25 @@ function renderTheses() {
     
     if (typeFilter) {
         const [type, specialization] = typeFilter.split('-');
-        filtered = filtered.filter(t => t.type === type && t.specialization === specialization);
+        filtered = filtered.filter(t => {
+            const thesisType = (t.type || '').trim();
+            const thesisSpec = (t.specialization || '').trim();
+            return thesisType === type.trim() && thesisSpec === specialization.trim();
+        });
     }
     
-    if (statusFilter) filtered = filtered.filter(t => t.status === statusFilter);
+    if (statusFilter) filtered = filtered.filter(t => (t.status || '').trim() === statusFilter);
     
     filtered.forEach(thesis => {
         const tr = document.createElement('tr');
         tr.style.cursor = 'pointer';
         tr.onclick = () => showThesisDetails(thesis);
         tr.innerHTML = `
-            <td><span class="badge badge-${thesis.type === 'دكتوراه' ? 'phd' : 'masters'}">${thesis.type}</span></td>
+            <td><span class="badge badge-${(thesis.type || '').trim() === 'دكتوراه' ? 'phd' : 'masters'}">${thesis.type}</span></td>
             <td>${thesis.student_name}</td>
             <td>${thesis.title}</td>
             <td>${getMemberName(thesis.supervisor_id)}</td>
-            <td><span class="badge badge-${thesis.status === 'منجزة' ? 'completed' : 'ongoing'}">${thesis.status}</span></td>
+            <td><span class="badge badge-${(thesis.status || '').trim() === 'منجزة' ? 'completed' : 'ongoing'}">${thesis.status}</span></td>
             <td>${formatDate(thesis.defense_date)}</td>
         `;
         tbody.appendChild(tr);
@@ -829,10 +833,12 @@ function renderTheses() {
 function showThesisDetails(thesis) {
     currentThesis = thesis;
     const modal = document.getElementById('thesisModal');
-    const programName = thesis.type + ' ' + (thesis.specialization === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
+    const thesisType = (thesis.type || '').trim();
+    const thesisSpec = (thesis.specialization || '').trim();
+    const programName = thesisType + ' ' + (thesisSpec === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
     
     document.getElementById('modalBadge').textContent = programName;
-    document.getElementById('modalBadge').className = 'thesis-badge ' + (thesis.type === 'دكتوراه' ? 'phd' : 'masters');
+    document.getElementById('modalBadge').className = 'thesis-badge ' + (thesisType === 'دكتوراه' ? 'phd' : 'masters');
     document.getElementById('modalTitle').textContent = thesis.title;
     document.getElementById('modalStudent').textContent = thesis.student_name;
     document.getElementById('modalProgram').textContent = programName;
@@ -841,16 +847,34 @@ function showThesisDetails(thesis) {
     document.getElementById('modalDate').textContent = formatDate(thesis.defense_date);
     document.getElementById('modalSupervisor').textContent = getMemberName(thesis.supervisor_id);
     
+    // المشرف المشارك
     const coSupervisorSection = document.getElementById('coSupervisorSection');
-    if (thesis.co_supervisor_id) {
+    if (thesis.co_supervisor_id && thesis.co_supervisor_id.trim()) {
         coSupervisorSection.style.display = 'block';
         document.getElementById('modalCoSupervisor').textContent = getMemberName(thesis.co_supervisor_id);
     } else {
         coSupervisorSection.style.display = 'none';
     }
     
-    document.getElementById('modalExaminer1').textContent = getMemberName(thesis.examiner1_id) || '-';
-    document.getElementById('modalExaminer2').textContent = getMemberName(thesis.examiner2_id) || '-';
+    // المناقش الأول
+    const examiner1Section = document.getElementById('examiner1Section');
+    const examiner1Name = getMemberName(thesis.examiner1_id);
+    if (thesis.examiner1_id && thesis.examiner1_id.trim() && examiner1Name !== '-') {
+        examiner1Section.style.display = 'block';
+        document.getElementById('modalExaminer1').textContent = examiner1Name;
+    } else {
+        examiner1Section.style.display = 'none';
+    }
+    
+    // المناقش الثاني
+    const examiner2Section = document.getElementById('examiner2Section');
+    const examiner2Name = getMemberName(thesis.examiner2_id);
+    if (thesis.examiner2_id && thesis.examiner2_id.trim() && examiner2Name !== '-') {
+        examiner2Section.style.display = 'block';
+        document.getElementById('modalExaminer2').textContent = examiner2Name;
+    } else {
+        examiner2Section.style.display = 'none';
+    }
     
     modal.classList.add('active');
 }
@@ -862,9 +886,19 @@ function printThesis() {
     if (!currentThesis) return;
     
     const thesis = currentThesis;
-    const programName = thesis.type + ' ' + (thesis.specialization === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
+    const thesisType = (thesis.type || '').trim();
+    const thesisSpec = (thesis.specialization || '').trim();
+    const programName = thesisType + ' ' + (thesisSpec === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
     const universityName = config.university_name || 'جامعة الطائف';
     const departmentName = config.department_name || 'قسم القراءات';
+    
+    // تحضير أعضاء اللجنة
+    const supervisor = getMemberName(thesis.supervisor_id);
+    const coSupervisor = thesis.co_supervisor_id?.trim() ? getMemberName(thesis.co_supervisor_id) : null;
+    const examiner1Name = getMemberName(thesis.examiner1_id);
+    const examiner2Name = getMemberName(thesis.examiner2_id);
+    const examiner1 = thesis.examiner1_id?.trim() && examiner1Name !== '-' ? examiner1Name : null;
+    const examiner2 = thesis.examiner2_id?.trim() && examiner2Name !== '-' ? examiner2Name : null;
     
     const printContent = `
 <!DOCTYPE html>
@@ -1003,11 +1037,25 @@ function printThesis() {
             border: 1px solid #eee;
         }
         
+        .committee-member-print.supervisor {
+            border-color: #c6a962;
+            background: linear-gradient(145deg, #fffbf0, #fff9e6);
+        }
+        
+        .committee-member-print.examiner {
+            border-color: #0ea5e9;
+            background: linear-gradient(145deg, #f0f9ff, #e6f4ff);
+        }
+        
         .member-role-print {
             font-size: 12px;
             color: #c6a962;
             font-weight: 600;
             margin-bottom: 8px;
+        }
+        
+        .committee-member-print.examiner .member-role-print {
+            color: #0ea5e9;
         }
         
         .member-name-print {
@@ -1057,7 +1105,7 @@ function printThesis() {
         </div>
         
         <div style="text-align: center;">
-            <span class="thesis-badge-print ${thesis.type === 'دكتوراه' ? 'phd' : 'masters'}">${programName}</span>
+            <span class="thesis-badge-print ${thesisType === 'دكتوراه' ? 'phd' : 'masters'}">${programName}</span>
         </div>
         
         <div class="thesis-title-print">${thesis.title}</div>
@@ -1091,24 +1139,28 @@ function printThesis() {
         <div class="info-section">
             <h3>👥 لجنة الإشراف والمناقشة</h3>
             <div class="committee-grid-print">
-                <div class="committee-member-print">
+                <div class="committee-member-print supervisor">
                     <div class="member-role-print">المشرف الرئيسي</div>
-                    <div class="member-name-print">${getMemberName(thesis.supervisor_id)}</div>
+                    <div class="member-name-print">${supervisor}</div>
                 </div>
-                ${thesis.co_supervisor_id ? `
-                <div class="committee-member-print">
+                ${coSupervisor ? `
+                <div class="committee-member-print supervisor">
                     <div class="member-role-print">المشرف المشارك</div>
-                    <div class="member-name-print">${getMemberName(thesis.co_supervisor_id)}</div>
+                    <div class="member-name-print">${coSupervisor}</div>
                 </div>
                 ` : ''}
-                <div class="committee-member-print">
+                ${examiner1 ? `
+                <div class="committee-member-print examiner">
                     <div class="member-role-print">المناقش الأول</div>
-                    <div class="member-name-print">${getMemberName(thesis.examiner1_id) || '-'}</div>
+                    <div class="member-name-print">${examiner1}</div>
                 </div>
-                <div class="committee-member-print">
+                ` : ''}
+                ${examiner2 ? `
+                <div class="committee-member-print examiner">
                     <div class="member-role-print">المناقش الثاني</div>
-                    <div class="member-name-print">${getMemberName(thesis.examiner2_id) || '-'}</div>
+                    <div class="member-name-print">${examiner2}</div>
                 </div>
+                ` : ''}
             </div>
         </div>
         
