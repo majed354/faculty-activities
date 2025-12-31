@@ -1,6 +1,6 @@
 // ========================================
 // نظام الأنشطة العلمية - قسم القراءات
-// JavaScript Application
+// JavaScript Application - النسخة المحدثة
 // ========================================
 
 // ========================================
@@ -8,21 +8,18 @@
 // ========================================
 let config = {};
 let currentYear = 1446;
+let currentThesis = null;
 let allData = {
     faculty: [],
     students: [],
     theses: [],
-    publications: [],
-    events: [],
-    awards: []
+    participations: []
 };
 let data = {
     faculty: [],
     students: [],
     theses: [],
-    publications: [],
-    events: [],
-    awards: []
+    participations: []
 };
 let charts = {};
 
@@ -42,18 +39,24 @@ function hideLoading() {
     document.getElementById('loadingOverlay').classList.remove('active');
 }
 
+// ========================================
 // دالة اكتشاف الفاصل تلقائياً
+// ========================================
 function detectDelimiter(text) {
     const firstLine = text.split('\n')[0];
-    const commaCount = (firstLine.match(/,/g) || []).length;
-    const semicolonCount = (firstLine.match(/;/g) || []).length;
-    const tabCount = (firstLine.match(/\t/g) || []).length;
     
-    if (semicolonCount > commaCount && semicolonCount > tabCount) {
-        return ';';
-    } else if (tabCount > commaCount && tabCount > semicolonCount) {
-        return '\t';
+    const delimiters = [
+        { char: ';', count: (firstLine.match(/;/g) || []).length },
+        { char: ',', count: (firstLine.match(/,/g) || []).length },
+        { char: '\t', count: (firstLine.match(/\t/g) || []).length }
+    ];
+    
+    delimiters.sort((a, b) => b.count - a.count);
+    
+    if (delimiters[0].count > 0) {
+        return delimiters[0].char;
     }
+    
     return ',';
 }
 
@@ -64,16 +67,18 @@ async function loadCSV(url) {
         const text = await response.text();
         
         const delimiter = detectDelimiter(text);
-        console.log(`📄 ${url} → delimiter: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
+        const delimiterName = delimiter === '\t' ? 'TAB' : delimiter;
+        console.log(`📄 تحميل ${url.split('/').pop()} ← الفاصل: "${delimiterName}"`);
         
         const result = Papa.parse(text, { 
             header: true, 
             skipEmptyLines: true,
             delimiter: delimiter
         });
+        
         return result.data;
     } catch (error) {
-        console.warn(`Failed to load ${url}:`, error);
+        console.warn(`❌ فشل تحميل ${url}:`, error);
         return [];
     }
 }
@@ -87,7 +92,9 @@ async function loadConfig() {
         console.warn('Using default config');
         config = {
             current_year: 1446,
-            available_years: [1446, 1447],
+            available_years: [1445, 1446, 1447],
+            department_name: "قسم القراءات",
+            university_name: "جامعة الطائف",
             weights: {
                 phd_supervision: 10,
                 phd_co_supervision: 5,
@@ -98,7 +105,11 @@ async function loadConfig() {
                 publication: 15,
                 conference_paper: 8,
                 workshop_participation: 5,
+                seminar_participation: 4,
                 event_attendance: 1,
+                event_organization: 10,
+                external_discussion: 6,
+                student_research: 8,
                 award: 10,
                 patent: 15
             },
@@ -119,28 +130,23 @@ async function loadConfig() {
 async function loadAllData() {
     showLoading();
     
-    const [faculty, students, theses, publications, events, awards] = await Promise.all([
+    const [faculty, students, theses, participations] = await Promise.all([
         loadCSV(`${DATA_BASE_URL}/faculty.csv`),
         loadCSV(`${DATA_BASE_URL}/students_count.csv`),
         loadCSV(`${DATA_BASE_URL}/theses.csv`),
-        loadCSV(`${DATA_BASE_URL}/publications.csv`),
-        loadCSV(`${DATA_BASE_URL}/events.csv`),
-        loadCSV(`${DATA_BASE_URL}/awards.csv`)
+        loadCSV(`${DATA_BASE_URL}/participations.csv`)
     ]);
     
-    allData = { faculty, students, theses, publications, events, awards };
+    allData = { faculty, students, theses, participations };
     
     await loadYearData(currentYear);
 }
 
 async function loadYearData(year) {
-    // فلترة البيانات حسب السنة المختارة
-   data.faculty = allData.faculty.filter(f => parseInt(f.year) === year);
+    data.faculty = allData.faculty.filter(f => parseInt(f.year) === year);
     data.students = allData.students.filter(s => parseInt(s.year) === year);
     data.theses = allData.theses.filter(t => parseInt(t.year) === year);
-    data.publications = allData.publications.filter(p => parseInt(p.year) === year);
-    data.events = allData.events.filter(e => parseInt(e.year) === year);
-    data.awards = allData.awards.filter(a => parseInt(a.year) === year);
+    data.participations = allData.participations.filter(p => parseInt(p.year) === year);
     
     hideLoading();
     renderAll();
@@ -150,7 +156,10 @@ async function loadYearData(year) {
 // دوال مساعدة
 // ========================================
 function getMemberName(id) {
-    const member = data.faculty.find(f => f.id === String(id));
+    let member = data.faculty.find(f => f.id === String(id));
+    if (!member) {
+        member = allData.faculty.find(f => f.id === String(id));
+    }
     return member ? member.name : '-';
 }
 
@@ -160,9 +169,7 @@ function formatDate(dateStr) {
     
     let day, month, year;
     
-    // تحديد الفاصل والتنسيق
     if (dateStr.includes('/')) {
-        // تنسيق: DD/MM/YYYY (هجري)
         const parts = dateStr.split('/');
         day = parseInt(parts[0]);
         month = parseInt(parts[1]);
@@ -170,12 +177,10 @@ function formatDate(dateStr) {
     } else if (dateStr.includes('-')) {
         const parts = dateStr.split('-');
         if (parts[0].length === 4) {
-            // تنسيق: YYYY-MM-DD (ميلادي)
             year = parseInt(parts[0]);
             month = parseInt(parts[1]);
             day = parseInt(parts[2]);
         } else {
-            // تنسيق: DD-MM-YYYY (هجري)
             day = parseInt(parts[0]);
             month = parseInt(parts[1]);
             year = parseInt(parts[2]);
@@ -184,21 +189,21 @@ function formatDate(dateStr) {
         return dateStr;
     }
     
-    // إذا كانت السنة ميلادية (أكبر من 2000)، حوّلها للهجري
-    if (year > 2000) {
-        const gregorianDate = new Date(year, month - 1, day);
-        const hijriDate = gregorianDate.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {
-            day: 'numeric',
-            month: 'numeric', 
-            year: 'numeric'
-        });
-        // استخراج الأرقام من النتيجة
-        const hijriParts = hijriDate.match(/(\d+)/g);
-        if (hijriParts && hijriParts.length >= 3) {
-            day = parseInt(hijriParts[0]);
-            month = parseInt(hijriParts[1]);
-            year = parseInt(hijriParts[2]);
-        }
+    if (year < 2000) {
+        return `${day} ${hijriMonths[month - 1]} ${year}هـ`;
+    }
+    
+    const gregorianDate = new Date(year, month - 1, day);
+    const hijriDate = gregorianDate.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {
+        day: 'numeric',
+        month: 'numeric', 
+        year: 'numeric'
+    });
+    const hijriParts = hijriDate.match(/(\d+)/g);
+    if (hijriParts && hijriParts.length >= 3) {
+        day = parseInt(hijriParts[0]);
+        month = parseInt(hijriParts[1]);
+        year = parseInt(hijriParts[2]);
     }
     
     return `${day} ${hijriMonths[month - 1]} ${year}هـ`;
@@ -206,15 +211,51 @@ function formatDate(dateStr) {
 
 function formatDateShort(dateStr) {
     if (!dateStr) return { day: '-', month: '-' };
-    const date = new Date(dateStr);
-    const day = date.getDate();
-    const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 
-                    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-    return { day, month: months[date.getMonth()] };
+    
+    const hijriMonths = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
+    
+    let day, month;
+    
+    if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts[0].length === 4) {
+            month = parseInt(parts[1]);
+            day = parseInt(parts[2]);
+        } else {
+            day = parseInt(parts[0]);
+            month = parseInt(parts[1]);
+        }
+    } else if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        day = parseInt(parts[0]);
+        month = parseInt(parts[1]);
+    }
+    
+    return { day: day || '-', month: hijriMonths[month - 1] || '-' };
 }
 
 function getCitationsEstimate(range) {
     return config.citations_ranges?.[range] || 5;
+}
+
+// ========================================
+// دوال استخراج البيانات من participations
+// ========================================
+function getPublications() {
+    return data.participations.filter(p => p.category === 'بحث منشور' || p.category === 'بحوث الطلاب');
+}
+
+function getEvents() {
+    return data.participations.filter(p => 
+        p.category === 'مؤتمر' || 
+        p.category === 'ندوة' || 
+        p.category === 'ورشة عمل' ||
+        p.category === 'مناقشة علمية خارجية'
+    );
+}
+
+function getAwards() {
+    return data.participations.filter(p => p.category === 'جائزة' || p.category === 'براءة اختراع');
 }
 
 // ========================================
@@ -225,10 +266,11 @@ function calculateMemberPoints(memberId) {
     let points = 0;
     const breakdown = {};
     
-    // البحوث
-    const pubs = data.publications.filter(p => {
-        const authors = (p.authors_ids || '').split('|');
-        return authors.includes(String(memberId));
+    // البحوث من participations
+    const pubs = data.participations.filter(p => {
+        if (p.category !== 'بحث منشور' && p.category !== 'بحوث الطلاب') return false;
+        const participants = (p.participant_ids || '').split('|');
+        return participants.includes(String(memberId));
     });
     breakdown.publications = pubs.length;
     points += pubs.length * (weights.publication || 15);
@@ -261,45 +303,82 @@ function calculateMemberPoints(memberId) {
     breakdown.mastersCoSupervision = mastersCoSupervised.length;
     points += mastersCoSupervised.length * (weights.masters_co_supervision || 2);
     
-    // مناقشة الرسائل
+    // مناقشة رسائل الدكتوراه (داخلية)
     const phdExamined = data.theses.filter(t => 
         t.type === 'دكتوراه' && (t.examiner1_id === String(memberId) || t.examiner2_id === String(memberId))
     );
     breakdown.phdDiscussion = phdExamined.length;
     points += phdExamined.length * (weights.phd_discussion || 5);
     
+    // مناقشة رسائل الماجستير (داخلية)
     const mastersExamined = data.theses.filter(t => 
         t.type === 'ماجستير' && (t.examiner1_id === String(memberId) || t.examiner2_id === String(memberId))
     );
     breakdown.mastersDiscussion = mastersExamined.length;
     points += mastersExamined.length * (weights.masters_discussion || 2);
     
-    // المشاركة في الفعاليات
-    data.events.forEach(e => {
-        const participants = (e.participant_ids || '').split('|');
-        if (participants.includes(String(memberId))) {
-            if (e.type === 'مؤتمر' && e.participation_type === 'مشاركة بورقة') {
-                breakdown.conferencePaper = (breakdown.conferencePaper || 0) + 1;
-                points += weights.conference_paper || 8;
-            } else if (e.type === 'ورشة') {
-                breakdown.workshop = (breakdown.workshop || 0) + 1;
-                points += weights.workshop_participation || 5;
-            } else {
-                breakdown.eventAttendance = (breakdown.eventAttendance || 0) + 1;
-                points += weights.event_attendance || 1;
-            }
-        }
-    });
-    
-    // الجوائز
-    const memberAwards = data.awards.filter(a => a.recipient_id === String(memberId));
-    memberAwards.forEach(a => {
-        if (a.type === 'براءة اختراع') {
-            breakdown.patent = (breakdown.patent || 0) + 1;
-            points += weights.patent || 15;
-        } else {
-            breakdown.award = (breakdown.award || 0) + 1;
-            points += weights.award || 10;
+    // المشاركات العلمية من participations
+    data.participations.forEach(p => {
+        const participants = (p.participant_ids || '').split('|');
+        if (!participants.includes(String(memberId))) return;
+        
+        switch(p.category) {
+            case 'مؤتمر':
+                if (p.participation_type === 'مشاركة بورقة' || p.participation_type === 'نشر') {
+                    breakdown.conferencePaper = (breakdown.conferencePaper || 0) + 1;
+                    points += weights.conference_paper || 8;
+                } else if (p.participation_type === 'تنظيم') {
+                    breakdown.eventOrganization = (breakdown.eventOrganization || 0) + 1;
+                    points += weights.event_organization || 10;
+                } else if (p.participation_type === 'حضور') {
+                    breakdown.eventAttendance = (breakdown.eventAttendance || 0) + 1;
+                    points += weights.event_attendance || 1;
+                } else {
+                    breakdown.conferencePaper = (breakdown.conferencePaper || 0) + 1;
+                    points += weights.conference_paper || 8;
+                }
+                break;
+                
+            case 'ندوة':
+                if (p.participation_type === 'تنظيم') {
+                    breakdown.eventOrganization = (breakdown.eventOrganization || 0) + 1;
+                    points += weights.event_organization || 10;
+                } else if (p.participation_type === 'حضور') {
+                    breakdown.eventAttendance = (breakdown.eventAttendance || 0) + 1;
+                    points += weights.event_attendance || 1;
+                } else {
+                    breakdown.seminar = (breakdown.seminar || 0) + 1;
+                    points += weights.seminar_participation || 4;
+                }
+                break;
+                
+            case 'ورشة عمل':
+                if (p.participation_type === 'تنظيم') {
+                    breakdown.eventOrganization = (breakdown.eventOrganization || 0) + 1;
+                    points += weights.event_organization || 10;
+                } else if (p.participation_type === 'حضور') {
+                    breakdown.eventAttendance = (breakdown.eventAttendance || 0) + 1;
+                    points += weights.event_attendance || 1;
+                } else {
+                    breakdown.workshop = (breakdown.workshop || 0) + 1;
+                    points += weights.workshop_participation || 5;
+                }
+                break;
+                
+            case 'مناقشة علمية خارجية':
+                breakdown.externalDiscussion = (breakdown.externalDiscussion || 0) + 1;
+                points += weights.external_discussion || 6;
+                break;
+                
+            case 'جائزة':
+                breakdown.award = (breakdown.award || 0) + 1;
+                points += weights.award || 10;
+                break;
+                
+            case 'براءة اختراع':
+                breakdown.patent = (breakdown.patent || 0) + 1;
+                points += weights.patent || 15;
+                break;
         }
     });
     
@@ -331,38 +410,35 @@ function calculateKPIs() {
     
     if (totalMembers === 0) return null;
     
-    // نسبة النشر العلمي
+    const publications = getPublications();
+    const awards = getAwards();
+    
     const publishingMembers = new Set();
-    data.publications.forEach(p => {
-        const authors = (p.authors_ids || '').split('|');
-        authors.forEach(id => publishingMembers.add(id));
+    publications.forEach(p => {
+        const participants = (p.participant_ids || '').split('|');
+        participants.forEach(id => publishingMembers.add(id));
     });
     const publishingRate = (publishingMembers.size / totalMembers) * 100;
     
-    // معدل البحوث لكل عضو
-    const pubPerMember = data.publications.length / totalMembers;
+    const pubPerMember = publications.length / totalMembers;
     
-    // معدل الاقتباسات
     let totalCitations = 0;
-    data.publications.forEach(p => {
+    publications.forEach(p => {
         totalCitations += getCitationsEstimate(p.citations_range);
     });
     const citationsPerMember = totalCitations / totalMembers;
     
-    // نسبة نشر الطلاب
-    const studentPubs = data.publications.filter(p => p.student_author === 'نعم').length;
+    const studentPubs = publications.filter(p => p.student_author === 'نعم' || p.category === 'بحوث الطلاب').length;
     const totalStudents = data.students.reduce((sum, s) => sum + parseInt(s.count || 0), 0);
     const studentPubRate = totalStudents > 0 ? (studentPubs / totalStudents) * 100 : 0;
     
-    // معدل الإشراف
     const supervisionRate = data.theses.length / totalMembers;
     const phdCount = data.theses.filter(t => t.type === 'دكتوراه').length;
     const mastersCount = data.theses.filter(t => t.type === 'ماجستير').length;
     
-    // الابتكار والتميز
-    const awards = data.awards.filter(a => a.type === 'جائزة').length;
-    const patents = data.awards.filter(a => a.type === 'براءة اختراع').length;
-    const innovation = awards + patents;
+    const awardsCount = awards.filter(a => a.category === 'جائزة').length;
+    const patentsCount = awards.filter(a => a.category === 'براءة اختراع').length;
+    const innovation = awardsCount + patentsCount;
     
     return {
         publishingRate: publishingRate.toFixed(1),
@@ -373,8 +449,8 @@ function calculateKPIs() {
         phdCount,
         mastersCount,
         innovation,
-        awards,
-        patents
+        awards: awardsCount,
+        patents: patentsCount
     };
 }
 
@@ -384,19 +460,49 @@ function calculateKPIs() {
 function getRecentActivities(limit = 10) {
     const activities = [];
     
-    // البحوث
-    data.publications.forEach(p => {
+    data.participations.forEach(p => {
+        let icon = '📄';
+        let title = p.title;
+        let meta = p.location;
+        
+        switch(p.category) {
+            case 'بحث منشور':
+            case 'بحوث الطلاب':
+                icon = '📄';
+                meta = p.journal || p.location;
+                break;
+            case 'مؤتمر':
+                icon = '🎤';
+                break;
+            case 'ندوة':
+                icon = '💬';
+                break;
+            case 'ورشة عمل':
+                icon = '🛠️';
+                break;
+            case 'مناقشة علمية خارجية':
+                icon = '🎓';
+                break;
+            case 'جائزة':
+                icon = '🏆';
+                meta = p.granting_body || p.location;
+                break;
+            case 'براءة اختراع':
+                icon = '💡';
+                meta = p.granting_body || p.location;
+                break;
+        }
+        
         activities.push({
-            type: 'publication',
-            icon: '📄',
-            title: p.title,
-            meta: p.journal,
-            date: p.publish_date,
-            dateObj: new Date(p.publish_date)
+            type: p.category,
+            icon,
+            title,
+            meta,
+            date: p.date,
+            dateObj: new Date(p.date?.replace(/-/g, '/') || Date.now())
         });
     });
     
-    // الرسائل المنجزة
     data.theses.filter(t => t.status === 'منجزة').forEach(t => {
         activities.push({
             type: 'thesis',
@@ -404,35 +510,10 @@ function getRecentActivities(limit = 10) {
             title: `مناقشة رسالة ${t.type}: ${t.student_name}`,
             meta: getMemberName(t.supervisor_id),
             date: t.defense_date,
-            dateObj: new Date(t.defense_date)
+            dateObj: new Date(t.defense_date?.replace(/-/g, '/') || Date.now())
         });
     });
     
-    // الفعاليات
-    data.events.forEach(e => {
-        activities.push({
-            type: 'event',
-            icon: e.type === 'مؤتمر' ? '🎤' : e.type === 'ندوة' ? '💬' : '🛠️',
-            title: e.name,
-            meta: `${e.type} - ${e.location}`,
-            date: e.date,
-            dateObj: new Date(e.date)
-        });
-    });
-    
-    // الجوائز
-    data.awards.forEach(a => {
-        activities.push({
-            type: 'award',
-            icon: a.type === 'براءة اختراع' ? '💡' : '🏆',
-            title: a.name,
-            meta: getMemberName(a.recipient_id),
-            date: a.date,
-            dateObj: new Date(a.date)
-        });
-    });
-    
-    // ترتيب حسب التاريخ (الأحدث أولاً)
     activities.sort((a, b) => b.dateObj - a.dateObj);
     
     return activities.slice(0, limit);
@@ -455,26 +536,22 @@ function populateYearSelector() {
 }
 
 function renderDashboard() {
-    // الإحصائيات السريعة
+    const publications = getPublications();
+    const events = getEvents();
+    
     document.getElementById('totalFaculty').textContent = data.faculty.filter(f => f.active === 'نعم').length;
-    document.getElementById('totalPublications').textContent = data.publications.length;
+    document.getElementById('totalPublications').textContent = publications.length;
     document.getElementById('totalTheses').textContent = data.theses.length;
-    document.getElementById('totalEvents').textContent = data.events.length;
+    document.getElementById('totalEvents').textContent = events.length;
     
-    // المتصدرون
     renderLeaderboard();
-    
-    // آخر النشاطات
     renderActivities();
-    
-    // الرسوم البيانية
     renderDashboardCharts();
 }
 
 function renderLeaderboard() {
     const leaderboard = getLeaderboard();
     
-    // المنصة (أول 3)
     if (leaderboard[0]) {
         document.getElementById('first-name').textContent = leaderboard[0].name.replace('د. ', '').split(' ').slice(0, 2).join(' ');
         document.getElementById('first-points').textContent = leaderboard[0].points + ' نقطة';
@@ -488,7 +565,6 @@ function renderLeaderboard() {
         document.getElementById('third-points').textContent = leaderboard[2].points + ' نقطة';
     }
     
-    // القائمة (4 فما بعد)
     const listContainer = document.getElementById('leaderboardList');
     listContainer.innerHTML = '';
     
@@ -511,12 +587,12 @@ function renderActivities() {
     
     activities.forEach(activity => {
         const item = document.createElement('div');
-        item.className = `activity-item ${activity.type}`;
+        item.className = `activity-item`;
         item.innerHTML = `
             <span class="activity-icon">${activity.icon}</span>
             <div class="activity-content">
                 <div class="activity-title">${activity.title}</div>
-                <div class="activity-meta">${activity.meta}</div>
+                <div class="activity-meta">${activity.meta || ''}</div>
                 <div class="activity-date">${formatDate(activity.date)}</div>
             </div>
         `;
@@ -525,24 +601,28 @@ function renderActivities() {
 }
 
 function renderDashboardCharts() {
-    // رسم بياني للبحوث
+    const publications = getPublications();
+    
     const pubCtx = document.getElementById('publicationsChart');
     if (pubCtx) {
         if (charts.publications) charts.publications.destroy();
         
         const monthlyPubs = new Array(12).fill(0);
-        data.publications.forEach(p => {
-            if (p.publish_date) {
-                const month = new Date(p.publish_date).getMonth();
-                monthlyPubs[month]++;
+        publications.forEach(p => {
+            if (p.date) {
+                const parts = p.date.split('-');
+                const month = parseInt(parts[1]) - 1;
+                if (month >= 0 && month < 12) monthlyPubs[month]++;
             }
         });
+        
+        const hijriMonths = ['محرم', 'صفر', 'ربيع أول', 'ربيع ثاني', 'جمادى أولى', 'جمادى آخرة', 
+                           'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
         
         charts.publications = new Chart(pubCtx, {
             type: 'bar',
             data: {
-                labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 
-                        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'],
+                labels: hijriMonths,
                 datasets: [{
                     label: 'عدد البحوث',
                     data: monthlyPubs,
@@ -554,9 +634,7 @@ function renderDashboardCharts() {
             },
             options: {
                 responsive: true,
-                plugins: {
-                    legend: { display: false }
-                },
+                plugins: { legend: { display: false } },
                 scales: {
                     y: {
                         beginAtZero: true,
@@ -572,7 +650,6 @@ function renderDashboardCharts() {
         });
     }
     
-    // رسم بياني للرسائل
     const thesesCtx = document.getElementById('thesesChart');
     if (thesesCtx) {
         if (charts.theses) charts.theses.destroy();
@@ -614,19 +691,15 @@ function renderQualityIndicators() {
     const kpis = calculateKPIs();
     if (!kpis) return;
     
-    // نسبة النشر
     document.getElementById('kpiPublishingRate').textContent = kpis.publishingRate;
     document.getElementById('kpiPublishingRateBar').style.width = kpis.publishingRate + '%';
     
-    // معدل البحوث
     document.getElementById('kpiPubPerMember').textContent = kpis.pubPerMember;
     const gaugeWidth = Math.min(parseFloat(kpis.pubPerMember) * 33, 100);
     document.getElementById('kpiPubPerMemberGauge').style.width = gaugeWidth + '%';
     
-    // الاقتباسات
     document.getElementById('kpiCitations').textContent = kpis.citationsPerMember;
     
-    // رسم مصغر للاقتباسات
     const miniChart = document.getElementById('kpiCitationsMini');
     miniChart.innerHTML = '';
     const heights = [30, 50, 70, 40, 80, 60, 90];
@@ -637,11 +710,9 @@ function renderQualityIndicators() {
         miniChart.appendChild(bar);
     });
     
-    // نسبة نشر الطلاب
     document.getElementById('kpiStudentPub').textContent = kpis.studentPubRate;
     document.getElementById('kpiStudentPubBar').style.width = Math.min(parseFloat(kpis.studentPubRate) * 10, 100) + '%';
     
-    // معدل الإشراف
     document.getElementById('kpiSupervision').textContent = kpis.supervisionRate;
     document.getElementById('kpiPhdCount').textContent = kpis.phdCount;
     document.getElementById('kpiMastersCount').textContent = kpis.mastersCount;
@@ -650,7 +721,6 @@ function renderQualityIndicators() {
     document.getElementById('kpiPhdBar').style.width = (kpis.phdCount / maxTheses * 100) + '%';
     document.getElementById('kpiMastersBar').style.width = (kpis.mastersCount / maxTheses * 100) + '%';
     
-    // الابتكار
     document.getElementById('kpiInnovation').textContent = kpis.innovation;
     const iconsContainer = document.getElementById('kpiInnovationIcons');
     iconsContainer.innerHTML = '';
@@ -669,7 +739,6 @@ function renderQualityIndicators() {
         iconsContainer.appendChild(icon);
     }
     
-    // رسم الرادار
     renderQualityRadarChart(kpis);
 }
 
@@ -710,13 +779,14 @@ function renderQualityRadarChart(kpis) {
                     pointLabels: { color: '#e5e7eb', font: { size: 12 } }
                 }
             },
-            plugins: {
-                legend: { display: false }
-            }
+            plugins: { legend: { display: false } }
         }
     });
 }
 
+// ========================================
+// عرض الرسائل العلمية
+// ========================================
 function renderTheses() {
     const tbody = document.getElementById('thesesTableBody');
     tbody.innerHTML = '';
@@ -728,8 +798,8 @@ function renderTheses() {
     let filtered = data.theses;
     
     if (searchTerm) filtered = filtered.filter(t => 
-        t.title.toLowerCase().includes(searchTerm) || 
-        t.student_name.toLowerCase().includes(searchTerm) ||
+        (t.title && t.title.toLowerCase().includes(searchTerm)) || 
+        (t.student_name && t.student_name.toLowerCase().includes(searchTerm)) ||
         getMemberName(t.supervisor_id).toLowerCase().includes(searchTerm)
     );
     
@@ -757,6 +827,7 @@ function renderTheses() {
 }
 
 function showThesisDetails(thesis) {
+    currentThesis = thesis;
     const modal = document.getElementById('thesisModal');
     const programName = thesis.type + ' ' + (thesis.specialization === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
     
@@ -765,6 +836,7 @@ function showThesisDetails(thesis) {
     document.getElementById('modalTitle').textContent = thesis.title;
     document.getElementById('modalStudent').textContent = thesis.student_name;
     document.getElementById('modalProgram').textContent = programName;
+    document.getElementById('modalLocation').textContent = config.university_name || 'جامعة الطائف';
     document.getElementById('modalStatus').textContent = thesis.status;
     document.getElementById('modalDate').textContent = formatDate(thesis.defense_date);
     document.getElementById('modalSupervisor').textContent = getMemberName(thesis.supervisor_id);
@@ -783,6 +855,279 @@ function showThesisDetails(thesis) {
     modal.classList.add('active');
 }
 
+// ========================================
+// طباعة الرسالة العلمية
+// ========================================
+function printThesis() {
+    if (!currentThesis) return;
+    
+    const thesis = currentThesis;
+    const programName = thesis.type + ' ' + (thesis.specialization === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
+    const universityName = config.university_name || 'جامعة الطائف';
+    const departmentName = config.department_name || 'قسم القراءات';
+    
+    const printContent = `
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>بيانات الرسالة العلمية - ${thesis.student_name}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;600;700&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Cairo', 'Amiri', sans-serif;
+            background: #fff;
+            color: #1a1a2e;
+            padding: 40px;
+            line-height: 1.8;
+        }
+        
+        .print-container {
+            max-width: 800px;
+            margin: 0 auto;
+            border: 3px double #c6a962;
+            padding: 40px;
+            position: relative;
+        }
+        
+        .print-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #c6a962;
+        }
+        
+        .university-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1a365d;
+            margin-bottom: 5px;
+        }
+        
+        .department-name {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .document-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #c6a962;
+            background: #1a365d;
+            padding: 10px 30px;
+            display: inline-block;
+            border-radius: 25px;
+        }
+        
+        .thesis-badge-print {
+            display: inline-block;
+            padding: 8px 25px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0;
+        }
+        
+        .thesis-badge-print.phd {
+            background: linear-gradient(135deg, #c6a962, #a08339);
+            color: #1a1a2e;
+        }
+        
+        .thesis-badge-print.masters {
+            background: linear-gradient(135deg, #4a9d9a, #2d6a6a);
+            color: #fff;
+        }
+        
+        .thesis-title-print {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1a365d;
+            text-align: center;
+            margin: 25px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-right: 5px solid #c6a962;
+        }
+        
+        .info-section { margin: 30px 0; }
+        
+        .info-section h3 {
+            font-size: 18px;
+            color: #c6a962;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .info-item-print {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-right: 3px solid #1a365d;
+        }
+        
+        .info-label-print {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        
+        .info-value-print {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1a365d;
+        }
+        
+        .committee-grid-print {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .committee-member-print {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #eee;
+        }
+        
+        .member-role-print {
+            font-size: 12px;
+            color: #c6a962;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .member-name-print {
+            font-size: 15px;
+            color: #1a365d;
+            font-weight: 600;
+        }
+        
+        .print-footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #c6a962;
+            text-align: center;
+            color: #888;
+            font-size: 12px;
+        }
+        
+        .decorative-corner {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border: 3px solid #c6a962;
+        }
+        
+        .corner-top-right { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+        .corner-top-left { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+        .corner-bottom-right { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+        .corner-bottom-left { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+        
+        @media print {
+            body { padding: 0; }
+            .print-container { border: 2px solid #333; }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-container">
+        <div class="decorative-corner corner-top-right"></div>
+        <div class="decorative-corner corner-top-left"></div>
+        <div class="decorative-corner corner-bottom-right"></div>
+        <div class="decorative-corner corner-bottom-left"></div>
+        
+        <div class="print-header">
+            <div class="university-name">${universityName}</div>
+            <div class="department-name">${departmentName}</div>
+            <div class="document-title">بيانات الرسالة العلمية</div>
+        </div>
+        
+        <div style="text-align: center;">
+            <span class="thesis-badge-print ${thesis.type === 'دكتوراه' ? 'phd' : 'masters'}">${programName}</span>
+        </div>
+        
+        <div class="thesis-title-print">${thesis.title}</div>
+        
+        <div class="info-section">
+            <h3>📋 البيانات الأساسية</h3>
+            <div class="info-grid">
+                <div class="info-item-print">
+                    <div class="info-label-print">اسم الطالب</div>
+                    <div class="info-value-print">${thesis.student_name}</div>
+                </div>
+                <div class="info-item-print">
+                    <div class="info-label-print">البرنامج</div>
+                    <div class="info-value-print">${programName}</div>
+                </div>
+                <div class="info-item-print">
+                    <div class="info-label-print">المكان</div>
+                    <div class="info-value-print">${universityName}</div>
+                </div>
+                <div class="info-item-print">
+                    <div class="info-label-print">الحالة</div>
+                    <div class="info-value-print">${thesis.status}</div>
+                </div>
+                <div class="info-item-print" style="grid-column: span 2;">
+                    <div class="info-label-print">تاريخ المناقشة</div>
+                    <div class="info-value-print">${formatDate(thesis.defense_date)}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="info-section">
+            <h3>👥 لجنة الإشراف والمناقشة</h3>
+            <div class="committee-grid-print">
+                <div class="committee-member-print">
+                    <div class="member-role-print">المشرف الرئيسي</div>
+                    <div class="member-name-print">${getMemberName(thesis.supervisor_id)}</div>
+                </div>
+                ${thesis.co_supervisor_id ? `
+                <div class="committee-member-print">
+                    <div class="member-role-print">المشرف المشارك</div>
+                    <div class="member-name-print">${getMemberName(thesis.co_supervisor_id)}</div>
+                </div>
+                ` : ''}
+                <div class="committee-member-print">
+                    <div class="member-role-print">المناقش الأول</div>
+                    <div class="member-name-print">${getMemberName(thesis.examiner1_id) || '-'}</div>
+                </div>
+                <div class="committee-member-print">
+                    <div class="member-role-print">المناقش الثاني</div>
+                    <div class="member-name-print">${getMemberName(thesis.examiner2_id) || '-'}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="print-footer">
+            <p>تم الطباعة من نظام الأنشطة العلمية - ${departmentName} - ${universityName}</p>
+            <p>التاريخ: ${new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura')}</p>
+        </div>
+    </div>
+    
+    <script>window.onload = function() { window.print(); }</script>
+</body>
+</html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+}
+
 // إغلاق Modal
 document.addEventListener('click', (e) => {
     const modal = document.getElementById('thesisModal');
@@ -791,84 +1136,102 @@ document.addEventListener('click', (e) => {
     }
 });
 
-
+// ========================================
+// عرض البحوث المنشورة
+// ========================================
 function renderPublications() {
     const container = document.getElementById('publicationsGrid');
     container.innerHTML = '';
     
-    const searchTerm = document.getElementById('pubSearch').value.toLowerCase();
-    const citationsFilter = document.getElementById('pubCitationsFilter').value;
+    const searchTerm = document.getElementById('pubSearch')?.value?.toLowerCase() || '';
+    const citationsFilter = document.getElementById('pubCitationsFilter')?.value || '';
     
-    let filtered = data.publications;
-    if (searchTerm) filtered = filtered.filter(p => p.title.toLowerCase().includes(searchTerm));
+    let filtered = getPublications();
+    if (searchTerm) filtered = filtered.filter(p => p.title && p.title.toLowerCase().includes(searchTerm));
     if (citationsFilter) filtered = filtered.filter(p => p.citations_range === citationsFilter);
     
     filtered.forEach(pub => {
-        const authors = (pub.authors_ids || '').split('|').map(id => getMemberName(id));
+        const participants = (pub.participant_ids || '').split('|').map(id => getMemberName(id));
         
         const card = document.createElement('div');
         card.className = 'publication-card';
         card.innerHTML = `
             <div class="publication-title">${pub.title}</div>
-            <div class="publication-journal">${pub.journal}</div>
+            <div class="publication-journal">${pub.journal || pub.location}</div>
             <div class="publication-authors">
-                ${authors.map(a => `<span class="author-tag">${a}</span>`).join('')}
+                ${participants.map(a => `<span class="author-tag">${a}</span>`).join('')}
             </div>
             <div class="publication-meta">
-                <span class="publication-date">${formatDate(pub.publish_date)}</span>
-                <span class="publication-citations">${pub.citations_range}</span>
+                <span class="publication-date">${formatDate(pub.date)}</span>
+                <span class="publication-citations">${pub.citations_range || '-'}</span>
             </div>
+            ${pub.student_author === 'نعم' || pub.category === 'بحوث الطلاب' ? '<span class="student-badge">بحث طالب</span>' : ''}
         `;
         container.appendChild(card);
     });
 }
 
+// ========================================
+// عرض الفعاليات العلمية
+// ========================================
 function renderEvents() {
     const container = document.getElementById('eventsGrid');
     container.innerHTML = '';
     
-    const typeFilter = document.getElementById('eventsTypeFilter').value;
+    const typeFilter = document.getElementById('eventsTypeFilter')?.value || '';
+    const participationFilter = document.getElementById('eventsParticipationFilter')?.value || '';
     
-    let filtered = data.events;
-    if (typeFilter) filtered = filtered.filter(e => e.type === typeFilter);
+    let filtered = getEvents();
+    if (typeFilter) filtered = filtered.filter(e => e.category === typeFilter);
+    if (participationFilter) filtered = filtered.filter(e => e.participation_type === participationFilter);
     
     filtered.forEach(event => {
         const dateInfo = formatDateShort(event.date);
-        const typeClass = event.type === 'مؤتمر' ? 'conference' : event.type === 'ندوة' ? 'seminar' : 'workshop';
+        let typeClass = 'workshop';
+        if (event.category === 'مؤتمر') typeClass = 'conference';
+        else if (event.category === 'ندوة') typeClass = 'seminar';
+        else if (event.category === 'مناقشة علمية خارجية') typeClass = 'discussion';
         
         const card = document.createElement('div');
         card.className = `event-card ${typeClass}`;
         card.innerHTML = `
             <div class="event-header">
-                <span class="event-type">${event.type}</span>
+                <span class="event-type">${event.category}</span>
                 <div class="event-date-box">
                     <div class="event-day">${dateInfo.day}</div>
                     <div class="event-month">${dateInfo.month}</div>
                 </div>
             </div>
             <div class="event-body">
-                <div class="event-name">${event.name}</div>
+                <div class="event-name">${event.title}</div>
                 <div class="event-location">📍 ${event.location}</div>
                 <div class="event-participation">${event.participation_type}</div>
+                ${event.organized_by_department === 'نعم' ? '<span class="organized-badge">من تنظيم القسم</span>' : ''}
             </div>
         `;
         container.appendChild(card);
     });
 }
 
+// ========================================
+// عرض الجوائز
+// ========================================
 function renderAwards() {
     const container = document.getElementById('awardsShowcase');
+    if (!container) return;
     container.innerHTML = '';
     
-    data.awards.forEach(award => {
+    const awards = getAwards();
+    
+    awards.forEach(award => {
         const card = document.createElement('div');
         card.className = 'award-card';
         card.innerHTML = `
-            <div class="award-icon">${award.type === 'براءة اختراع' ? '💡' : '🏆'}</div>
-            <div class="award-type">${award.type}</div>
-            <div class="award-name">${award.name}</div>
-            <div class="award-recipient">${getMemberName(award.recipient_id)}</div>
-            <div class="award-granter">${award.granting_body}</div>
+            <div class="award-icon">${award.category === 'براءة اختراع' ? '💡' : '🏆'}</div>
+            <div class="award-type">${award.category}</div>
+            <div class="award-name">${award.title}</div>
+            <div class="award-recipient">${(award.participant_ids || '').split('|').map(id => getMemberName(id)).join('، ')}</div>
+            <div class="award-granter">${award.granting_body || award.location}</div>
             <div class="award-date">${formatDate(award.date)}</div>
         `;
         container.appendChild(card);
@@ -877,11 +1240,10 @@ function renderAwards() {
 
 function renderAll() {
     renderDashboard();
-    renderQualityIndicators();
-    renderTheses();
     renderPublications();
+    renderTheses();
     renderEvents();
-    renderAwards();
+    renderQualityIndicators();
 }
 
 // ========================================
@@ -890,11 +1252,9 @@ function renderAll() {
 function setupTabs() {
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            // تحديث الأزرار
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             
-            // تحديث المحتوى
             const tabId = btn.dataset.tab;
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
@@ -903,17 +1263,15 @@ function setupTabs() {
 }
 
 function setupFilters() {
-    // فلاتر الرسائل
-   // فلاتر الرسائل
-    document.getElementById('thesesSearch').addEventListener('input', renderTheses);
-    document.getElementById('thesesTypeFilter').addEventListener('change', renderTheses);
-    document.getElementById('thesesStatusFilter').addEventListener('change', renderTheses);
-    // فلاتر البحوث
-    document.getElementById('pubSearch').addEventListener('input', renderPublications);
-    document.getElementById('pubCitationsFilter').addEventListener('change', renderPublications);
+    document.getElementById('thesesSearch')?.addEventListener('input', renderTheses);
+    document.getElementById('thesesTypeFilter')?.addEventListener('change', renderTheses);
+    document.getElementById('thesesStatusFilter')?.addEventListener('change', renderTheses);
     
-    // فلاتر الفعاليات
-    document.getElementById('eventsTypeFilter').addEventListener('change', renderEvents);
+    document.getElementById('pubSearch')?.addEventListener('input', renderPublications);
+    document.getElementById('pubCitationsFilter')?.addEventListener('change', renderPublications);
+    
+    document.getElementById('eventsTypeFilter')?.addEventListener('change', renderEvents);
+    document.getElementById('eventsParticipationFilter')?.addEventListener('change', renderEvents);
 }
 
 function setupYearSelector() {
@@ -927,11 +1285,9 @@ function setupYearSelector() {
 // التهيئة
 // ========================================
 async function init() {
-    // تعيين السنة الهجرية في الفوتر
     const hijriYear = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { year: 'numeric' }).replace(/[^0-9]/g, '');
     document.getElementById('currentYear').textContent = hijriYear;
     
-    // تحميل الإعدادات والبيانات
     await loadConfig();
     populateYearSelector();
     setupTabs();
@@ -940,5 +1296,4 @@ async function init() {
     await loadAllData();
 }
 
-// بدء التطبيق
 document.addEventListener('DOMContentLoaded', init);
