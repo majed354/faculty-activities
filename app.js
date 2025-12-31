@@ -112,7 +112,7 @@ async function loadAllData() {
 
 async function loadYearData(year) {
     // فلترة البيانات حسب السنة المختارة
-    data.faculty = allData.faculty;
+   data.faculty = allData.faculty.filter(f => parseInt(f.year) === year);
     data.students = allData.students.filter(s => parseInt(s.year) === year);
     data.theses = allData.theses.filter(t => parseInt(t.year) === year);
     data.publications = allData.publications.filter(p => parseInt(p.year) === year);
