@@ -700,23 +700,27 @@ function renderTheses() {
     
     const typeFilter = document.getElementById('thesesTypeFilter').value;
     const statusFilter = document.getElementById('thesesStatusFilter').value;
-    
-   const searchTerm = document.getElementById('thesesSearch').value.toLowerCase();
+    const searchTerm = document.getElementById('thesesSearch')?.value?.toLowerCase() || '';
     
     let filtered = data.theses;
+    
     if (searchTerm) filtered = filtered.filter(t => 
         t.title.toLowerCase().includes(searchTerm) || 
         t.student_name.toLowerCase().includes(searchTerm) ||
         getMemberName(t.supervisor_id).toLowerCase().includes(searchTerm)
     );
-  if (typeFilter) {
+    
+    if (typeFilter) {
         const [type, specialization] = typeFilter.split('-');
         filtered = filtered.filter(t => t.type === type && t.specialization === specialization);
     }
+    
     if (statusFilter) filtered = filtered.filter(t => t.status === statusFilter);
     
     filtered.forEach(thesis => {
         const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.onclick = () => showThesisDetails(thesis);
         tr.innerHTML = `
             <td><span class="badge badge-${thesis.type === 'دكتوراه' ? 'phd' : 'masters'}">${thesis.type}</span></td>
             <td>${thesis.student_name}</td>
@@ -728,6 +732,42 @@ function renderTheses() {
         tbody.appendChild(tr);
     });
 }
+
+function showThesisDetails(thesis) {
+    const modal = document.getElementById('thesisModal');
+    const programName = thesis.type + ' ' + (thesis.specialization === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
+    
+    document.getElementById('modalBadge').textContent = programName;
+    document.getElementById('modalBadge').className = 'thesis-badge ' + (thesis.type === 'دكتوراه' ? 'phd' : 'masters');
+    document.getElementById('modalTitle').textContent = thesis.title;
+    document.getElementById('modalStudent').textContent = thesis.student_name;
+    document.getElementById('modalProgram').textContent = programName;
+    document.getElementById('modalStatus').textContent = thesis.status;
+    document.getElementById('modalDate').textContent = formatDate(thesis.defense_date);
+    document.getElementById('modalSupervisor').textContent = getMemberName(thesis.supervisor_id);
+    
+    const coSupervisorSection = document.getElementById('coSupervisorSection');
+    if (thesis.co_supervisor_id) {
+        coSupervisorSection.style.display = 'block';
+        document.getElementById('modalCoSupervisor').textContent = getMemberName(thesis.co_supervisor_id);
+    } else {
+        coSupervisorSection.style.display = 'none';
+    }
+    
+    document.getElementById('modalExaminer1').textContent = getMemberName(thesis.examiner1_id) || '-';
+    document.getElementById('modalExaminer2').textContent = getMemberName(thesis.examiner2_id) || '-';
+    
+    modal.classList.add('active');
+}
+
+// إغلاق Modal
+document.addEventListener('click', (e) => {
+    const modal = document.getElementById('thesisModal');
+    if (e.target === modal || e.target.classList.contains('modal-close')) {
+        modal.classList.remove('active');
+    }
+});
+
 
 function renderPublications() {
     const container = document.getElementById('publicationsGrid');
