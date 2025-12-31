@@ -27,9 +27,7 @@ let data = {
 let charts = {};
 
 // تحديد مسار البيانات
-const DATA_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? './data'
-    : 'https://raw.githubusercontent.com/YOUR_USERNAME/faculty-activities/main/data';
+const DATA_BASE_URL = './data';
 
 // ========================================
 // دوال التحميل
@@ -44,10 +42,18 @@ function hideLoading() {
 
 async function loadCSV(url) {
     try {
+        console.log('Loading:', url);
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const text = await response.text();
         const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+        console.log(`Loaded ${url}:`, result.data.length, 'rows');
+        return result.data;
+    } catch (error) {
+        console.error(`Failed to load ${url}:`, error);
+        return [];
+    }
+}
         return result.data;
     } catch (error) {
         console.warn(`Failed to load ${url}:`, error);
@@ -96,28 +102,77 @@ async function loadConfig() {
 async function loadAllData() {
     showLoading();
     
-    const [faculty, students, theses, publications, events, awards] = await Promise.all([
-        loadCSV(`${DATA_BASE_URL}/faculty.csv`),
-        loadCSV(`${DATA_BASE_URL}/students_count.csv`),
-        loadCSV(`${DATA_BASE_URL}/theses.csv`),
-        loadCSV(`${DATA_BASE_URL}/publications.csv`),
-        loadCSV(`${DATA_BASE_URL}/events.csv`),
-        loadCSV(`${DATA_BASE_URL}/awards.csv`)
-    ]);
-    
-    allData = { faculty, students, theses, publications, events, awards };
-    
-    await loadYearData(currentYear);
+    try {
+        const [faculty, students, theses, publications, events, awards] = await Promise.all([
+            loadCSV(`${DATA_BASE_URL}/faculty.csv`),
+            loadCSV(`${DATA_BASE_URL}/students_count.csv`),
+            loadCSV(`${DATA_BASE_URL}/theses.csv`),
+            loadCSV(`${DATA_BASE_URL}/publications.csv`),
+            loadCSV(`${DATA_BASE_URL}/events.csv`),
+            loadCSV(`${DATA_BASE_URL}/awards.csv`)
+        ]);
+        
+        allData = { faculty, students, theses, publications, events, awards };
+        
+        console.log('All data loaded:', {
+            faculty: faculty.length,
+            students: students.length,
+            theses: theses.length,
+            publications: publications.length,
+            events: events.length,
+            awards: awards.length
+        });
+        
+        // التحقق من وجود بيانات
+        if (faculty.length === 0) {
+            showError('لم يتم تحميل البيانات. تأكد من تشغيل خادم محلي.');
+            return;
+        }
+        
+        await loadYearData(currentYear);
+        
+    } catch (error) {
+        console.error('Error loading data:', error);
+        showError('حدث خطأ في تحميل البيانات.');
+    }
+}
+
+function showError(message) {
+    hideLoading();
+    const main = document.querySelector('.main-content');
+    main.innerHTML = `
+        <div style="text-align: center; padding: 4rem 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">⚠️</div>
+            <h2 style="color: #f59e0b; margin-bottom: 1rem;">${message}</h2>
+            <p style="color: #9ca3af; margin-bottom: 2rem;">
+                لتشغيل الموقع محلياً، استخدم أحد الأوامر التالية:
+            </p>
+            <div style="background: rgba(0,0,0,0.3); padding: 1.5rem; border-radius: 12px; display: inline-block; text-align: left; direction: ltr;">
+                <code style="color: #10b981; display: block; margin-bottom: 0.5rem;">python -m http.server 8000</code>
+                <code style="color: #10b981; display: block; margin-bottom: 0.5rem;">npx serve .</code>
+                <code style="color: #10b981; display: block;">php -S localhost:8000</code>
+            </div>
+            <p style="color: #9ca3af; margin-top: 1.5rem;">
+                ثم افتح: <a href="http://localhost:8000" style="color: #60a5fa;">http://localhost:8000</a>
+            </p>
+        </div>
+    `;
 }
 
 async function loadYearData(year) {
+    console.log('Loading year:', year);
+    console.log('All faculty:', allData.faculty.length);
+    
     // فلترة البيانات حسب السنة المختارة
-    data.faculty = allData.faculty;
+    data.faculty = allData.faculty.filter(f => parseInt(f.year) === year);
     data.students = allData.students.filter(s => parseInt(s.year) === year);
     data.theses = allData.theses.filter(t => parseInt(t.year) === year);
     data.publications = allData.publications.filter(p => parseInt(p.year) === year);
     data.events = allData.events.filter(e => parseInt(e.year) === year);
     data.awards = allData.awards.filter(a => parseInt(a.year) === year);
+    
+    console.log('Filtered faculty:', data.faculty.length);
+    console.log('Filtered theses:', data.theses.length);
     
     hideLoading();
     renderAll();
