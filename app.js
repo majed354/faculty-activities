@@ -29,7 +29,7 @@ let charts = {};
 // تحديد مسار البيانات
 const DATA_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? './data'
-    : 'https://raw.githubusercontent.com/YOUR_USERNAME/faculty-activities/main/data';
+    : 'https://raw.githubusercontent.com/majed354/faculty-activities/main/data';
 
 // ========================================
 // دوال التحميل
