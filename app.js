@@ -133,12 +133,52 @@ function getMemberName(id) {
 
 function formatDate(dateStr) {
     if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('ar-SA-u-ca-islamic', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-    });
+    const hijriMonths = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
+    
+    let day, month, year;
+    
+    // تحديد الفاصل والتنسيق
+    if (dateStr.includes('/')) {
+        // تنسيق: DD/MM/YYYY (هجري)
+        const parts = dateStr.split('/');
+        day = parseInt(parts[0]);
+        month = parseInt(parts[1]);
+        year = parseInt(parts[2]);
+    } else if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts[0].length === 4) {
+            // تنسيق: YYYY-MM-DD (ميلادي)
+            year = parseInt(parts[0]);
+            month = parseInt(parts[1]);
+            day = parseInt(parts[2]);
+        } else {
+            // تنسيق: DD-MM-YYYY (هجري)
+            day = parseInt(parts[0]);
+            month = parseInt(parts[1]);
+            year = parseInt(parts[2]);
+        }
+    } else {
+        return dateStr;
+    }
+    
+    // إذا كانت السنة ميلادية (أكبر من 2000)، حوّلها للهجري
+    if (year > 2000) {
+        const gregorianDate = new Date(year, month - 1, day);
+        const hijriDate = gregorianDate.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {
+            day: 'numeric',
+            month: 'numeric', 
+            year: 'numeric'
+        });
+        // استخراج الأرقام من النتيجة
+        const hijriParts = hijriDate.match(/(\d+)/g);
+        if (hijriParts && hijriParts.length >= 3) {
+            day = parseInt(hijriParts[0]);
+            month = parseInt(hijriParts[1]);
+            year = parseInt(hijriParts[2]);
+        }
+    }
+    
+    return `${day} ${hijriMonths[month - 1]} ${year}هـ`;
 }
 
 function formatDateShort(dateStr) {
