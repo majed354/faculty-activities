@@ -1639,6 +1639,750 @@ function renderAll() {
 }
 
 // ========================================
+// نظام إضافة الأنشطة
+// ========================================
+
+// أنواع الأنشطة المتاحة
+const activityTypes = [
+    { id: 'publication', name: 'نشر علمي', icon: '📄', category: 'بحث منشور' },
+    { id: 'thesis_supervision', name: 'إشراف رسائل', icon: '🎓', category: 'إشراف' },
+    { id: 'internal_discussion', name: 'مناقشة داخلية', icon: '📋', category: 'مناقشة' },
+    { id: 'external_discussion', name: 'مناقشة خارجية', icon: '🎯', category: 'مناقشة علمية خارجية' },
+    { id: 'conference_attendance', name: 'حضور مؤتمرات', icon: '👥', category: 'مؤتمر' },
+    { id: 'conference_participation', name: 'مشاركة في مؤتمرات', icon: '🎤', category: 'مؤتمر' },
+    { id: 'workshop_attendance', name: 'حضور ندوات وورش عمل', icon: '📚', category: 'ورشة عمل' },
+    { id: 'workshop_participation', name: 'مشاركة في ندوات وورش عمل', icon: '🛠️', category: 'ندوة' },
+    { id: 'award', name: 'الحصول على جوائز علمية', icon: '🏆', category: 'جائزة' }
+];
+
+// متغيرات نظام الإضافة
+let selectedMemberForAdd = null;
+let selectedActivityType = null;
+let currentAddStep = 1;
+let pendingActivities = []; // الأنشطة المعلقة للإضافة
+
+// إنشاء الزر العائم و Modal الإضافة
+function createAddActivityUI() {
+    // إنشاء الزر العائم
+    const fabContainer = document.createElement('div');
+    fabContainer.className = 'fab-container';
+    fabContainer.innerHTML = `
+        <button class="fab-button" onclick="toggleAddModal()" title="إضافة نشاط جديد">
+            <span>+</span>
+        </button>
+    `;
+    document.body.appendChild(fabContainer);
+    
+    // إنشاء Modal الإضافة
+    const modal = document.createElement('div');
+    modal.id = 'addActivityModal';
+    modal.className = 'add-activity-modal';
+    modal.innerHTML = `
+        <div class="add-modal-content">
+            <div class="add-modal-header">
+                <h2>➕ إضافة نشاط علمي جديد</h2>
+                <button class="add-modal-close" onclick="closeAddModal()">×</button>
+            </div>
+            <div class="add-modal-body">
+                <!-- خطوات الإضافة -->
+                <div class="add-steps">
+                    <div class="add-step active" data-step="1">
+                        <span class="step-number">1</span>
+                        <span>اختيار العضو</span>
+                    </div>
+                    <div class="add-step" data-step="2">
+                        <span class="step-number">2</span>
+                        <span>نوع النشاط</span>
+                    </div>
+                    <div class="add-step" data-step="3">
+                        <span class="step-number">3</span>
+                        <span>البيانات</span>
+                    </div>
+                    <div class="add-step" data-step="4">
+                        <span class="step-number">4</span>
+                        <span>المراجعة</span>
+                    </div>
+                </div>
+                
+                <!-- الخطوة 1: اختيار العضو -->
+                <div class="step-content active" id="step1Content">
+                    <div class="member-select-section">
+                        <div class="form-group">
+                            <label><span class="required">*</span> اختر عضو هيئة التدريس</label>
+                            <select class="form-select" id="memberSelectDropdown" onchange="onMemberSelected()">
+                                <option value="">-- اختر العضو --</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="memberActivitiesSummary" class="member-activities-summary" style="display: none;">
+                        <!-- ملخص أنشطة العضو -->
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn btn-primary" onclick="goToStep(2)" id="step1NextBtn" disabled>
+                            التالي <span>←</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- الخطوة 2: نوع النشاط -->
+                <div class="step-content" id="step2Content">
+                    <h3 style="color: var(--gray-300); margin-bottom: 20px;">اختر نوع النشاط</h3>
+                    <div class="activity-types-grid" id="activityTypesGrid">
+                        <!-- يتم ملؤها بـ JavaScript -->
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="goToStep(1)">
+                            <span>→</span> السابق
+                        </button>
+                        <button class="btn btn-primary" onclick="goToStep(3)" id="step2NextBtn" disabled>
+                            التالي <span>←</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- الخطوة 3: إدخال البيانات -->
+                <div class="step-content" id="step3Content">
+                    <div id="activityFormContainer">
+                        <!-- يتم ملؤها حسب نوع النشاط -->
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="goToStep(2)">
+                            <span>→</span> السابق
+                        </button>
+                        <button class="btn btn-primary" onclick="goToStep(4)" id="step3NextBtn">
+                            معاينة <span>←</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- الخطوة 4: المراجعة والإرسال -->
+                <div class="step-content" id="step4Content">
+                    <div class="preview-section">
+                        <div class="preview-header">
+                            <span>📋</span> مراجعة البيانات قبل الإضافة
+                        </div>
+                        <div class="preview-data" id="previewData">
+                            <!-- يتم ملؤها بالبيانات -->
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info" style="margin-top: 20px;">
+                        <span>💡</span>
+                        <span>سيتم تنزيل ملف CSV يحتوي على البيانات الجديدة. يمكنك إضافته لمجلد البيانات.</span>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="goToStep(3)">
+                            <span>→</span> تعديل
+                        </button>
+                        <button class="btn btn-success" onclick="submitActivity()">
+                            <span>✓</span> تأكيد وتنزيل
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- رسالة النجاح -->
+                <div class="step-content" id="successContent">
+                    <div class="success-message">
+                        <div class="success-icon">✅</div>
+                        <h3>تم إنشاء ملف البيانات بنجاح!</h3>
+                        <p>تم تنزيل الملف. قم برفعه إلى مجلد data في المستودع.</p>
+                        <div class="modal-actions" style="justify-content: center;">
+                            <button class="btn btn-primary" onclick="resetAddForm()">
+                                إضافة نشاط آخر
+                            </button>
+                            <button class="btn btn-secondary" onclick="closeAddModal()">
+                                إغلاق
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // ملء قائمة الأنشطة
+    populateActivityTypes();
+}
+
+// ملء قائمة أنواع الأنشطة
+function populateActivityTypes() {
+    const grid = document.getElementById('activityTypesGrid');
+    if (!grid) return;
+    
+    grid.innerHTML = activityTypes.map(type => `
+        <button class="activity-type-btn" data-type="${type.id}" onclick="selectActivityType('${type.id}')">
+            <span class="type-icon">${type.icon}</span>
+            <span>${type.name}</span>
+        </button>
+    `).join('');
+}
+
+// فتح/إغلاق Modal الإضافة
+function toggleAddModal() {
+    const modal = document.getElementById('addActivityModal');
+    const fab = document.querySelector('.fab-button');
+    
+    if (modal.classList.contains('active')) {
+        closeAddModal();
+    } else {
+        openAddModal();
+    }
+}
+
+function openAddModal() {
+    const modal = document.getElementById('addActivityModal');
+    const fab = document.querySelector('.fab-button');
+    
+    modal.classList.add('active');
+    fab.classList.add('active');
+    
+    // تحديث قائمة الأعضاء
+    populateMemberDropdown();
+    
+    // إعادة تعيين النموذج
+    resetAddForm();
+}
+
+function closeAddModal() {
+    const modal = document.getElementById('addActivityModal');
+    const fab = document.querySelector('.fab-button');
+    
+    modal.classList.remove('active');
+    fab.classList.remove('active');
+}
+
+// ملء قائمة الأعضاء
+function populateMemberDropdown() {
+    const select = document.getElementById('memberSelectDropdown');
+    if (!select) return;
+    
+    const activeMembers = data.faculty.filter(f => f.active === 'نعم');
+    
+    select.innerHTML = '<option value="">-- اختر العضو --</option>';
+    activeMembers.forEach(member => {
+        select.innerHTML += `<option value="${member.id}">${member.name} - ${member.rank}</option>`;
+    });
+}
+
+// عند اختيار عضو
+function onMemberSelected() {
+    const select = document.getElementById('memberSelectDropdown');
+    const memberId = select.value;
+    const nextBtn = document.getElementById('step1NextBtn');
+    const summaryDiv = document.getElementById('memberActivitiesSummary');
+    
+    if (memberId) {
+        selectedMemberForAdd = getMemberData(memberId);
+        nextBtn.disabled = false;
+        
+        // عرض ملخص أنشطة العضو
+        const activities = getMemberActivities(memberId);
+        const { points, breakdown } = calculateMemberPoints(memberId);
+        
+        summaryDiv.style.display = 'block';
+        summaryDiv.innerHTML = `
+            <div class="summary-header">
+                <h3>📊 ملخص أنشطة ${selectedMemberForAdd.name}</h3>
+                <span style="color: var(--emerald-400); font-weight: 700;">${points} نقطة</span>
+            </div>
+            <div class="summary-stats">
+                <div class="summary-stat">
+                    <div class="summary-stat-value">${activities.theses.length}</div>
+                    <div class="summary-stat-label">رسائل علمية</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="summary-stat-value">${activities.publications.length}</div>
+                    <div class="summary-stat-label">بحوث منشورة</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="summary-stat-value">${activities.events.length}</div>
+                    <div class="summary-stat-label">فعاليات</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="summary-stat-value">${activities.awards.length}</div>
+                    <div class="summary-stat-label">جوائز</div>
+                </div>
+            </div>
+        `;
+    } else {
+        selectedMemberForAdd = null;
+        nextBtn.disabled = true;
+        summaryDiv.style.display = 'none';
+    }
+}
+
+// اختيار نوع النشاط
+function selectActivityType(typeId) {
+    selectedActivityType = activityTypes.find(t => t.id === typeId);
+    
+    // تحديث الأزرار
+    document.querySelectorAll('.activity-type-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        if (btn.dataset.type === typeId) {
+            btn.classList.add('selected');
+        }
+    });
+    
+    document.getElementById('step2NextBtn').disabled = false;
+}
+
+// التنقل بين الخطوات
+function goToStep(step) {
+    currentAddStep = step;
+    
+    // تحديث مؤشرات الخطوات
+    document.querySelectorAll('.add-step').forEach(s => {
+        const stepNum = parseInt(s.dataset.step);
+        s.classList.remove('active', 'completed');
+        if (stepNum === step) {
+            s.classList.add('active');
+        } else if (stepNum < step) {
+            s.classList.add('completed');
+        }
+    });
+    
+    // إظهار المحتوى المناسب
+    document.querySelectorAll('.step-content').forEach(c => c.classList.remove('active'));
+    document.getElementById(`step${step}Content`).classList.add('active');
+    
+    // تحضير محتوى الخطوة
+    if (step === 3) {
+        generateActivityForm();
+    } else if (step === 4) {
+        generatePreview();
+    }
+}
+
+// توليد نموذج إدخال البيانات حسب نوع النشاط
+function generateActivityForm() {
+    const container = document.getElementById('activityFormContainer');
+    if (!selectedActivityType) return;
+    
+    let formHTML = `<h3 style="color: var(--gold-400); margin-bottom: 20px;">${selectedActivityType.icon} ${selectedActivityType.name}</h3>`;
+    
+    switch(selectedActivityType.id) {
+        case 'publication':
+            formHTML += `
+                <div class="form-group">
+                    <label><span class="required">*</span> عنوان البحث</label>
+                    <input type="text" class="form-input" id="actTitle" placeholder="أدخل عنوان البحث">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><span class="required">*</span> اسم المجلة</label>
+                        <input type="text" class="form-input" id="actJournal" placeholder="اسم المجلة">
+                    </div>
+                    <div class="form-group">
+                        <label><span class="required">*</span> تاريخ النشر</label>
+                        <input type="date" class="form-input" id="actDate">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>نطاق الاقتباسات</label>
+                        <select class="form-select" id="actCitations">
+                            <option value="أقل من 10">أقل من 10</option>
+                            <option value="11-20">11-20</option>
+                            <option value="21-50">21-50</option>
+                            <option value="51-100">51-100</option>
+                            <option value="101-200">101-200</option>
+                            <option value="201-500">201-500</option>
+                            <option value="أكثر من 500">أكثر من 500</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>هل هناك طالب مشارك؟</label>
+                        <select class="form-select" id="actStudentAuthor">
+                            <option value="لا">لا</option>
+                            <option value="نعم">نعم</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+            break;
+            
+        case 'thesis_supervision':
+            formHTML += `
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><span class="required">*</span> نوع الرسالة</label>
+                        <select class="form-select" id="actThesisType">
+                            <option value="دكتوراه">دكتوراه</option>
+                            <option value="ماجستير">ماجستير</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label><span class="required">*</span> التخصص</label>
+                        <select class="form-select" id="actSpecialization">
+                            <option value="قراءات">قراءات</option>
+                            <option value="دراسات قرآنية">دراسات قرآنية</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label><span class="required">*</span> اسم الطالب</label>
+                    <input type="text" class="form-input" id="actStudentName" placeholder="اسم الطالب الكامل">
+                </div>
+                <div class="form-group">
+                    <label><span class="required">*</span> عنوان الرسالة</label>
+                    <textarea class="form-textarea" id="actTitle" placeholder="عنوان الرسالة"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>نوع الإشراف</label>
+                        <select class="form-select" id="actSupervisionType">
+                            <option value="رئيسي">مشرف رئيسي</option>
+                            <option value="مشارك">مشرف مشارك</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>الحالة</label>
+                        <select class="form-select" id="actStatus">
+                            <option value="جارية">جارية</option>
+                            <option value="منجزة">منجزة</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>تاريخ المناقشة (إن وجد)</label>
+                    <input type="date" class="form-input" id="actDate">
+                </div>
+            `;
+            break;
+            
+        case 'internal_discussion':
+        case 'external_discussion':
+            formHTML += `
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><span class="required">*</span> نوع الرسالة</label>
+                        <select class="form-select" id="actThesisType">
+                            <option value="دكتوراه">دكتوراه</option>
+                            <option value="ماجستير">ماجستير</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label><span class="required">*</span> تاريخ المناقشة</label>
+                        <input type="date" class="form-input" id="actDate">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label><span class="required">*</span> اسم الطالب</label>
+                    <input type="text" class="form-input" id="actStudentName" placeholder="اسم الطالب">
+                </div>
+                <div class="form-group">
+                    <label><span class="required">*</span> عنوان الرسالة</label>
+                    <textarea class="form-textarea" id="actTitle" placeholder="عنوان الرسالة"></textarea>
+                </div>
+                ${selectedActivityType.id === 'external_discussion' ? `
+                <div class="form-group">
+                    <label>الجامعة/الجهة</label>
+                    <input type="text" class="form-input" id="actLocation" placeholder="اسم الجامعة أو الجهة">
+                </div>
+                ` : ''}
+            `;
+            break;
+            
+        case 'conference_attendance':
+        case 'conference_participation':
+        case 'workshop_attendance':
+        case 'workshop_participation':
+            const isParticipation = selectedActivityType.id.includes('participation');
+            formHTML += `
+                <div class="form-group">
+                    <label><span class="required">*</span> اسم الفعالية</label>
+                    <input type="text" class="form-input" id="actTitle" placeholder="اسم المؤتمر أو الورشة">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><span class="required">*</span> المكان</label>
+                        <input type="text" class="form-input" id="actLocation" placeholder="المدينة أو الجهة">
+                    </div>
+                    <div class="form-group">
+                        <label><span class="required">*</span> التاريخ</label>
+                        <input type="date" class="form-input" id="actDate">
+                    </div>
+                </div>
+                ${isParticipation ? `
+                <div class="form-group">
+                    <label>نوع المشاركة</label>
+                    <select class="form-select" id="actParticipationType">
+                        <option value="مشاركة بورقة">مشاركة بورقة بحثية</option>
+                        <option value="مشاركة">مشاركة</option>
+                        <option value="تنظيم">تنظيم</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>عنوان الورقة (إن وجد)</label>
+                    <input type="text" class="form-input" id="actPaperTitle" placeholder="عنوان الورقة البحثية">
+                </div>
+                ` : ''}
+                <div class="form-group">
+                    <label>هل الفعالية من تنظيم القسم؟</label>
+                    <select class="form-select" id="actOrganizedByDept">
+                        <option value="لا">لا</option>
+                        <option value="نعم">نعم</option>
+                    </select>
+                </div>
+            `;
+            break;
+            
+        case 'award':
+            formHTML += `
+                <div class="form-group">
+                    <label><span class="required">*</span> نوع التكريم</label>
+                    <select class="form-select" id="actAwardType">
+                        <option value="جائزة">جائزة</option>
+                        <option value="براءة اختراع">براءة اختراع</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><span class="required">*</span> اسم الجائزة/البراءة</label>
+                    <input type="text" class="form-input" id="actTitle" placeholder="اسم الجائزة أو البراءة">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><span class="required">*</span> الجهة المانحة</label>
+                        <input type="text" class="form-input" id="actGrantingBody" placeholder="الجهة المانحة">
+                    </div>
+                    <div class="form-group">
+                        <label><span class="required">*</span> التاريخ</label>
+                        <input type="date" class="form-input" id="actDate">
+                    </div>
+                </div>
+            `;
+            break;
+    }
+    
+    container.innerHTML = formHTML;
+}
+
+// توليد معاينة البيانات
+function generatePreview() {
+    const container = document.getElementById('previewData');
+    const formData = collectFormData();
+    
+    let previewHTML = `
+        <div class="preview-item" style="grid-column: span 2;">
+            <div class="preview-item-label">العضو</div>
+            <div class="preview-item-value">${selectedMemberForAdd?.name || '-'}</div>
+        </div>
+        <div class="preview-item">
+            <div class="preview-item-label">نوع النشاط</div>
+            <div class="preview-item-value">${selectedActivityType?.name || '-'}</div>
+        </div>
+        <div class="preview-item">
+            <div class="preview-item-label">السنة</div>
+            <div class="preview-item-value">${currentYear}هـ</div>
+        </div>
+    `;
+    
+    Object.entries(formData).forEach(([key, value]) => {
+        if (value && key !== 'member_id' && key !== 'year') {
+            const labels = {
+                title: 'العنوان',
+                journal: 'المجلة',
+                date: 'التاريخ',
+                citations_range: 'الاقتباسات',
+                student_author: 'طالب مشارك',
+                thesis_type: 'نوع الرسالة',
+                specialization: 'التخصص',
+                student_name: 'اسم الطالب',
+                supervision_type: 'نوع الإشراف',
+                status: 'الحالة',
+                location: 'المكان',
+                participation_type: 'نوع المشاركة',
+                organized_by_dept: 'تنظيم القسم',
+                award_type: 'نوع التكريم',
+                granting_body: 'الجهة المانحة'
+            };
+            
+            previewHTML += `
+                <div class="preview-item">
+                    <div class="preview-item-label">${labels[key] || key}</div>
+                    <div class="preview-item-value">${value}</div>
+                </div>
+            `;
+        }
+    });
+    
+    container.innerHTML = previewHTML;
+}
+
+// جمع بيانات النموذج
+function collectFormData() {
+    const data = {
+        member_id: selectedMemberForAdd?.id,
+        year: currentYear
+    };
+    
+    // جمع القيم من النموذج
+    const fields = ['Title', 'Journal', 'Date', 'Citations', 'StudentAuthor', 'ThesisType', 
+                    'Specialization', 'StudentName', 'SupervisionType', 'Status', 'Location',
+                    'ParticipationType', 'OrganizedByDept', 'AwardType', 'GrantingBody', 'PaperTitle'];
+    
+    fields.forEach(field => {
+        const el = document.getElementById('act' + field);
+        if (el && el.value) {
+            data[field.toLowerCase().replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '')] = el.value;
+        }
+    });
+    
+    return data;
+}
+
+// إرسال النشاط
+function submitActivity() {
+    const formData = collectFormData();
+    
+    // تحديد الملف المناسب
+    let csvContent = '';
+    let filename = '';
+    
+    switch(selectedActivityType.id) {
+        case 'publication':
+            filename = 'participations_new.csv';
+            csvContent = generateParticipationCSV(formData, 'بحث منشور');
+            break;
+        case 'thesis_supervision':
+            filename = 'theses_new.csv';
+            csvContent = generateThesisCSV(formData);
+            break;
+        case 'internal_discussion':
+        case 'external_discussion':
+            filename = selectedActivityType.id === 'external_discussion' ? 'participations_new.csv' : 'theses_update.csv';
+            csvContent = selectedActivityType.id === 'external_discussion' 
+                ? generateParticipationCSV(formData, 'مناقشة علمية خارجية')
+                : generateDiscussionNote(formData);
+            break;
+        case 'conference_attendance':
+        case 'conference_participation':
+            filename = 'participations_new.csv';
+            csvContent = generateParticipationCSV(formData, 'مؤتمر');
+            break;
+        case 'workshop_attendance':
+        case 'workshop_participation':
+            filename = 'participations_new.csv';
+            const cat = selectedActivityType.id.includes('workshop') ? 'ورشة عمل' : 'ندوة';
+            csvContent = generateParticipationCSV(formData, cat);
+            break;
+        case 'award':
+            filename = 'participations_new.csv';
+            csvContent = generateParticipationCSV(formData, formData.award_type || 'جائزة');
+            break;
+    }
+    
+    // تنزيل الملف
+    downloadCSV(csvContent, filename);
+    
+    // عرض رسالة النجاح
+    document.querySelectorAll('.step-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('successContent').classList.add('active');
+}
+
+// توليد CSV للمشاركات
+function generateParticipationCSV(data, category) {
+    const participationType = data.participation_type || 
+        (selectedActivityType.id.includes('attendance') ? 'حضور' : 'مشاركة');
+    
+    const headers = 'id;year;category;title;participant_ids;date;location;journal;citations_range;student_author;participation_type;organized_by_department;granting_body';
+    const newId = Date.now(); // ID مؤقت
+    
+    const row = [
+        newId,
+        data.year,
+        category,
+        data.title || data.paper_title || '',
+        data.member_id,
+        data.date || '',
+        data.location || '',
+        data.journal || '',
+        data.citations_range || '',
+        data.student_author || '',
+        participationType,
+        data.organized_by_dept || 'لا',
+        data.granting_body || ''
+    ].join(';');
+    
+    return headers + '\n' + row;
+}
+
+// توليد CSV للرسائل
+function generateThesisCSV(data) {
+    const headers = 'id;year;type;specialization;student_name;title;supervisor_id;co_supervisor_id;examiner1_id;examiner2_id;status;defense_date';
+    const newId = Date.now();
+    
+    const supervisorId = data.supervision_type === 'رئيسي' ? data.member_id : '';
+    const coSupervisorId = data.supervision_type === 'مشارك' ? data.member_id : '';
+    
+    const row = [
+        newId,
+        data.year,
+        data.thesis_type || 'ماجستير',
+        data.specialization || 'قراءات',
+        data.student_name || '',
+        data.title || '',
+        supervisorId,
+        coSupervisorId,
+        '', // examiner1
+        '', // examiner2
+        data.status || 'جارية',
+        data.date || ''
+    ].join(';');
+    
+    return headers + '\n' + row;
+}
+
+// ملاحظة للمناقشة الداخلية
+function generateDiscussionNote(data) {
+    return `ملاحظة: لإضافة مناقشة داخلية، يجب تحديث بيانات الرسالة الموجودة في ملف theses.csv
+العضو: ${selectedMemberForAdd?.name}
+الطالب: ${data.student_name}
+العنوان: ${data.title}
+التاريخ: ${data.date}
+
+قم بإضافة معرف العضو (${data.member_id}) في حقل examiner1_id أو examiner2_id للرسالة المناسبة.`;
+}
+
+// تنزيل ملف CSV
+function downloadCSV(content, filename) {
+    const BOM = '\uFEFF'; // لضمان ظهور العربية صحيحة
+    const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+}
+
+// إعادة تعيين النموذج
+function resetAddForm() {
+    selectedMemberForAdd = null;
+    selectedActivityType = null;
+    currentAddStep = 1;
+    
+    // إعادة تعيين العناصر
+    const memberSelect = document.getElementById('memberSelectDropdown');
+    if (memberSelect) memberSelect.value = '';
+    
+    const summaryDiv = document.getElementById('memberActivitiesSummary');
+    if (summaryDiv) summaryDiv.style.display = 'none';
+    
+    document.querySelectorAll('.activity-type-btn').forEach(btn => btn.classList.remove('selected'));
+    
+    document.getElementById('step1NextBtn').disabled = true;
+    document.getElementById('step2NextBtn').disabled = true;
+    
+    // العودة للخطوة الأولى
+    goToStep(1);
+}
+
+// ========================================
 // التنقل بين التبويبات
 // ========================================
 function setupTabs() {
@@ -1686,6 +2430,9 @@ async function init() {
     setupFilters();
     setupYearSelector();
     await loadAllData();
+    
+    // إنشاء واجهة إضافة الأنشطة
+    createAddActivityUI();
 }
 
 document.addEventListener('DOMContentLoaded', init);
