@@ -10,7 +10,7 @@
     
     <style>
         /* =========================================
-           تنسيقات الصفحة الأساسية
+           تنسيقات الصفحة
         ========================================= */
         body { background-color: var(--primary-900); min-height: 100vh; }
         
@@ -51,14 +51,8 @@
             outline: none; border-color: var(--gold-400); background: rgba(255, 255, 255, 0.1);
         }
 
-        /* تنسيق خاص لحقول التاريخ الهجري */
-        .hijri-input {
-            direction: ltr; /* لتسهيل كتابة الأرقام */
-            text-align: right;
-            letter-spacing: 1px;
-        }
+        .hijri-input { direction: ltr; text-align: right; letter-spacing: 1px; }
 
-        /* تنسيق الحقل الخارجي المخفي */
         .external-input {
             display: none; margin-top: 10px;
             border-color: var(--sky-500) !important;
@@ -80,12 +74,7 @@
         }
         optgroup { color: var(--gold-400); background: #0c1929; font-weight: bold; }
 
-        /* =========================================
-           تنسيقات الاختيار المتعدد (Multi-Select)
-        ========================================= */
-        .multi-select-wrapper {
-            display: flex; gap: 10px;
-        }
+        .multi-select-wrapper { display: flex; gap: 10px; }
         .btn-add-member {
             background: var(--emerald-500); color: white; border: none;
             padding: 0 20px; border-radius: 8px; cursor: pointer; font-weight: bold;
@@ -104,6 +93,10 @@
             cursor: pointer; color: var(--rose-500); font-weight: bold; font-size: 1.1rem; line-height: 1;
         }
         .remove-tag:hover { color: var(--rose-600); }
+
+        /* إخفاء العناصر ديناميكياً */
+        .dynamic-field { display: none; }
+        .dynamic-field.visible { display: block; animation: fadeIn 0.3s; }
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -140,7 +133,7 @@
                 <option value="">-- اختر النشاط من القائمة --</option>
                 
                 <optgroup label="📚 النشر العلمي">
-                    <option value="pub_research">بحث علمي منشور</option>
+                    <option value="pub_research">بحث علمي منشور (للأعضاء)</option>
                 </optgroup>
 
                 <optgroup label="🎓 الإشراف والمناقشة">
@@ -148,19 +141,19 @@
                     <option value="thesis_discussion_internal">مناقشة داخلية (داخل القسم)</option>
                 </optgroup>
 
-                <optgroup label="📅 الفعاليات العلمية">
+                <optgroup label="📅 الفعاليات والأنشطة">
                     <option value="event_discussion_external">مناقشة خارجية</option>
                     <option value="event_conf_attend">حضور مؤتمر</option>
                     <option value="event_conf_part">مشاركة في مؤتمر</option>
                     <option value="event_workshop_attend">حضور ندوة / ورشة عمل</option>
                     <option value="event_workshop_part">مشاركة في ندوة / ورشة عمل</option>
-                    <option value="event_student_research">بحوث الطلاب</option>
+                    <option value="event_student_research">بحث منشور لطالب (إشراف)</option>
                 </optgroup>
             </select>
         </div>
 
         <div id="form-publications" class="form-section">
-            <h3 style="color: var(--emerald-500); margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">بيانات البحث المنشور</h3>
+            <h3 style="color: var(--emerald-500); margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">بيانات البحث المنشور (أعضاء)</h3>
             <div class="input-grid">
                 <div class="form-group">
                     <label>السنة (هجري)</label>
@@ -170,7 +163,6 @@
                     <label>عنوان البحث</label>
                     <input type="text" id="pub_title">
                 </div>
-
                 <div class="form-group" style="grid-column: span 2;">
                     <label>الأعضاء المشاركون في البحث (من القسم)</label>
                     <div class="multi-select-wrapper">
@@ -182,7 +174,6 @@
                     <div id="pub_authors_list" class="selected-members-list"></div>
                     <input type="hidden" id="pub_authors_hidden">
                 </div>
-
                 <div class="form-group">
                     <label>اسم المجلة</label>
                     <input type="text" id="pub_journal">
@@ -281,14 +272,14 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>تاريخ المناقشة (هجري: YYYY-MM-DD)</label>
+                    <label>تاريخ المناقشة (هجري)</label>
                     <input type="text" id="thesis_date" class="hijri-input" placeholder="مثال: 1446-05-20">
                 </div>
             </div>
         </div>
 
         <div id="form-participations" class="form-section">
-            <h3 style="color: var(--violet-500); margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">بيانات الفعالية / المشاركة</h3>
+            <h3 style="color: var(--violet-500); margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">بيانات الفعالية / الأنشطة</h3>
             
             <input type="hidden" id="part_category_hidden">
             <input type="hidden" id="part_type_hidden">
@@ -300,20 +291,26 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>عنوان الفعالية / المشاركة</label>
+                    <label id="part_title_label">عنوان الفعالية / النشاط</label>
                     <input type="text" id="part_title">
                 </div>
+
+                <div id="div_student_name" class="form-group dynamic-field">
+                    <label style="color: var(--sky-500);">اسم الطالب الباحث</label>
+                    <input type="text" id="part_student_name" placeholder="أدخل اسم الطالب...">
+                </div>
+
                 <div class="form-group">
-                    <label>المكان / الجهة المنظمة</label>
+                    <label id="part_location_label">المكان / الجهة المنظمة</label>
                     <input type="text" id="part_location">
                 </div>
                 <div class="form-group">
-                    <label>التاريخ (هجري: YYYY-MM-DD)</label>
+                    <label>التاريخ (هجري)</label>
                     <input type="text" id="part_date" class="hijri-input" placeholder="مثال: 1446-05-20">
                 </div>
 
                 <div class="form-group" style="grid-column: span 2;">
-                    <label>الأعضاء المشاركون (من القسم)</label>
+                    <label id="part_ids_label">الأعضاء المشاركون (من القسم)</label>
                     <div class="multi-select-wrapper">
                         <select id="part_ids_select" class="faculty-select">
                             <option value="">-- اختر اسماً للإضافة --</option>
@@ -324,7 +321,7 @@
                     <input type="hidden" id="part_ids_hidden">
                 </div>
 
-                <div class="form-group">
+                <div id="div_org" class="form-group dynamic-field">
                     <label>تنظيم القسم؟</label>
                     <select id="part_org">
                         <option value="لا">لا</option>
@@ -332,12 +329,12 @@
                     </select>
                 </div>
                 
-                <div class="form-group">
-                    <label>اسم المجلة / الجهة (اختياري)</label>
-                    <input type="text" id="part_journal">
+                <div id="div_attendance" class="form-group dynamic-field">
+                    <label style="color: var(--sky-500);">عدد الحضور (تقريبي)</label>
+                    <input type="number" id="part_attendance" placeholder="مثال: 45">
                 </div>
                 
-                <div class="form-group">
+                <div class="form-group" id="div_student_participation">
                     <label>مشاركة طالب؟</label>
                     <select id="part_student">
                         <option value="لا">لا</option>
@@ -359,9 +356,6 @@
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzbIi7bIwIZCXPtUHnUt5bS2GJAZZjfFqgKSqyEnC97KOPwx03ZGkXCFdZRTcndZOuM/exec';
         let facultyList = [];
         let currentTargetSheet = '';
-
-        // كائنات لتخزين الاختيارات المتعددة (المؤلفون والمشاركون)
-        // Key: List ID, Value: Array of {id, name}
         let selectedMembersData = {};
 
         async function attemptLogin() {
@@ -396,7 +390,6 @@
                     }
                 });
             } catch (error) {
-                // تجاوز للدخول المحلي
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('mainFormScreen').style.display = 'block';
             }
@@ -420,7 +413,7 @@
                 select.appendChild(firstOption);
                 if (firstOption.text === "جاري التحميل...") firstOption.text = "-- اختر عضو هيئة التدريس --";
 
-                // إضافة خيار خارجي فقط للرسائل
+                // إضافة خيار خارجي للرسائل فقط
                 if (select.id.startsWith('thesis_')) {
                     const extOption = document.createElement('option');
                     extOption.value = "external";
@@ -428,7 +421,6 @@
                     extOption.style.color = "#0ea5e9";
                     extOption.style.fontWeight = "bold";
                     select.appendChild(extOption);
-                    
                     const separator = document.createElement('option');
                     separator.disabled = true; separator.text = "------------------";
                     select.appendChild(separator);
@@ -459,41 +451,24 @@
             return (select.value === 'external') ? input.value.trim() : select.value;
         }
 
-        // ============================================================
-        // منطق الإضافة المتعددة (Multi-Select Logic)
-        // ============================================================
         function addMemberToList(selectId, listId, hiddenInputId) {
             const select = document.getElementById(selectId);
             const memberId = select.value;
             const memberName = select.options[select.selectedIndex].text;
+            if (!memberId || memberId === 'external') return;
 
-            if (!memberId || memberId === 'external') return; // لا نقبل الفارغ أو الخارجي هنا حالياً
-
-            // تهيئة المصفوفة إذا لم تكن موجودة
-            if (!selectedMembersData[hiddenInputId]) {
-                selectedMembersData[hiddenInputId] = [];
-            }
-
-            // التحقق من التكرار
-            const exists = selectedMembersData[hiddenInputId].find(m => m.id === memberId);
-            if (exists) {
-                alert('هذا العضو مضاف بالفعل!');
-                return;
-            }
-
-            // الإضافة للمصفوفة
-            selectedMembersData[hiddenInputId].push({ id: memberId, name: memberName });
-
-            // تحديث العرض والحقل المخفي
-            renderMembersList(hiddenInputId, listId);
+            if (!selectedMembersData[hiddenInputId]) selectedMembersData[hiddenInputId] = [];
             
-            // إعادة تعيين القائمة المنسدلة
+            const exists = selectedMembersData[hiddenInputId].find(m => m.id === memberId);
+            if (exists) { alert('هذا العضو مضاف بالفعل!'); return; }
+
+            selectedMembersData[hiddenInputId].push({ id: memberId, name: memberName });
+            renderMembersList(hiddenInputId, listId);
             select.value = "";
         }
 
         function removeMemberFromList(memberId, listId, hiddenInputId) {
             if (!selectedMembersData[hiddenInputId]) return;
-
             selectedMembersData[hiddenInputId] = selectedMembersData[hiddenInputId].filter(m => m.id !== memberId);
             renderMembersList(hiddenInputId, listId);
         }
@@ -502,62 +477,75 @@
             const listContainer = document.getElementById(listId);
             const hiddenInput = document.getElementById(hiddenInputId);
             const members = selectedMembersData[hiddenInputId] || [];
-
-            // تحديث الحقل المخفي (الأرقام مفصولة بـ |)
             hiddenInput.value = members.map(m => m.id).join('|');
-
-            // تحديث العرض المرئي
             listContainer.innerHTML = '';
             members.forEach(member => {
                 const tag = document.createElement('div');
                 tag.className = 'member-tag';
-                tag.innerHTML = `
-                    ${member.name}
-                    <span class="remove-tag" onclick="removeMemberFromList('${member.id}', '${listId}', '${hiddenInputId}')">&times;</span>
-                `;
+                tag.innerHTML = `${member.name} <span class="remove-tag" onclick="removeMemberFromList('${member.id}', '${listId}', '${hiddenInputId}')">&times;</span>`;
                 listContainer.appendChild(tag);
             });
         }
 
         // ============================================================
-        // التعامل مع تغيير نوع النشاط
+        // التحكم الديناميكي في الحقول
         // ============================================================
         function handleActivityChange() {
             const selection = document.getElementById('mainActivitySelect').value;
             
             document.querySelectorAll('.form-section').forEach(el => el.classList.remove('active'));
             document.getElementById('submitBtn').style.display = 'none';
+            document.querySelectorAll('.dynamic-field').forEach(el => el.classList.remove('visible'));
 
             if (!selection) return;
 
+            // 1. قسم النشر العلمي
             if (selection === 'pub_research') {
                 document.getElementById('form-publications').classList.add('active');
                 currentTargetSheet = 'publications';
             } 
+            // 2. قسم الرسائل
             else if (selection.startsWith('thesis_')) {
                 document.getElementById('form-theses').classList.add('active');
                 currentTargetSheet = 'theses';
             } 
+            // 3. قسم الفعاليات
             else if (selection.startsWith('event_')) {
                 document.getElementById('form-participations').classList.add('active');
                 currentTargetSheet = 'participations';
                 
                 const categoryField = document.getElementById('part_category_hidden');
                 const typeField = document.getElementById('part_type_hidden');
+                
+                // إعادة تسمية الحقول افتراضياً
+                document.getElementById('part_title_label').textContent = "عنوان الفعالية / النشاط";
+                document.getElementById('part_location_label').textContent = "المكان / الجهة المنظمة";
+                document.getElementById('part_ids_label').textContent = "الأعضاء المشاركون (من القسم)";
 
                 switch(selection) {
                     case 'event_discussion_external':
-                        categoryField.value = 'مناقشة خارجية'; typeField.value = 'مشاركة'; break;
+                        categoryField.value = 'مناقشة خارجية'; typeField.value = 'مشاركة';
+                        break;
                     case 'event_conf_attend':
-                        categoryField.value = 'مؤتمر'; typeField.value = 'حضور'; break;
                     case 'event_conf_part':
-                        categoryField.value = 'مؤتمر'; typeField.value = 'مشاركة'; break;
+                        categoryField.value = 'مؤتمر'; 
+                        typeField.value = selection.includes('attend') ? 'حضور' : 'مشاركة';
+                        break;
                     case 'event_workshop_attend':
-                        categoryField.value = 'ندوة/ورشة'; typeField.value = 'حضور'; break;
                     case 'event_workshop_part':
-                        categoryField.value = 'ندوة/ورشة'; typeField.value = 'مشاركة'; break;
+                        categoryField.value = 'ندوة/ورشة'; 
+                        typeField.value = selection.includes('attend') ? 'حضور' : 'مشاركة';
+                        if(selection.includes('part')) document.getElementById('div_org').classList.add('visible'); // إظهار خيار التنظيم
+                        document.getElementById('div_attendance').classList.add('visible'); // إظهار عدد الحضور
+                        break;
                     case 'event_student_research':
-                        categoryField.value = 'بحوث الطلاب'; typeField.value = 'نشر'; break;
+                        categoryField.value = 'بحوث الطلاب'; typeField.value = 'نشر';
+                        // تخصيص الواجهة لبحوث الطلاب
+                        document.getElementById('div_student_name').classList.add('visible'); // إظهار حقل اسم الطالب
+                        document.getElementById('part_title_label').textContent = "عنوان البحث";
+                        document.getElementById('part_location_label').textContent = "اسم المجلة / جهة النشر";
+                        document.getElementById('part_ids_label').textContent = "المشرف (عضو هيئة التدريس)";
+                        break;
                 }
             }
             
@@ -568,16 +556,13 @@
             const btn = document.getElementById('submitBtn');
             const statusMsg = document.getElementById('statusMsg');
 
-            btn.disabled = true;
-            btn.textContent = "جاري الإرسال...";
-            statusMsg.textContent = "";
+            btn.disabled = true; btn.textContent = "جاري الإرسال..."; statusMsg.textContent = "";
 
             let formData = { formType: currentTargetSheet };
 
             if (currentTargetSheet === 'publications') {
                 formData.year = document.getElementById('pub_year').value;
                 formData.title = document.getElementById('pub_title').value;
-                // نأخذ القيمة من الحقل المخفي الذي عبأه نظام الإضافة المتعددة
                 formData.authors_ids = document.getElementById('pub_authors_hidden').value;
                 formData.journal = document.getElementById('pub_journal').value;
                 formData.publish_date = document.getElementById('pub_date').value;
@@ -601,16 +586,30 @@
                 formData.year = document.getElementById('part_year').value;
                 formData.category = document.getElementById('part_category_hidden').value;
                 formData.participation_type = document.getElementById('part_type_hidden').value;
-                formData.title = document.getElementById('part_title').value;
+                
+                let finalTitle = document.getElementById('part_title').value;
+                let studentDetails = "";
+
+                // منطق دمج اسم الطالب في العنوان
+                const studentNameInput = document.getElementById('part_student_name');
+                if (formData.category === 'بحوث الطلاب' && studentNameInput.value) {
+                    finalTitle = `إشراف على نشر بحث للطالب: ${studentNameInput.value} - بعنوان: ${finalTitle}`;
+                    studentDetails = studentNameInput.value; // نخزن الاسم أيضاً
+                } 
+                else if (document.getElementById('part_attendance').value) {
+                    studentDetails = document.getElementById('part_attendance').value; // نخزن عدد الحضور
+                }
+
+                formData.title = finalTitle;
                 formData.location = document.getElementById('part_location').value;
                 formData.date = document.getElementById('part_date').value;
-                // نأخذ القيمة من الحقل المخفي
                 formData.participant_ids = document.getElementById('part_ids_hidden').value;
                 formData.organized_by_department = document.getElementById('part_org').value;
-                formData.journal = document.getElementById('part_journal').value;
-                formData.student_author = document.getElementById('part_student').value;
+                formData.student_details = studentDetails; // العمود الجوكر
                 formData.notes = document.getElementById('part_notes').value;
-                formData.citations_range = ""; formData.granting_body = "";
+                // حقول فارغة
+                formData.journal = ""; formData.citations_range = ""; formData.granting_body = ""; 
+                formData.student_author = document.getElementById('part_student').value;
             }
 
             fetch(SCRIPT_URL, {
