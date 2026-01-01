@@ -552,20 +552,26 @@
             document.getElementById('submitBtn').style.display = 'block';
         }
 
-        function submitData() {
+function submitData() {
             const btn = document.getElementById('submitBtn');
             const statusMsg = document.getElementById('statusMsg');
 
-            btn.disabled = true; btn.textContent = "جاري الإرسال..."; statusMsg.textContent = "";
+            // 1. إعادة تهيئة الزر والرسالة
+            btn.disabled = true; 
+            btn.textContent = "جاري التحقق والإرسال..."; 
+            statusMsg.textContent = "";
 
             let formData = { formType: currentTargetSheet };
 
+            // =================================================
+            // تجميع البيانات (نفس الكود السابق)
+            // =================================================
             if (currentTargetSheet === 'publications') {
                 formData.year = document.getElementById('pub_year').value;
                 formData.title = document.getElementById('pub_title').value;
                 formData.authors_ids = document.getElementById('pub_authors_hidden').value;
                 formData.journal = document.getElementById('pub_journal').value;
-                formData.publish_date = document.getElementById('pub_date').value;
+                formData.publish_date = document.getElementById('pub_date').value; // التاريخ
                 formData.citations_range = document.getElementById('pub_citations').value;
                 formData.student_author = document.getElementById('pub_student').value;
             }
@@ -580,7 +586,7 @@
                 formData.examiner1_id = getMemberValue('thesis_exam1');
                 formData.examiner2_id = getMemberValue('thesis_exam2');
                 formData.status = document.getElementById('thesis_status').value;
-                formData.defense_date = document.getElementById('thesis_date').value;
+                formData.defense_date = document.getElementById('thesis_date').value; // التاريخ
             }
             else if (currentTargetSheet === 'participations') {
                 formData.year = document.getElementById('part_year').value;
@@ -590,28 +596,47 @@
                 let finalTitle = document.getElementById('part_title').value;
                 let studentDetails = "";
 
-                // منطق دمج اسم الطالب في العنوان
                 const studentNameInput = document.getElementById('part_student_name');
                 if (formData.category === 'بحوث الطلاب' && studentNameInput.value) {
                     finalTitle = `إشراف على نشر بحث للطالب: ${studentNameInput.value} - بعنوان: ${finalTitle}`;
-                    studentDetails = studentNameInput.value; // نخزن الاسم أيضاً
+                    studentDetails = studentNameInput.value; 
                 } 
                 else if (document.getElementById('part_attendance').value) {
-                    studentDetails = document.getElementById('part_attendance').value; // نخزن عدد الحضور
+                    studentDetails = document.getElementById('part_attendance').value; 
                 }
 
                 formData.title = finalTitle;
                 formData.location = document.getElementById('part_location').value;
-                formData.date = document.getElementById('part_date').value;
+                formData.date = document.getElementById('part_date').value; // التاريخ
                 formData.participant_ids = document.getElementById('part_ids_hidden').value;
                 formData.organized_by_department = document.getElementById('part_org').value;
-                formData.student_details = studentDetails; // العمود الجوكر
+                formData.student_details = studentDetails; 
                 formData.notes = document.getElementById('part_notes').value;
-                // حقول فارغة
                 formData.journal = ""; formData.citations_range = ""; formData.granting_body = ""; 
                 formData.student_author = document.getElementById('part_student').value;
             }
 
+            // =================================================
+            // [جديد] التحقق من صحة التاريخ قبل الإرسال
+            // =================================================
+            let dateToCheck = "";
+            if (currentTargetSheet === 'publications') dateToCheck = formData.publish_date;
+            else if (currentTargetSheet === 'theses') dateToCheck = formData.defense_date;
+            else if (currentTargetSheet === 'participations') dateToCheck = formData.date;
+
+            // التعبير النمطي: 4 أرقام - رقمين - رقمين (YYYY-MM-DD)
+            const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+            if (dateToCheck && !datePattern.test(dateToCheck)) {
+                alert("⚠️ خطأ في التاريخ!\nيجب أن يكون التاريخ بصيغة: YYYY-MM-DD\n(مثال: 1446-05-20)");
+                btn.disabled = false;
+                btn.textContent = "📤 حفظ وإرسال البيانات";
+                return; // إيقاف العملية هنا
+            }
+
+            // =================================================
+            // الإرسال
+            // =================================================
             fetch(SCRIPT_URL, {
                 method: 'POST',
                 body: JSON.stringify(formData),
@@ -620,10 +645,19 @@
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
+                    // [تعديل] رسالة النجاح بدون ريفريش
                     statusMsg.style.color = 'var(--emerald-500)';
-                    statusMsg.textContent = `✅ تم الحفظ بنجاح! رقم العملية: ${data.id}`;
-                    btn.textContent = "تم الإرسال";
-                    setTimeout(() => { location.reload(); }, 3000);
+                    statusMsg.textContent = `✅ تم الحفظ بنجاح! (رقم العملية: ${data.id})`;
+                    
+                    // إعادة تفعيل الزر لإضافة جديدة
+                    btn.disabled = false;
+                    btn.textContent = "📤 حفظ وإرسال البيانات";
+
+                    // [اختياري] تفريغ حقول العناوين والتواريخ لتسهيل الإدخال الجديد
+                    clearInputsAfterSuccess();
+                    
+                    // تنبيه بسيط
+                    alert("تمت الإضافة بنجاح. يمكنك إضافة نشاط آخر الآن.");
                 } else {
                     throw new Error(data.message || 'Unknown error');
                 }
@@ -635,6 +669,14 @@
                 btn.disabled = false;
                 btn.textContent = "حاول مرة أخرى";
             });
+        }
+
+        // دالة مساعدة لتفريغ الحقول النصية فقط بعد الحفظ
+        function clearInputsAfterSuccess() {
+            const inputs = document.querySelectorAll('.active input[type="text"]:not([readonly]), .active textarea');
+            inputs.forEach(input => input.value = "");
+            // لا نفرغ القوائم المنسدلة (Select) لأن المستخدم قد يريد إضافة نشاط بنفس التصنيف
+        });
         }
     </script>
 </body>
