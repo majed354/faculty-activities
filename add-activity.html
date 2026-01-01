@@ -672,11 +672,11 @@ function submitData() {
         }
 
         // دالة مساعدة لتفريغ الحقول النصية فقط بعد الحفظ
+     // دالة مساعدة لتفريغ الحقول النصية فقط بعد الحفظ
         function clearInputsAfterSuccess() {
             const inputs = document.querySelectorAll('.active input[type="text"]:not([readonly]), .active textarea');
             inputs.forEach(input => input.value = "");
             // لا نفرغ القوائم المنسدلة (Select) لأن المستخدم قد يريد إضافة نشاط بنفس التصنيف
-        });
         }
     </script>
 </body>
