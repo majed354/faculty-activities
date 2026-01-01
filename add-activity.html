@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -141,20 +140,37 @@
                 
                 <optgroup label="📚 النشر العلمي">
                     <option value="pub_research">بحث علمي منشور (للأعضاء)</option>
+                    <option value="event_student_research">بحث منشور لطالب (إشراف)</option>
                 </optgroup>
 
                 <optgroup label="🎓 الإشراف والمناقشة">
                     <option value="thesis_supervision">إشراف على رسالة علمية</option>
                     <option value="thesis_discussion_internal">مناقشة داخلية (داخل القسم)</option>
+                    <option value="event_discussion_external">مناقشة خارجية (جامعة أخرى)</option>
                 </optgroup>
 
-                <optgroup label="📅 الفعاليات والأنشطة">
-                    <option value="event_discussion_external">مناقشة خارجية</option>
+                <optgroup label="📅 المؤتمرات">
                     <option value="event_conf_attend">حضور مؤتمر</option>
-                    <option value="event_conf_part">مشاركة في مؤتمر</option>
-                    <option value="event_workshop_attend">حضور ندوة / ورشة عمل</option>
-                    <option value="event_workshop_part">مشاركة في ندوة / ورشة عمل</option>
-                    <option value="event_student_research">بحث منشور لطالب (إشراف)</option>
+                    <option value="event_conf_participate">مشاركة في مؤتمر (تقديم ورقة/متحدث)</option>
+                </optgroup>
+                
+                <optgroup label="💬 الندوات">
+                    <option value="event_seminar_attend">حضور ندوة</option>
+                    <option value="event_seminar_participate">مشاركة في ندوة (تقديم/متحدث)</option>
+                </optgroup>
+                
+                <optgroup label="🛠️ ورش العمل">
+                    <option value="event_workshop_attend">حضور ورشة عمل</option>
+                    <option value="event_workshop_participate">مشاركة في ورشة عمل</option>
+                </optgroup>
+                
+                <optgroup label="✅ التحكيم العلمي">
+                    <option value="event_reviewing">تحكيم علمي (بحوث/رسائل/مجلات)</option>
+                </optgroup>
+                
+                <optgroup label="🏆 الجوائز والإنجازات">
+                    <option value="event_award">جائزة علمية</option>
+                    <option value="event_patent">براءة اختراع</option>
                 </optgroup>
             </select>
         </div>
@@ -535,33 +551,83 @@
                 const categoryField = document.getElementById('part_category_hidden');
                 const typeField = document.getElementById('part_type_hidden');
                 
+                // إعادة تعيين التسميات الافتراضية
                 document.getElementById('part_title_label').textContent = "عنوان الفعالية / النشاط";
                 document.getElementById('part_location_label').textContent = "المكان / الجهة المنظمة";
                 document.getElementById('part_ids_label').textContent = "الأعضاء المشاركون (من القسم)";
 
-                switch(selection) {
-                    case 'event_discussion_external':
-                        categoryField.value = 'مناقشة خارجية'; typeField.value = 'مشاركة';
-                        break;
-                    case 'event_conf_attend':
-                    case 'event_conf_part':
-                        categoryField.value = 'مؤتمر'; 
-                        typeField.value = selection.includes('attend') ? 'حضور' : 'مشاركة';
-                        break;
-                    case 'event_workshop_attend':
-                    case 'event_workshop_part':
-                        categoryField.value = 'ندوة/ورشة'; 
-                        typeField.value = selection.includes('attend') ? 'حضور' : 'مشاركة';
-                        if(selection.includes('part')) document.getElementById('div_org').classList.add('visible'); 
-                        document.getElementById('div_attendance').classList.add('visible'); 
-                        break;
-                    case 'event_student_research':
-                        categoryField.value = 'بحوث الطلاب'; typeField.value = 'نشر';
-                        document.getElementById('div_student_name').classList.add('visible');
-                        document.getElementById('part_title_label').textContent = "عنوان البحث";
-                        document.getElementById('part_location_label').textContent = "اسم المجلة / جهة النشر";
-                        document.getElementById('part_ids_label').textContent = "المشرف (عضو هيئة التدريس)";
-                        break;
+                // ====== المناقشة الخارجية ======
+                if (selection === 'event_discussion_external') {
+                    categoryField.value = 'مناقشة خارجية';
+                    typeField.value = 'مناقشة';
+                    document.getElementById('part_title_label').textContent = "عنوان الرسالة";
+                    document.getElementById('part_location_label').textContent = "الجامعة / الجهة";
+                    document.getElementById('part_ids_label').textContent = "المناقش (عضو هيئة التدريس)";
+                }
+                // ====== المؤتمرات ======
+                else if (selection === 'event_conf_attend') {
+                    categoryField.value = 'مؤتمر';
+                    typeField.value = 'حضور';
+                }
+                else if (selection === 'event_conf_participate') {
+                    categoryField.value = 'مؤتمر';
+                    typeField.value = 'مشاركة';
+                    document.getElementById('part_title_label').textContent = "عنوان الورقة / المشاركة";
+                }
+                // ====== الندوات ======
+                else if (selection === 'event_seminar_attend') {
+                    categoryField.value = 'ندوة';
+                    typeField.value = 'حضور';
+                }
+                else if (selection === 'event_seminar_participate') {
+                    categoryField.value = 'ندوة';
+                    typeField.value = 'مشاركة';
+                    document.getElementById('div_org').classList.add('visible');
+                    document.getElementById('div_attendance').classList.add('visible');
+                }
+                // ====== ورش العمل ======
+                else if (selection === 'event_workshop_attend') {
+                    categoryField.value = 'ورشة عمل';
+                    typeField.value = 'حضور';
+                }
+                else if (selection === 'event_workshop_participate') {
+                    categoryField.value = 'ورشة عمل';
+                    typeField.value = 'مشاركة';
+                    document.getElementById('div_org').classList.add('visible');
+                    document.getElementById('div_attendance').classList.add('visible');
+                }
+                // ====== بحوث الطلاب ======
+                else if (selection === 'event_student_research') {
+                    categoryField.value = 'بحوث الطلاب';
+                    typeField.value = 'نشر';
+                    document.getElementById('div_student_name').classList.add('visible');
+                    document.getElementById('part_title_label').textContent = "عنوان البحث";
+                    document.getElementById('part_location_label').textContent = "اسم المجلة / جهة النشر";
+                    document.getElementById('part_ids_label').textContent = "المشرف (عضو هيئة التدريس)";
+                }
+                // ====== التحكيم العلمي ======
+                else if (selection === 'event_reviewing') {
+                    categoryField.value = 'تحكيم علمي';
+                    typeField.value = 'مشاركة';
+                    document.getElementById('part_title_label').textContent = "وصف التحكيم (بحث/رسالة/مجلة)";
+                    document.getElementById('part_location_label').textContent = "الجهة المحكم لها";
+                    document.getElementById('part_ids_label').textContent = "المحكم (عضو هيئة التدريس)";
+                }
+                // ====== الجوائز ======
+                else if (selection === 'event_award') {
+                    categoryField.value = 'جائزة';
+                    typeField.value = 'مشاركة';
+                    document.getElementById('part_title_label').textContent = "اسم الجائزة";
+                    document.getElementById('part_location_label').textContent = "الجهة المانحة";
+                    document.getElementById('part_ids_label').textContent = "الحاصل على الجائزة";
+                }
+                // ====== براءة الاختراع ======
+                else if (selection === 'event_patent') {
+                    categoryField.value = 'براءة اختراع';
+                    typeField.value = 'مشاركة';
+                    document.getElementById('part_title_label').textContent = "عنوان براءة الاختراع";
+                    document.getElementById('part_location_label').textContent = "الجهة المسجلة لديها";
+                    document.getElementById('part_ids_label').textContent = "صاحب البراءة";
                 }
             }
             
@@ -608,23 +674,21 @@
                 let studentDetails = "";
 
                 const studentNameInput = document.getElementById('part_student_name');
-                if (formData.category === 'بحوث الطلاب' && studentNameInput.value) {
+                if (formData.category === 'بحوث الطلاب' && studentNameInput && studentNameInput.value) {
                     finalTitle = `إشراف على نشر بحث للطالب: ${studentNameInput.value} - بعنوان: ${finalTitle}`;
                     studentDetails = studentNameInput.value; 
                 } 
-                else if (document.getElementById('part_attendance').value) {
+                else if (document.getElementById('part_attendance') && document.getElementById('part_attendance').value) {
                     studentDetails = document.getElementById('part_attendance').value; 
                 }
 
                 formData.title = finalTitle;
                 formData.location = document.getElementById('part_location').value;
-                formData.date = convertToHijri(document.getElementById('part_date').value); // تحويل
+                formData.date = convertToHijri(document.getElementById('part_date').value);
                 formData.participant_ids = document.getElementById('part_ids_hidden').value;
-                formData.organized_by_department = document.getElementById('part_org').value;
+                formData.organized_by_department = document.getElementById('part_org')?.value || 'لا';
                 formData.student_details = studentDetails; 
                 formData.notes = document.getElementById('part_notes').value;
-                formData.journal = ""; formData.citations_range = ""; formData.granting_body = ""; 
-                formData.student_author = document.getElementById('part_student').value;
             }
 
             fetch(SCRIPT_URL, {
