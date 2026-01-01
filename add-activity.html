@@ -4,13 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>إضافة نشاط علمي جديد</title>
+    
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-hijri/2.1.2/moment-hijri.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-hijri-datepicker/1.0.7/js/bootstrap-hijri-datepicker.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-hijri-datepicker/1.0.7/css/bootstrap-hijri-datepicker.min.css">
+
     <link rel="stylesheet" href="style.css">
     
     <style>
         /* =========================================
-           تنسيقات الصفحة
+           تنسيقات الصفحة الأساسية
         ========================================= */
         body { background-color: var(--primary-900); min-height: 100vh; }
         
@@ -51,8 +60,7 @@
             outline: none; border-color: var(--gold-400); background: rgba(255, 255, 255, 0.1);
         }
 
-        .hijri-input { direction: ltr; text-align: right; letter-spacing: 1px; }
-
+        /* تنسيق الحقل الخارجي المخفي */
         .external-input {
             display: none; margin-top: 10px;
             border-color: var(--sky-500) !important;
@@ -74,6 +82,52 @@
         }
         optgroup { color: var(--gold-400); background: #0c1929; font-weight: bold; }
 
+        /* =========================================
+           تخصيص نافذة التقويم (Dark Mode Fix)
+        ========================================= */
+        .hijri-date-input { 
+            cursor: pointer; 
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23d4af37' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: left 10px center;
+            background-size: 20px;
+            padding-left: 40px !important; /* مساحة للأيقونة */
+        }
+        
+        /* تعديل ألوان نافذة التقويم لتناسب الوضع الليلي */
+        .bootstrap-datetimepicker-widget {
+            background-color: #1a1a2e !important;
+            border: 1px solid var(--gold-400) !important;
+            color: #fff !important;
+        }
+        .bootstrap-datetimepicker-widget table td.day:hover,
+        .bootstrap-datetimepicker-widget table td.hour:hover,
+        .bootstrap-datetimepicker-widget table td.minute:hover,
+        .bootstrap-datetimepicker-widget table td.second:hover {
+            background-color: rgba(198, 169, 98, 0.2) !important;
+            color: #fff !important;
+        }
+        .bootstrap-datetimepicker-widget table td.active,
+        .bootstrap-datetimepicker-widget table td.active:hover {
+            background-color: var(--gold-500) !important;
+            color: #000 !important;
+            text-shadow: none;
+        }
+        .bootstrap-datetimepicker-widget table th {
+            color: var(--gold-400) !important;
+        }
+        .bootstrap-datetimepicker-widget table th.prev:hover,
+        .bootstrap-datetimepicker-widget table th.next:hover,
+        .bootstrap-datetimepicker-widget table th.picker-switch:hover {
+            background-color: rgba(255,255,255,0.1) !important;
+        }
+        .dropdown-menu {
+            color: #fff;
+        }
+
+        /* =========================================
+           تنسيقات الاختيار المتعدد
+        ========================================= */
         .multi-select-wrapper { display: flex; gap: 10px; }
         .btn-add-member {
             background: var(--emerald-500); color: white; border: none;
@@ -94,7 +148,6 @@
         }
         .remove-tag:hover { color: var(--rose-600); }
 
-        /* إخفاء العناصر ديناميكياً */
         .dynamic-field { display: none; }
         .dynamic-field.visible { display: block; animation: fadeIn 0.3s; }
 
@@ -164,7 +217,7 @@
                     <input type="text" id="pub_title">
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
-                    <label>اسم العضو الناشر </label>
+                    <label>اسم العضو الباحث</label>
                     <div class="multi-select-wrapper">
                         <select id="pub_author_select" class="faculty-select">
                             <option value="">-- اختر اسماً للإضافة --</option>
@@ -179,8 +232,8 @@
                     <input type="text" id="pub_journal">
                 </div>
                 <div class="form-group">
-                    <label>تاريخ النشر (هجري: YYYY-MM-DD)</label>
-                    <input type="text" id="pub_date" class="hijri-input" placeholder="مثال: 1446-05-20">
+                    <label>تاريخ النشر (هجري)</label>
+                    <input type="text" id="pub_date" class="hijri-date-input" readonly placeholder="اضغط لاختيار التاريخ">
                 </div>
                 <div class="form-group">
                     <label>نطاق الاستشهادات</label>
@@ -273,7 +326,7 @@
                 </div>
                 <div class="form-group">
                     <label>تاريخ المناقشة (هجري)</label>
-                    <input type="text" id="thesis_date" class="hijri-input" placeholder="مثال: 1446-05-20">
+                    <input type="text" id="thesis_date" class="hijri-date-input" readonly placeholder="اضغط لاختيار التاريخ">
                 </div>
             </div>
         </div>
@@ -306,7 +359,7 @@
                 </div>
                 <div class="form-group">
                     <label>التاريخ (هجري)</label>
-                    <input type="text" id="part_date" class="hijri-input" placeholder="مثال: 1446-05-20">
+                    <input type="text" id="part_date" class="hijri-date-input" readonly placeholder="اضغط لاختيار التاريخ">
                 </div>
 
                 <div class="form-group" style="grid-column: span 2;">
@@ -357,6 +410,31 @@
         let facultyList = [];
         let currentTargetSheet = '';
         let selectedMembersData = {};
+
+        // ===========================================
+        // تهيئة التقويم الهجري عند تحميل الصفحة
+        // ===========================================
+        $(function () {
+            $(".hijri-date-input").hijriDatePicker({
+                locale: "ar-sa",
+                format: "YYYY-MM-DD", // صيغة التخزين
+                hijriFormat:"iYYYY-iMM-iDD", // صيغة العرض الهجري
+                dayViewHeaderFormat: "MMMM YYYY",
+                hijri: true,
+                debug: true,
+                showSwitcher: false,
+                allowInputToggle: true,
+                useCurrent: false,
+                isRTL: true,
+                icons: {
+                    previous: '<',
+                    next: '>',
+                    today: 'اليوم',
+                    clear: 'مسح',
+                    close: 'إغلاق'
+                }
+            });
+        });
 
         async function attemptLogin() {
             const id = document.getElementById('loginId').value;
@@ -413,7 +491,6 @@
                 select.appendChild(firstOption);
                 if (firstOption.text === "جاري التحميل...") firstOption.text = "-- اختر عضو هيئة التدريس --";
 
-                // إضافة خيار خارجي للرسائل فقط
                 if (select.id.startsWith('thesis_')) {
                     const extOption = document.createElement('option');
                     extOption.value = "external";
@@ -487,9 +564,6 @@
             });
         }
 
-        // ============================================================
-        // التحكم الديناميكي في الحقول
-        // ============================================================
         function handleActivityChange() {
             const selection = document.getElementById('mainActivitySelect').value;
             
@@ -499,17 +573,14 @@
 
             if (!selection) return;
 
-            // 1. قسم النشر العلمي
             if (selection === 'pub_research') {
                 document.getElementById('form-publications').classList.add('active');
                 currentTargetSheet = 'publications';
             } 
-            // 2. قسم الرسائل
             else if (selection.startsWith('thesis_')) {
                 document.getElementById('form-theses').classList.add('active');
                 currentTargetSheet = 'theses';
             } 
-            // 3. قسم الفعاليات
             else if (selection.startsWith('event_')) {
                 document.getElementById('form-participations').classList.add('active');
                 currentTargetSheet = 'participations';
@@ -517,7 +588,6 @@
                 const categoryField = document.getElementById('part_category_hidden');
                 const typeField = document.getElementById('part_type_hidden');
                 
-                // إعادة تسمية الحقول افتراضياً
                 document.getElementById('part_title_label').textContent = "عنوان الفعالية / النشاط";
                 document.getElementById('part_location_label').textContent = "المكان / الجهة المنظمة";
                 document.getElementById('part_ids_label').textContent = "الأعضاء المشاركون (من القسم)";
@@ -535,13 +605,12 @@
                     case 'event_workshop_part':
                         categoryField.value = 'ندوة/ورشة'; 
                         typeField.value = selection.includes('attend') ? 'حضور' : 'مشاركة';
-                        if(selection.includes('part')) document.getElementById('div_org').classList.add('visible'); // إظهار خيار التنظيم
-                        document.getElementById('div_attendance').classList.add('visible'); // إظهار عدد الحضور
+                        if(selection.includes('part')) document.getElementById('div_org').classList.add('visible'); 
+                        document.getElementById('div_attendance').classList.add('visible'); 
                         break;
                     case 'event_student_research':
                         categoryField.value = 'بحوث الطلاب'; typeField.value = 'نشر';
-                        // تخصيص الواجهة لبحوث الطلاب
-                        document.getElementById('div_student_name').classList.add('visible'); // إظهار حقل اسم الطالب
+                        document.getElementById('div_student_name').classList.add('visible');
                         document.getElementById('part_title_label').textContent = "عنوان البحث";
                         document.getElementById('part_location_label').textContent = "اسم المجلة / جهة النشر";
                         document.getElementById('part_ids_label').textContent = "المشرف (عضو هيئة التدريس)";
@@ -590,14 +659,13 @@
                 let finalTitle = document.getElementById('part_title').value;
                 let studentDetails = "";
 
-                // منطق دمج اسم الطالب في العنوان
                 const studentNameInput = document.getElementById('part_student_name');
                 if (formData.category === 'بحوث الطلاب' && studentNameInput.value) {
                     finalTitle = `إشراف على نشر بحث للطالب: ${studentNameInput.value} - بعنوان: ${finalTitle}`;
-                    studentDetails = studentNameInput.value; // نخزن الاسم أيضاً
+                    studentDetails = studentNameInput.value; 
                 } 
                 else if (document.getElementById('part_attendance').value) {
-                    studentDetails = document.getElementById('part_attendance').value; // نخزن عدد الحضور
+                    studentDetails = document.getElementById('part_attendance').value; 
                 }
 
                 formData.title = finalTitle;
@@ -605,9 +673,8 @@
                 formData.date = document.getElementById('part_date').value;
                 formData.participant_ids = document.getElementById('part_ids_hidden').value;
                 formData.organized_by_department = document.getElementById('part_org').value;
-                formData.student_details = studentDetails; // العمود الجوكر
+                formData.student_details = studentDetails; 
                 formData.notes = document.getElementById('part_notes').value;
-                // حقول فارغة
                 formData.journal = ""; formData.citations_range = ""; formData.granting_body = ""; 
                 formData.student_author = document.getElementById('part_student').value;
             }
