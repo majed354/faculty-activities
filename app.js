@@ -9,6 +9,8 @@
 let config = {};
 let currentYear = 1446;
 let currentThesis = null;
+let currentLeaderboard = [];
+let showAllLeaderboard = false;
 let allData = {
     faculty: [],
     students: [],
@@ -148,6 +150,9 @@ async function loadYearData(year) {
     data.theses = allData.theses.filter(t => parseInt(t.year) === year);
     data.participations = allData.participations.filter(p => parseInt(p.year) === year);
     
+    // إعادة تعيين عرض المتصدرين
+    showAllLeaderboard = false;
+    
     hideLoading();
     renderAll();
 }
@@ -156,11 +161,61 @@ async function loadYearData(year) {
 // دوال مساعدة
 // ========================================
 function getMemberName(id) {
-    let member = data.faculty.find(f => f.id === String(id));
+    if (!id || id === '' || id === null || id === undefined) return '-';
+    
+    const idStr = String(id).trim();
+    if (idStr === '') return '-';
+    
+    // البحث أولاً في بيانات السنة الحالية
+    let member = data.faculty.find(f => String(f.id).trim() === idStr);
+    
+    // إذا لم يوجد، البحث في كل البيانات
     if (!member) {
-        member = allData.faculty.find(f => f.id === String(id));
+        member = allData.faculty.find(f => String(f.id).trim() === idStr);
     }
+    
     return member ? member.name : '-';
+}
+
+// دالة جديدة للحصول على بيانات العضو كاملة
+function getMemberData(id) {
+    if (!id || id === '' || id === null || id === undefined) return null;
+    
+    const idStr = String(id).trim();
+    if (idStr === '') return null;
+    
+    let member = data.faculty.find(f => String(f.id).trim() === idStr);
+    if (!member) {
+        member = allData.faculty.find(f => String(f.id).trim() === idStr);
+    }
+    
+    return member || null;
+}
+
+// دالة لاستخراج الاسم المختصر مع اللقب
+function getShortName(fullName) {
+    if (!fullName || fullName === '-') return '-';
+    
+    // استخراج اللقب (أ.د. أو د. أو أ.)
+    let prefix = '';
+    let name = fullName;
+    
+    if (fullName.startsWith('أ.د.')) {
+        prefix = 'أ.د.';
+        name = fullName.replace('أ.د.', '').trim();
+    } else if (fullName.startsWith('د.')) {
+        prefix = 'د.';
+        name = fullName.replace('د.', '').trim();
+    } else if (fullName.startsWith('أ.')) {
+        prefix = 'أ.';
+        name = fullName.replace('أ.', '').trim();
+    }
+    
+    // الحصول على أول اسمين فقط
+    const nameParts = name.split(' ').filter(p => p.length > 0);
+    const shortName = nameParts.slice(0, 2).join(' ');
+    
+    return prefix + ' ' + shortName;
 }
 
 function formatDate(dateStr) {
@@ -550,35 +605,320 @@ function renderDashboard() {
 }
 
 function renderLeaderboard() {
-    const leaderboard = getLeaderboard();
+    currentLeaderboard = getLeaderboard();
     
-    if (leaderboard[0]) {
-        document.getElementById('first-name').textContent = leaderboard[0].name.replace('د. ', '').split(' ').slice(0, 2).join(' ');
-        document.getElementById('first-points').textContent = leaderboard[0].points + ' نقطة';
+    // المنصة - الثلاثة الأوائل
+    if (currentLeaderboard[0]) {
+        const firstName = document.getElementById('first-name');
+        firstName.textContent = getShortName(currentLeaderboard[0].name);
+        firstName.style.fontSize = '0.85rem';
+        firstName.style.cursor = 'pointer';
+        firstName.onclick = () => showMemberDetails(currentLeaderboard[0].id);
+        document.getElementById('first-points').textContent = currentLeaderboard[0].points + ' نقطة';
     }
-    if (leaderboard[1]) {
-        document.getElementById('second-name').textContent = leaderboard[1].name.replace('د. ', '').split(' ').slice(0, 2).join(' ');
-        document.getElementById('second-points').textContent = leaderboard[1].points + ' نقطة';
+    if (currentLeaderboard[1]) {
+        const secondName = document.getElementById('second-name');
+        secondName.textContent = getShortName(currentLeaderboard[1].name);
+        secondName.style.fontSize = '0.85rem';
+        secondName.style.cursor = 'pointer';
+        secondName.onclick = () => showMemberDetails(currentLeaderboard[1].id);
+        document.getElementById('second-points').textContent = currentLeaderboard[1].points + ' نقطة';
     }
-    if (leaderboard[2]) {
-        document.getElementById('third-name').textContent = leaderboard[2].name.replace('د. ', '').split(' ').slice(0, 2).join(' ');
-        document.getElementById('third-points').textContent = leaderboard[2].points + ' نقطة';
+    if (currentLeaderboard[2]) {
+        const thirdName = document.getElementById('third-name');
+        thirdName.textContent = getShortName(currentLeaderboard[2].name);
+        thirdName.style.fontSize = '0.85rem';
+        thirdName.style.cursor = 'pointer';
+        thirdName.onclick = () => showMemberDetails(currentLeaderboard[2].id);
+        document.getElementById('third-points').textContent = currentLeaderboard[2].points + ' نقطة';
     }
     
     const listContainer = document.getElementById('leaderboardList');
     listContainer.innerHTML = '';
     
-    leaderboard.slice(3, 8).forEach((member, index) => {
+    // تحديد عدد العناصر للعرض
+    const displayCount = showAllLeaderboard ? currentLeaderboard.length : 8;
+    const displayItems = currentLeaderboard.slice(3, displayCount);
+    
+    displayItems.forEach((member, index) => {
         const item = document.createElement('div');
         item.className = 'leaderboard-item';
+        item.style.cursor = 'pointer';
+        item.onclick = () => showMemberDetails(member.id);
         item.innerHTML = `
             <span class="leaderboard-rank">${index + 4}</span>
-            <span class="leaderboard-name">${member.name}</span>
+            <span class="leaderboard-name" style="font-size: 0.85rem;">${member.name}</span>
             <span class="leaderboard-points">${member.points} نقطة</span>
         `;
         listContainer.appendChild(item);
     });
+    
+    // إضافة زر المزيد/الأقل إذا كان هناك أكثر من 8 أعضاء
+    if (currentLeaderboard.length > 8) {
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'leaderboard-toggle-btn';
+        toggleBtn.innerHTML = showAllLeaderboard 
+            ? '<span>▲</span> عرض أقل' 
+            : `<span>▼</span> عرض الكل (${currentLeaderboard.length - 3})`;
+        toggleBtn.onclick = () => {
+            showAllLeaderboard = !showAllLeaderboard;
+            renderLeaderboard();
+        };
+        listContainer.appendChild(toggleBtn);
+    }
 }
+
+// ========================================
+// عرض تفاصيل العضو
+// ========================================
+function showMemberDetails(memberId) {
+    const member = getMemberData(memberId);
+    if (!member) return;
+    
+    const { points, breakdown } = calculateMemberPoints(memberId);
+    
+    // جمع أنشطة العضو
+    const memberActivities = getMemberActivities(memberId);
+    
+    // إنشاء HTML للـ Modal
+    const modalHtml = `
+        <div id="memberModal" class="modal active">
+            <div class="modal-content member-modal-content">
+                <span class="modal-close" onclick="closeMemberModal()">&times;</span>
+                
+                <div class="member-header">
+                    <div class="member-avatar-large">👨‍🏫</div>
+                    <div class="member-info-main">
+                        <h2>${member.name}</h2>
+                        <span class="member-rank-badge">${member.rank}</span>
+                        <span class="member-email">${member.email || ''}</span>
+                    </div>
+                    <div class="member-points-display">
+                        <span class="points-number">${points}</span>
+                        <span class="points-label">نقطة</span>
+                    </div>
+                </div>
+                
+                <div class="member-breakdown">
+                    <h3>📊 تفصيل النقاط</h3>
+                    <div class="breakdown-grid">
+                        ${breakdown.phdSupervision ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">🎓</span>
+                            <span class="breakdown-label">إشراف دكتوراه</span>
+                            <span class="breakdown-count">${breakdown.phdSupervision}</span>
+                        </div>` : ''}
+                        ${breakdown.phdCoSupervision ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">🎓</span>
+                            <span class="breakdown-label">إشراف مشارك (دكتوراه)</span>
+                            <span class="breakdown-count">${breakdown.phdCoSupervision}</span>
+                        </div>` : ''}
+                        ${breakdown.mastersSupervision ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📚</span>
+                            <span class="breakdown-label">إشراف ماجستير</span>
+                            <span class="breakdown-count">${breakdown.mastersSupervision}</span>
+                        </div>` : ''}
+                        ${breakdown.mastersCoSupervision ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📚</span>
+                            <span class="breakdown-label">إشراف مشارك (ماجستير)</span>
+                            <span class="breakdown-count">${breakdown.mastersCoSupervision}</span>
+                        </div>` : ''}
+                        ${breakdown.phdDiscussion ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📋</span>
+                            <span class="breakdown-label">مناقشة دكتوراه</span>
+                            <span class="breakdown-count">${breakdown.phdDiscussion}</span>
+                        </div>` : ''}
+                        ${breakdown.mastersDiscussion ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📋</span>
+                            <span class="breakdown-label">مناقشة ماجستير</span>
+                            <span class="breakdown-count">${breakdown.mastersDiscussion}</span>
+                        </div>` : ''}
+                        ${breakdown.publications ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📄</span>
+                            <span class="breakdown-label">بحوث منشورة</span>
+                            <span class="breakdown-count">${breakdown.publications}</span>
+                        </div>` : ''}
+                        ${breakdown.conferencePaper ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">🎤</span>
+                            <span class="breakdown-label">مشاركة بورقة</span>
+                            <span class="breakdown-count">${breakdown.conferencePaper}</span>
+                        </div>` : ''}
+                        ${breakdown.seminar ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">💬</span>
+                            <span class="breakdown-label">ندوات</span>
+                            <span class="breakdown-count">${breakdown.seminar}</span>
+                        </div>` : ''}
+                        ${breakdown.workshop ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">🛠️</span>
+                            <span class="breakdown-label">ورش عمل</span>
+                            <span class="breakdown-count">${breakdown.workshop}</span>
+                        </div>` : ''}
+                        ${breakdown.externalDiscussion ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">🎓</span>
+                            <span class="breakdown-label">مناقشات خارجية</span>
+                            <span class="breakdown-count">${breakdown.externalDiscussion}</span>
+                        </div>` : ''}
+                        ${breakdown.eventOrganization ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📅</span>
+                            <span class="breakdown-label">تنظيم فعاليات</span>
+                            <span class="breakdown-count">${breakdown.eventOrganization}</span>
+                        </div>` : ''}
+                        ${breakdown.eventAttendance ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">👥</span>
+                            <span class="breakdown-label">حضور فعاليات</span>
+                            <span class="breakdown-count">${breakdown.eventAttendance}</span>
+                        </div>` : ''}
+                        ${breakdown.award ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">🏆</span>
+                            <span class="breakdown-label">جوائز</span>
+                            <span class="breakdown-count">${breakdown.award}</span>
+                        </div>` : ''}
+                        ${breakdown.patent ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">💡</span>
+                            <span class="breakdown-label">براءات اختراع</span>
+                            <span class="breakdown-count">${breakdown.patent}</span>
+                        </div>` : ''}
+                    </div>
+                </div>
+                
+                <div class="member-activities-section">
+                    <h3>📝 تفاصيل الأنشطة</h3>
+                    
+                    ${memberActivities.theses.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>🎓 الرسائل العلمية (${memberActivities.theses.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.theses.map(t => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge ${t.type === 'دكتوراه' ? 'phd' : 'masters'}">${t.type}</span>
+                                    <span class="activity-role">${t.role}</span>
+                                    <span class="activity-title">${t.student_name} - ${t.title.substring(0, 50)}...</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+                    
+                    ${memberActivities.publications.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>📄 البحوث المنشورة (${memberActivities.publications.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.publications.map(p => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-title">${p.title}</span>
+                                    <span class="activity-meta">${p.journal || p.location} - ${formatDate(p.date)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+                    
+                    ${memberActivities.events.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>🎯 الفعاليات العلمية (${memberActivities.events.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.events.map(e => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge event">${e.category}</span>
+                                    <span class="activity-title">${e.title}</span>
+                                    <span class="activity-meta">${e.location} - ${e.participation_type}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+                    
+                    ${memberActivities.awards.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>🏆 الجوائز والتكريمات (${memberActivities.awards.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.awards.map(a => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge award">${a.category}</span>
+                                    <span class="activity-title">${a.title}</span>
+                                    <span class="activity-meta">${a.granting_body || a.location}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // إزالة أي modal سابق
+    const existingModal = document.getElementById('memberModal');
+    if (existingModal) existingModal.remove();
+    
+    // إضافة الـ modal
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+// دالة لجمع أنشطة العضو
+function getMemberActivities(memberId) {
+    const memberIdStr = String(memberId);
+    
+    // الرسائل العلمية
+    const theses = [];
+    data.theses.forEach(t => {
+        if (String(t.supervisor_id).trim() === memberIdStr) {
+            theses.push({ ...t, role: 'مشرف رئيسي' });
+        } else if (String(t.co_supervisor_id).trim() === memberIdStr) {
+            theses.push({ ...t, role: 'مشرف مشارك' });
+        } else if (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr) {
+            theses.push({ ...t, role: 'مناقش' });
+        }
+    });
+    
+    // البحوث
+    const publications = data.participations.filter(p => {
+        if (p.category !== 'بحث منشور' && p.category !== 'بحوث الطلاب') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
+    
+    // الفعاليات
+    const events = data.participations.filter(p => {
+        if (p.category === 'بحث منشور' || p.category === 'بحوث الطلاب' || 
+            p.category === 'جائزة' || p.category === 'براءة اختراع') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
+    
+    // الجوائز
+    const awards = data.participations.filter(p => {
+        if (p.category !== 'جائزة' && p.category !== 'براءة اختراع') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
+    
+    return { theses, publications, events, awards };
+}
+
+// دالة إغلاق modal العضو
+function closeMemberModal() {
+    const modal = document.getElementById('memberModal');
+    if (modal) modal.remove();
+}
+
+// إغلاق modal العضو بالنقر خارجه
+document.addEventListener('click', (e) => {
+    const memberModal = document.getElementById('memberModal');
+    if (e.target === memberModal) {
+        closeMemberModal();
+    }
+});
 
 function renderActivities() {
     const activities = getRecentActivities(10);
