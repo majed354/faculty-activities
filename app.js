@@ -15,13 +15,15 @@ let allData = {
     faculty: [],
     students: [],
     theses: [],
-    participations: []
+    participations: [],
+    publications: []  // ملف البحوث المنفصل
 };
 let data = {
     faculty: [],
     students: [],
     theses: [],
-    participations: []
+    participations: [],
+    publications: []  // ملف البحوث المنفصل
 };
 let charts = {};
 
@@ -132,14 +134,15 @@ async function loadConfig() {
 async function loadAllData() {
     showLoading();
     
-    const [faculty, students, theses, participations] = await Promise.all([
+    const [faculty, students, theses, participations, publications] = await Promise.all([
         loadCSV(`${DATA_BASE_URL}/faculty.csv`),
         loadCSV(`${DATA_BASE_URL}/students_count.csv`),
         loadCSV(`${DATA_BASE_URL}/theses.csv`),
-        loadCSV(`${DATA_BASE_URL}/participations.csv`)
+        loadCSV(`${DATA_BASE_URL}/participations.csv`),
+        loadCSV(`${DATA_BASE_URL}/publications.csv`)
     ]);
     
-    allData = { faculty, students, theses, participations };
+    allData = { faculty, students, theses, participations, publications };
     
     await loadYearData(currentYear);
 }
@@ -149,6 +152,7 @@ async function loadYearData(year) {
     data.students = allData.students.filter(s => parseInt(s.year) === year);
     data.theses = allData.theses.filter(t => parseInt(t.year) === year);
     data.participations = allData.participations.filter(p => parseInt(p.year) === year);
+    data.publications = allData.publications.filter(p => parseInt(p.year) === year);
     
     // إعادة تعيين عرض المتصدرين
     showAllLeaderboard = false;
@@ -294,23 +298,48 @@ function getCitationsEstimate(range) {
 }
 
 // ========================================
-// دوال استخراج البيانات من participations
+// دوال استخراج البيانات من participations و publications
 // ========================================
+
+// البحوث العلمية للأعضاء (من ملف publications.csv)
 function getPublications() {
-    return data.participations.filter(p => p.category === 'بحث منشور' || p.category === 'بحوث الطلاب');
+    return data.publications || [];
 }
 
+// بحوث الطلاب (من participations)
+function getStudentResearch() {
+    return data.participations.filter(p => p.category === 'بحوث الطلاب');
+}
+
+// الفعاليات (مؤتمرات، ندوات، ورش عمل)
 function getEvents() {
     return data.participations.filter(p => 
         p.category === 'مؤتمر' || 
         p.category === 'ندوة' || 
-        p.category === 'ورشة عمل' ||
-        p.category === 'مناقشة علمية خارجية'
+        p.category === 'ورشة عمل'
     );
 }
 
+// المناقشات الخارجية
+function getExternalDiscussions() {
+    return data.participations.filter(p => p.category === 'مناقشة خارجية');
+}
+
+// التحكيم العلمي
+function getReviewing() {
+    return data.participations.filter(p => p.category === 'تحكيم علمي');
+}
+
+// الجوائز وبراءات الاختراع
 function getAwards() {
-    return data.participations.filter(p => p.category === 'جائزة' || p.category === 'براءة اختراع');
+    return data.participations.filter(p => 
+        p.category === 'جائزة' || p.category === 'براءة اختراع'
+    );
+}
+
+// كل المشاركات (للإحصائيات)
+function getAllParticipations() {
+    return data.participations;
 }
 
 // ========================================
@@ -320,72 +349,87 @@ function calculateMemberPoints(memberId) {
     const weights = config.weights || {};
     let points = 0;
     const breakdown = {};
+    const memberIdStr = String(memberId).trim();
     
-    // البحوث من participations
-    const pubs = data.participations.filter(p => {
-        if (p.category !== 'بحث منشور' && p.category !== 'بحوث الطلاب') return false;
-        const participants = (p.participant_ids || '').split('|');
-        return participants.includes(String(memberId));
+    // 1. البحوث العلمية للأعضاء (من publications.csv)
+    if (data.publications && data.publications.length > 0) {
+        const memberPubs = data.publications.filter(p => {
+            const authors = (p.authors_ids || '').split('|').map(id => id.trim());
+            return authors.includes(memberIdStr);
+        });
+        breakdown.publications = memberPubs.length;
+        points += memberPubs.length * (weights.publication || 15);
+    }
+    
+    // 2. بحوث الطلاب (الإشراف على نشر بحث لطالب)
+    const studentResearch = data.participations.filter(p => {
+        if (p.category !== 'بحوث الطلاب') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
     });
-    breakdown.publications = pubs.length;
-    points += pubs.length * (weights.publication || 15);
+    breakdown.studentResearch = studentResearch.length;
+    points += studentResearch.length * (weights.student_research || 8);
     
-    // الإشراف على الدكتوراه
+    // 3. الإشراف على الدكتوراه
     const phdSupervised = data.theses.filter(t => 
-        t.type === 'دكتوراه' && t.supervisor_id === String(memberId)
+        t.type === 'دكتوراه' && String(t.supervisor_id).trim() === memberIdStr
     );
     breakdown.phdSupervision = phdSupervised.length;
     points += phdSupervised.length * (weights.phd_supervision || 10);
     
-    // الإشراف المشارك على الدكتوراه
+    // 4. الإشراف المشارك على الدكتوراه
     const phdCoSupervised = data.theses.filter(t => 
-        t.type === 'دكتوراه' && t.co_supervisor_id === String(memberId)
+        t.type === 'دكتوراه' && String(t.co_supervisor_id).trim() === memberIdStr
     );
     breakdown.phdCoSupervision = phdCoSupervised.length;
     points += phdCoSupervised.length * (weights.phd_co_supervision || 5);
     
-    // الإشراف على الماجستير
+    // 5. الإشراف على الماجستير
     const mastersSupervised = data.theses.filter(t => 
-        t.type === 'ماجستير' && t.supervisor_id === String(memberId)
+        t.type === 'ماجستير' && String(t.supervisor_id).trim() === memberIdStr
     );
     breakdown.mastersSupervision = mastersSupervised.length;
     points += mastersSupervised.length * (weights.masters_supervision || 3);
     
-    // الإشراف المشارك على الماجستير
+    // 6. الإشراف المشارك على الماجستير
     const mastersCoSupervised = data.theses.filter(t => 
-        t.type === 'ماجستير' && t.co_supervisor_id === String(memberId)
+        t.type === 'ماجستير' && String(t.co_supervisor_id).trim() === memberIdStr
     );
     breakdown.mastersCoSupervision = mastersCoSupervised.length;
     points += mastersCoSupervised.length * (weights.masters_co_supervision || 2);
     
-    // مناقشة رسائل الدكتوراه (داخلية)
+    // 7. مناقشة رسائل الدكتوراه (داخلية)
     const phdExamined = data.theses.filter(t => 
-        t.type === 'دكتوراه' && (t.examiner1_id === String(memberId) || t.examiner2_id === String(memberId))
+        t.type === 'دكتوراه' && 
+        (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr)
     );
     breakdown.phdDiscussion = phdExamined.length;
     points += phdExamined.length * (weights.phd_discussion || 5);
     
-    // مناقشة رسائل الماجستير (داخلية)
+    // 8. مناقشة رسائل الماجستير (داخلية)
     const mastersExamined = data.theses.filter(t => 
-        t.type === 'ماجستير' && (t.examiner1_id === String(memberId) || t.examiner2_id === String(memberId))
+        t.type === 'ماجستير' && 
+        (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr)
     );
     breakdown.mastersDiscussion = mastersExamined.length;
     points += mastersExamined.length * (weights.masters_discussion || 2);
     
-    // المشاركات العلمية من participations
+    // 9. المشاركات العلمية من participations
     data.participations.forEach(p => {
-        const participants = (p.participant_ids || '').split('|');
-        if (!participants.includes(String(memberId))) return;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        if (!participants.includes(memberIdStr)) return;
+        
+        // تخطي بحوث الطلاب (تم احتسابها أعلاه)
+        if (p.category === 'بحوث الطلاب') return;
+        
+        const partType = (p.participation_type || '').trim();
         
         switch(p.category) {
             case 'مؤتمر':
-                if (p.participation_type === 'مشاركة بورقة' || p.participation_type === 'نشر') {
+                if (partType === 'مشاركة' || partType === 'نشر') {
                     breakdown.conferencePaper = (breakdown.conferencePaper || 0) + 1;
                     points += weights.conference_paper || 8;
-                } else if (p.participation_type === 'تنظيم') {
-                    breakdown.eventOrganization = (breakdown.eventOrganization || 0) + 1;
-                    points += weights.event_organization || 10;
-                } else if (p.participation_type === 'حضور') {
+                } else if (partType === 'حضور') {
                     breakdown.eventAttendance = (breakdown.eventAttendance || 0) + 1;
                     points += weights.event_attendance || 1;
                 } else {
@@ -395,23 +439,23 @@ function calculateMemberPoints(memberId) {
                 break;
                 
             case 'ندوة':
-                if (p.participation_type === 'تنظيم') {
-                    breakdown.eventOrganization = (breakdown.eventOrganization || 0) + 1;
-                    points += weights.event_organization || 10;
-                } else if (p.participation_type === 'حضور') {
+                if (partType === 'مشاركة' || partType === 'نشر') {
+                    breakdown.seminar = (breakdown.seminar || 0) + 1;
+                    points += weights.seminar_participation || 5;
+                } else if (partType === 'حضور') {
                     breakdown.eventAttendance = (breakdown.eventAttendance || 0) + 1;
                     points += weights.event_attendance || 1;
                 } else {
                     breakdown.seminar = (breakdown.seminar || 0) + 1;
-                    points += weights.seminar_participation || 4;
+                    points += weights.seminar_participation || 5;
                 }
                 break;
                 
             case 'ورشة عمل':
-                if (p.participation_type === 'تنظيم') {
-                    breakdown.eventOrganization = (breakdown.eventOrganization || 0) + 1;
-                    points += weights.event_organization || 10;
-                } else if (p.participation_type === 'حضور') {
+                if (partType === 'مشاركة' || partType === 'نشر') {
+                    breakdown.workshop = (breakdown.workshop || 0) + 1;
+                    points += weights.workshop_participation || 5;
+                } else if (partType === 'حضور') {
                     breakdown.eventAttendance = (breakdown.eventAttendance || 0) + 1;
                     points += weights.event_attendance || 1;
                 } else {
@@ -420,9 +464,14 @@ function calculateMemberPoints(memberId) {
                 }
                 break;
                 
-            case 'مناقشة علمية خارجية':
+            case 'مناقشة خارجية':
                 breakdown.externalDiscussion = (breakdown.externalDiscussion || 0) + 1;
                 points += weights.external_discussion || 6;
+                break;
+                
+            case 'تحكيم علمي':
+                breakdown.reviewing = (breakdown.reviewing || 0) + 1;
+                points += weights.reviewing || 5;
                 break;
                 
             case 'جائزة':
@@ -515,16 +564,30 @@ function calculateKPIs() {
 function getRecentActivities(limit = 10) {
     const activities = [];
     
+    // البحوث العلمية من publications.csv
+    if (data.publications && data.publications.length > 0) {
+        data.publications.forEach(p => {
+            activities.push({
+                type: 'بحث منشور',
+                icon: '📄',
+                title: p.title,
+                meta: p.journal || '',
+                date: p.publish_date || p.date,
+                dateObj: new Date((p.publish_date || p.date)?.replace(/-/g, '/') || Date.now())
+            });
+        });
+    }
+    
+    // المشاركات من participations.csv
     data.participations.forEach(p => {
         let icon = '📄';
         let title = p.title;
         let meta = p.location;
         
         switch(p.category) {
-            case 'بحث منشور':
             case 'بحوث الطلاب':
-                icon = '📄';
-                meta = p.journal || p.location;
+                icon = '🎓';
+                meta = p.location;
                 break;
             case 'مؤتمر':
                 icon = '🎤';
@@ -535,16 +598,19 @@ function getRecentActivities(limit = 10) {
             case 'ورشة عمل':
                 icon = '🛠️';
                 break;
-            case 'مناقشة علمية خارجية':
-                icon = '🎓';
+            case 'مناقشة خارجية':
+                icon = '📋';
+                break;
+            case 'تحكيم علمي':
+                icon = '✅';
                 break;
             case 'جائزة':
                 icon = '🏆';
-                meta = p.granting_body || p.location;
+                meta = p.location;
                 break;
             case 'براءة اختراع':
                 icon = '💡';
-                meta = p.granting_body || p.location;
+                meta = p.location;
                 break;
         }
         
@@ -558,6 +624,7 @@ function getRecentActivities(limit = 10) {
         });
     });
     
+    // الرسائل المنجزة
     data.theses.filter(t => t.status === 'منجزة').forEach(t => {
         activities.push({
             type: 'thesis',
@@ -867,7 +934,7 @@ function showMemberDetails(memberId) {
 
 // دالة لجمع أنشطة العضو
 function getMemberActivities(memberId) {
-    const memberIdStr = String(memberId);
+    const memberIdStr = String(memberId).trim();
     
     // الرسائل العلمية
     const theses = [];
@@ -881,29 +948,48 @@ function getMemberActivities(memberId) {
         }
     });
     
-    // البحوث
-    const publications = data.participations.filter(p => {
-        if (p.category !== 'بحث منشور' && p.category !== 'بحوث الطلاب') return false;
+    // البحوث العلمية للأعضاء (من publications.csv)
+    const publications = (data.publications || []).filter(p => {
+        const authors = (p.authors_ids || '').split('|').map(id => id.trim());
+        return authors.includes(memberIdStr);
+    });
+    
+    // بحوث الطلاب (من participations.csv)
+    const studentResearch = data.participations.filter(p => {
+        if (p.category !== 'بحوث الطلاب') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
     
-    // الفعاليات
+    // الفعاليات (مؤتمرات، ندوات، ورش عمل)
     const events = data.participations.filter(p => {
-        if (p.category === 'بحث منشور' || p.category === 'بحوث الطلاب' || 
-            p.category === 'جائزة' || p.category === 'براءة اختراع') return false;
+        if (p.category !== 'مؤتمر' && p.category !== 'ندوة' && p.category !== 'ورشة عمل') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
     
-    // الجوائز
+    // المناقشات الخارجية
+    const externalDiscussions = data.participations.filter(p => {
+        if (p.category !== 'مناقشة خارجية') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
+    
+    // التحكيم العلمي
+    const reviewing = data.participations.filter(p => {
+        if (p.category !== 'تحكيم علمي') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
+    
+    // الجوائز وبراءات الاختراع
     const awards = data.participations.filter(p => {
         if (p.category !== 'جائزة' && p.category !== 'براءة اختراع') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
     
-    return { theses, publications, events, awards };
+    return { theses, publications, studentResearch, events, externalDiscussions, reviewing, awards };
 }
 
 // دالة إغلاق modal العضو
@@ -1538,26 +1624,70 @@ function renderPublications() {
     const searchTerm = document.getElementById('pubSearch')?.value?.toLowerCase() || '';
     const citationsFilter = document.getElementById('pubCitationsFilter')?.value || '';
     
+    // البحوث من ملف publications.csv
     let filtered = getPublications();
     if (searchTerm) filtered = filtered.filter(p => p.title && p.title.toLowerCase().includes(searchTerm));
     if (citationsFilter) filtered = filtered.filter(p => p.citations_range === citationsFilter);
     
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state">لا توجد بحوث علمية مسجلة لهذا العام</div>';
+        return;
+    }
+    
     filtered.forEach(pub => {
-        const participants = (pub.participant_ids || '').split('|').map(id => getMemberName(id));
+        // دعم authors_ids من publications.csv
+        const authorIds = pub.authors_ids || pub.participant_ids || '';
+        const authors = authorIds.split('|').map(id => getMemberName(id.trim())).filter(n => n);
         
         const card = document.createElement('div');
         card.className = 'publication-card';
         card.innerHTML = `
-            <div class="publication-title">${pub.title}</div>
-            <div class="publication-journal">${pub.journal || pub.location}</div>
+            <div class="publication-title">${pub.title || ''}</div>
+            <div class="publication-journal">${pub.journal || ''}</div>
             <div class="publication-authors">
-                ${participants.map(a => `<span class="author-tag">${a}</span>`).join('')}
+                ${authors.map(a => `<span class="author-tag">${a}</span>`).join('')}
             </div>
             <div class="publication-meta">
-                <span class="publication-date">${formatDate(pub.date)}</span>
+                <span class="publication-date">${formatDate(pub.publish_date || pub.date)}</span>
                 <span class="publication-citations">${pub.citations_range || '-'}</span>
             </div>
-            ${pub.student_author === 'نعم' || pub.category === 'بحوث الطلاب' ? '<span class="student-badge">بحث طالب</span>' : ''}
+            ${pub.student_author === 'نعم' ? '<span class="student-badge">مشاركة طالب</span>' : ''}
+        `;
+        container.appendChild(card);
+    });
+}
+
+// ========================================
+// عرض بحوث الطلاب
+// ========================================
+function renderStudentResearch() {
+    const container = document.getElementById('studentResearchGrid');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    const filtered = getStudentResearch();
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state">لا توجد بحوث طلاب مسجلة لهذا العام</div>';
+        return;
+    }
+    
+    filtered.forEach(pub => {
+        const supervisors = (pub.participant_ids || '').split('|').map(id => getMemberName(id.trim())).filter(n => n);
+        
+        const card = document.createElement('div');
+        card.className = 'publication-card student-research';
+        card.innerHTML = `
+            <div class="publication-title">${pub.title || ''}</div>
+            <div class="publication-journal">${pub.location || ''}</div>
+            <div class="publication-authors">
+                <span class="supervisor-label">المشرف:</span>
+                ${supervisors.map(a => `<span class="author-tag">${a}</span>`).join('')}
+            </div>
+            ${pub.student_details ? `<div class="student-name">🎓 الطالب: ${pub.student_details}</div>` : ''}
+            <div class="publication-meta">
+                <span class="publication-date">${formatDate(pub.date)}</span>
+            </div>
         `;
         container.appendChild(card);
     });
@@ -1577,12 +1707,22 @@ function renderEvents() {
     if (typeFilter) filtered = filtered.filter(e => e.category === typeFilter);
     if (participationFilter) filtered = filtered.filter(e => e.participation_type === participationFilter);
     
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state">لا توجد فعاليات مسجلة لهذا العام</div>';
+        return;
+    }
+    
     filtered.forEach(event => {
         const dateInfo = formatDateShort(event.date);
         let typeClass = 'workshop';
         if (event.category === 'مؤتمر') typeClass = 'conference';
         else if (event.category === 'ندوة') typeClass = 'seminar';
-        else if (event.category === 'مناقشة علمية خارجية') typeClass = 'discussion';
+        else if (event.category === 'ورشة عمل') typeClass = 'workshop';
+        
+        // الحصول على أسماء المشاركين
+        const participants = (event.participant_ids || '').split('|')
+            .map(id => getMemberName(id.trim()))
+            .filter(n => n);
         
         const card = document.createElement('div');
         card.className = `event-card ${typeClass}`;
@@ -1595,10 +1735,55 @@ function renderEvents() {
                 </div>
             </div>
             <div class="event-body">
-                <div class="event-name">${event.title}</div>
-                <div class="event-location">📍 ${event.location}</div>
-                <div class="event-participation">${event.participation_type}</div>
+                <div class="event-name">${event.title || ''}</div>
+                <div class="event-location">📍 ${event.location || ''}</div>
+                <div class="event-participation">${event.participation_type || ''}</div>
+                ${participants.length > 0 ? `<div class="event-participants">${participants.map(p => `<span class="participant-tag">${p}</span>`).join('')}</div>` : ''}
                 ${event.organized_by_department === 'نعم' ? '<span class="organized-badge">من تنظيم القسم</span>' : ''}
+                ${event.student_details && !isNaN(event.student_details) ? `<span class="attendance-badge">👥 ${event.student_details} حاضر</span>` : ''}
+                ${event.notes ? `<div class="event-notes">${event.notes}</div>` : ''}
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// ========================================
+// عرض المناقشات الخارجية
+// ========================================
+function renderExternalDiscussions() {
+    const container = document.getElementById('externalDiscussionsGrid');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    const filtered = getExternalDiscussions();
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state">لا توجد مناقشات خارجية مسجلة لهذا العام</div>';
+        return;
+    }
+    
+    filtered.forEach(event => {
+        const dateInfo = formatDateShort(event.date);
+        const participants = (event.participant_ids || '').split('|')
+            .map(id => getMemberName(id.trim()))
+            .filter(n => n);
+        
+        const card = document.createElement('div');
+        card.className = 'event-card discussion';
+        card.innerHTML = `
+            <div class="event-header">
+                <span class="event-type">مناقشة خارجية</span>
+                <div class="event-date-box">
+                    <div class="event-day">${dateInfo.day}</div>
+                    <div class="event-month">${dateInfo.month}</div>
+                </div>
+            </div>
+            <div class="event-body">
+                <div class="event-name">${event.title || ''}</div>
+                <div class="event-location">🏛️ ${event.location || ''}</div>
+                ${participants.length > 0 ? `<div class="event-participants"><span class="participant-label">المناقش:</span> ${participants.map(p => `<span class="participant-tag">${p}</span>`).join('')}</div>` : ''}
+                ${event.notes ? `<div class="event-notes">${event.notes}</div>` : ''}
             </div>
         `;
         container.appendChild(card);
@@ -1615,15 +1800,24 @@ function renderAwards() {
     
     const awards = getAwards();
     
+    if (awards.length === 0) {
+        container.innerHTML = '<div class="empty-state">لا توجد جوائز مسجلة لهذا العام</div>';
+        return;
+    }
+    
     awards.forEach(award => {
+        const recipients = (award.participant_ids || '').split('|')
+            .map(id => getMemberName(id.trim()))
+            .filter(n => n);
+        
         const card = document.createElement('div');
         card.className = 'award-card';
         card.innerHTML = `
             <div class="award-icon">${award.category === 'براءة اختراع' ? '💡' : '🏆'}</div>
             <div class="award-type">${award.category}</div>
-            <div class="award-name">${award.title}</div>
-            <div class="award-recipient">${(award.participant_ids || '').split('|').map(id => getMemberName(id)).join('، ')}</div>
-            <div class="award-granter">${award.granting_body || award.location}</div>
+            <div class="award-name">${award.title || ''}</div>
+            <div class="award-recipient">${recipients.join('، ')}</div>
+            <div class="award-granter">${award.location || ''}</div>
             <div class="award-date">${formatDate(award.date)}</div>
         `;
         container.appendChild(card);
