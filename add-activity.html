@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إضافة نشاط علمي جديد</title>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style-additions.css">
+    <style>
+        /* تنسيقات خاصة لصفحة الدخول */
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            text-align: center;
+        }
+        .form-section { display: none; padding: 40px; max-width: 800px; margin: 40px auto; }
+        .input-group { margin-bottom: 20px; text-align: right; }
+        .input-group label { display: block; color: var(--gold-400); margin-bottom: 10px; }
+        .input-group input, .input-group select {
+            width: 100%; padding: 12px;
+            background: rgba(0, 0, 0, 0.3); border: 1px solid var(--primary-600);
+            color: #fff; border-radius: 8px;
+        }
+        .login-btn {
+            background: var(--gold-500); color: #000; font-weight: bold;
+            padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="animated-bg">
+        <div class="geometric-pattern"></div>
+    </div>
+
+    <div id="loginScreen" class="login-container">
+        <h2 style="color: #fff; margin-bottom: 30px;">تسجيل دخول عضو هيئة التدريس</h2>
+        <div class="input-group">
+            <label>الرقم الوظيفي (ID)</label>
+            <input type="number" id="memberIdInput" placeholder="أدخل رقم العضو">
+        </div>
+        <div class="input-group">
+            <label>كلمة المرور</label>
+            <input type="password" id="passwordInput" placeholder="أدخل كلمة المرور">
+        </div>
+        <button onclick="attemptLogin()" class="login-btn">دخول</button>
+        <p id="errorMsg" style="color: var(--rose-500); margin-top: 15px; display: none;">بيانات الدخول غير صحيحة</p>
+    </div>
+
+    <div id="activityFormScreen" class="form-section glass-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <h2 style="color: var(--gold-400);">إضافة نشاط جديد</h2>
+            <a href="index.html" style="color: #fff; text-decoration: none;">رجوع للرئيسية 🏠</a>
+        </div>
+        
+        <div id="welcomeMsg" style="color: var(--emerald-500); margin-bottom: 20px; font-weight: bold;"></div>
+
+        <p style="color: #ccc;">سيتم تفعيل نموذج الإضافة هنا...</p>
+        <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,0,0.1); border-radius: 8px; color: #fff;">
+            ⚠️ ملاحظة: في النسخة الحالية، الإضافة تتطلب تعديل ملفات CSV مباشرة. هذه الواجهة للعرض فقط أو تتطلب ربطاً بخدمة تخزين (Backend).
+        </div>
+    </div>
+
+    <script>
+        // التحقق من الدخول
+        async function attemptLogin() {
+            const id = document.getElementById('memberIdInput').value;
+            const pass = document.getElementById('passwordInput').value;
+            const errorMsg = document.getElementById('errorMsg');
+
+            if (pass !== '1429') {
+                errorMsg.textContent = "كلمة المرور غير صحيحة";
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            // تحميل ملف faculty.csv للتحقق من وجود العضو
+            try {
+                const response = await fetch('./data/faculty.csv');
+                const csvText = await response.text();
+                
+                Papa.parse(csvText, {
+                    header: true,
+                    complete: function(results) {
+                        const member = results.data.find(m => m.id === id);
+                        if (member) {
+                            // نجاح الدخول
+                            document.getElementById('loginScreen').style.display = 'none';
+                            document.getElementById('activityFormScreen').style.display = 'block';
+                            document.getElementById('welcomeMsg').textContent = `أهلاً بك: ${member.name}`;
+                        } else {
+                            errorMsg.textContent = "رقم العضو غير موجود في السجلات";
+                            errorMsg.style.display = 'block';
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error(error);
+                errorMsg.textContent = "خطأ في الاتصال بقاعدة البيانات";
+                errorMsg.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
