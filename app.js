@@ -2432,7 +2432,7 @@ async function init() {
     await loadAllData();
     
     // إنشاء واجهة إضافة الأنشطة
-    createAddActivityUI();
+  //  createAddActivityUI();
 }
 
 document.addEventListener('DOMContentLoaded', init);
