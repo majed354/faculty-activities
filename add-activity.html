@@ -1,3 +1,15 @@
+نعم، هذا هو الحل **الأكثر استقراراً وعملية** ✅.
+
+استخدام حقل التاريخ الميلادي القياسي (`<input type="date">`) يضمن:
+
+1. **سهولة الإدخال:** تظهر نافذة التقويم الأصلية للهاتف أو المتصفح (Android/iPhone/Desktop).
+2. **بدون أخطاء:** لا يمكن للمستخدم كتابة صيغة خاطئة.
+3. **التحويل التلقائي:** سيقوم الكود في الخلفية بتحويل التاريخ إلى هجري (1446-xx-xx) قبل إرساله للشيت.
+4. **تحديد "اليوم" تلقائياً:** سنجعل الحقل يأخذ تاريخ اليوم افتراضياً.
+
+إليك الكود الكامل والمعدل (تم إزالة مكتبات التقويم المعقدة واستبدالها بمنطق التحويل البسيط):
+
+```html
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -6,6 +18,10 @@
     <title>إضافة نشاط علمي جديد</title>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-hijri/2.1.2/moment-hijri.min.js"></script>
+
     <link rel="stylesheet" href="style.css">
     
     <style>
@@ -46,12 +62,15 @@
             font-family: 'Cairo', sans-serif; transition: all 0.3s;
         }
         
+        /* تنسيق خاص لحقل التاريخ ليظهر بشكل جيد في الوضع الليلي */
+        input[type="date"] {
+            color-scheme: dark; /* يجعل أيقونة التقويم بيضاء */
+        }
+        
         .form-group option { background: #1a1a2e; color: #fff; }
         .form-group input:focus, .form-group select:focus {
             outline: none; border-color: var(--gold-400); background: rgba(255, 255, 255, 0.1);
         }
-
-        .hijri-input { direction: ltr; text-align: right; letter-spacing: 1px; }
 
         .external-input {
             display: none; margin-top: 10px;
@@ -94,7 +113,6 @@
         }
         .remove-tag:hover { color: var(--rose-600); }
 
-        /* إخفاء العناصر ديناميكياً */
         .dynamic-field { display: none; }
         .dynamic-field.visible { display: block; animation: fadeIn 0.3s; }
 
@@ -178,10 +196,12 @@
                     <label>اسم المجلة</label>
                     <input type="text" id="pub_journal">
                 </div>
+                
                 <div class="form-group">
-                    <label>تاريخ النشر (هجري: YYYY-MM-DD)</label>
-                    <input type="text" id="pub_date" class="hijri-input" placeholder="مثال: 1446-05-20">
+                    <label>تاريخ النشر</label>
+                    <input type="date" id="pub_date">
                 </div>
+
                 <div class="form-group">
                     <label>نطاق الاستشهادات</label>
                     <select id="pub_citations">
@@ -272,8 +292,8 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>تاريخ المناقشة (هجري)</label>
-                    <input type="text" id="thesis_date" class="hijri-input" placeholder="مثال: 1446-05-20">
+                    <label>تاريخ المناقشة</label>
+                    <input type="date" id="thesis_date">
                 </div>
             </div>
         </div>
@@ -304,9 +324,10 @@
                     <label id="part_location_label">المكان / الجهة المنظمة</label>
                     <input type="text" id="part_location">
                 </div>
+                
                 <div class="form-group">
-                    <label>التاريخ (هجري)</label>
-                    <input type="text" id="part_date" class="hijri-input" placeholder="مثال: 1446-05-20">
+                    <label>التاريخ</label>
+                    <input type="date" id="part_date">
                 </div>
 
                 <div class="form-group" style="grid-column: span 2;">
@@ -357,6 +378,21 @@
         let facultyList = [];
         let currentTargetSheet = '';
         let selectedMembersData = {};
+
+        // ضبط تاريخ اليوم كقيمة افتراضية لجميع حقول التاريخ عند التحميل
+        window.addEventListener('load', function() {
+            const today = new Date().toISOString().split('T')[0];
+            document.querySelectorAll('input[type="date"]').forEach(input => {
+                input.value = today;
+            });
+        });
+
+        // دالة تحويل التاريخ من ميلادي إلى هجري (YYYY-MM-DD)
+        function convertToHijri(gregorianDate) {
+            if (!gregorianDate) return "";
+            // تحويل باستخدام Moment-Hijri
+            return moment(gregorianDate, 'YYYY-MM-DD').format('iYYYY-iMM-iDD');
+        }
 
         async function attemptLogin() {
             const id = document.getElementById('loginId').value;
@@ -413,7 +449,6 @@
                 select.appendChild(firstOption);
                 if (firstOption.text === "جاري التحميل...") firstOption.text = "-- اختر عضو هيئة التدريس --";
 
-                // إضافة خيار خارجي للرسائل فقط
                 if (select.id.startsWith('thesis_')) {
                     const extOption = document.createElement('option');
                     extOption.value = "external";
@@ -487,9 +522,6 @@
             });
         }
 
-        // ============================================================
-        // التحكم الديناميكي في الحقول
-        // ============================================================
         function handleActivityChange() {
             const selection = document.getElementById('mainActivitySelect').value;
             
@@ -499,17 +531,14 @@
 
             if (!selection) return;
 
-            // 1. قسم النشر العلمي
             if (selection === 'pub_research') {
                 document.getElementById('form-publications').classList.add('active');
                 currentTargetSheet = 'publications';
             } 
-            // 2. قسم الرسائل
             else if (selection.startsWith('thesis_')) {
                 document.getElementById('form-theses').classList.add('active');
                 currentTargetSheet = 'theses';
             } 
-            // 3. قسم الفعاليات
             else if (selection.startsWith('event_')) {
                 document.getElementById('form-participations').classList.add('active');
                 currentTargetSheet = 'participations';
@@ -517,7 +546,6 @@
                 const categoryField = document.getElementById('part_category_hidden');
                 const typeField = document.getElementById('part_type_hidden');
                 
-                // إعادة تسمية الحقول افتراضياً
                 document.getElementById('part_title_label').textContent = "عنوان الفعالية / النشاط";
                 document.getElementById('part_location_label').textContent = "المكان / الجهة المنظمة";
                 document.getElementById('part_ids_label').textContent = "الأعضاء المشاركون (من القسم)";
@@ -535,13 +563,12 @@
                     case 'event_workshop_part':
                         categoryField.value = 'ندوة/ورشة'; 
                         typeField.value = selection.includes('attend') ? 'حضور' : 'مشاركة';
-                        if(selection.includes('part')) document.getElementById('div_org').classList.add('visible'); // إظهار خيار التنظيم
-                        document.getElementById('div_attendance').classList.add('visible'); // إظهار عدد الحضور
+                        if(selection.includes('part')) document.getElementById('div_org').classList.add('visible'); 
+                        document.getElementById('div_attendance').classList.add('visible'); 
                         break;
                     case 'event_student_research':
                         categoryField.value = 'بحوث الطلاب'; typeField.value = 'نشر';
-                        // تخصيص الواجهة لبحوث الطلاب
-                        document.getElementById('div_student_name').classList.add('visible'); // إظهار حقل اسم الطالب
+                        document.getElementById('div_student_name').classList.add('visible');
                         document.getElementById('part_title_label').textContent = "عنوان البحث";
                         document.getElementById('part_location_label').textContent = "اسم المجلة / جهة النشر";
                         document.getElementById('part_ids_label').textContent = "المشرف (عضو هيئة التدريس)";
@@ -552,26 +579,21 @@
             document.getElementById('submitBtn').style.display = 'block';
         }
 
-function submitData() {
+        function submitData() {
             const btn = document.getElementById('submitBtn');
             const statusMsg = document.getElementById('statusMsg');
 
-            // 1. إعادة تهيئة الزر والرسالة
-            btn.disabled = true; 
-            btn.textContent = "جاري التحقق والإرسال..."; 
-            statusMsg.textContent = "";
+            btn.disabled = true; btn.textContent = "جاري الإرسال..."; statusMsg.textContent = "";
 
             let formData = { formType: currentTargetSheet };
 
-            // =================================================
-            // تجميع البيانات (نفس الكود السابق)
-            // =================================================
+            // 1. جمع البيانات (مع تحويل التاريخ للهجري)
             if (currentTargetSheet === 'publications') {
                 formData.year = document.getElementById('pub_year').value;
                 formData.title = document.getElementById('pub_title').value;
                 formData.authors_ids = document.getElementById('pub_authors_hidden').value;
                 formData.journal = document.getElementById('pub_journal').value;
-                formData.publish_date = document.getElementById('pub_date').value; // التاريخ
+                formData.publish_date = convertToHijri(document.getElementById('pub_date').value); // تحويل
                 formData.citations_range = document.getElementById('pub_citations').value;
                 formData.student_author = document.getElementById('pub_student').value;
             }
@@ -586,7 +608,7 @@ function submitData() {
                 formData.examiner1_id = getMemberValue('thesis_exam1');
                 formData.examiner2_id = getMemberValue('thesis_exam2');
                 formData.status = document.getElementById('thesis_status').value;
-                formData.defense_date = document.getElementById('thesis_date').value; // التاريخ
+                formData.defense_date = convertToHijri(document.getElementById('thesis_date').value); // تحويل
             }
             else if (currentTargetSheet === 'participations') {
                 formData.year = document.getElementById('part_year').value;
@@ -607,7 +629,7 @@ function submitData() {
 
                 formData.title = finalTitle;
                 formData.location = document.getElementById('part_location').value;
-                formData.date = document.getElementById('part_date').value; // التاريخ
+                formData.date = convertToHijri(document.getElementById('part_date').value); // تحويل
                 formData.participant_ids = document.getElementById('part_ids_hidden').value;
                 formData.organized_by_department = document.getElementById('part_org').value;
                 formData.student_details = studentDetails; 
@@ -616,27 +638,6 @@ function submitData() {
                 formData.student_author = document.getElementById('part_student').value;
             }
 
-            // =================================================
-            // [جديد] التحقق من صحة التاريخ قبل الإرسال
-            // =================================================
-            let dateToCheck = "";
-            if (currentTargetSheet === 'publications') dateToCheck = formData.publish_date;
-            else if (currentTargetSheet === 'theses') dateToCheck = formData.defense_date;
-            else if (currentTargetSheet === 'participations') dateToCheck = formData.date;
-
-            // التعبير النمطي: 4 أرقام - رقمين - رقمين (YYYY-MM-DD)
-            const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-
-            if (dateToCheck && !datePattern.test(dateToCheck)) {
-                alert("⚠️ خطأ في التاريخ!\nيجب أن يكون التاريخ بصيغة: YYYY-MM-DD\n(مثال: 1446-05-20)");
-                btn.disabled = false;
-                btn.textContent = "📤 حفظ وإرسال البيانات";
-                return; // إيقاف العملية هنا
-            }
-
-            // =================================================
-            // الإرسال
-            // =================================================
             fetch(SCRIPT_URL, {
                 method: 'POST',
                 body: JSON.stringify(formData),
@@ -645,19 +646,15 @@ function submitData() {
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    // [تعديل] رسالة النجاح بدون ريفريش
                     statusMsg.style.color = 'var(--emerald-500)';
-                    statusMsg.textContent = `✅ تم الحفظ بنجاح! (رقم العملية: ${data.id})`;
-                    
-                    // إعادة تفعيل الزر لإضافة جديدة
+                    statusMsg.textContent = `✅ تم الحفظ بنجاح! رقم العملية: ${data.id}`;
                     btn.disabled = false;
                     btn.textContent = "📤 حفظ وإرسال البيانات";
-
-                    // [اختياري] تفريغ حقول العناوين والتواريخ لتسهيل الإدخال الجديد
+                    
+                    // تنظيف الحقول النصية فقط لتسهيل الإضافة التالية
                     clearInputsAfterSuccess();
                     
-                    // تنبيه بسيط
-                    alert("تمت الإضافة بنجاح. يمكنك إضافة نشاط آخر الآن.");
+                    alert("تمت إضافة النشاط بنجاح. يمكنك إضافة نشاط آخر.");
                 } else {
                     throw new Error(data.message || 'Unknown error');
                 }
@@ -671,13 +668,14 @@ function submitData() {
             });
         }
 
-        // دالة مساعدة لتفريغ الحقول النصية فقط بعد الحفظ
-     // دالة مساعدة لتفريغ الحقول النصية فقط بعد الحفظ
+        // دالة لتفريغ الحقول النصية فقط بعد الحفظ
         function clearInputsAfterSuccess() {
             const inputs = document.querySelectorAll('.active input[type="text"]:not([readonly]), .active textarea');
             inputs.forEach(input => input.value = "");
-            // لا نفرغ القوائم المنسدلة (Select) لأن المستخدم قد يريد إضافة نشاط بنفس التصنيف
+            // لا نفرغ القوائم المنسدلة ولا التواريخ (تبقى على وضعها لتسريع الإدخال المتكرر)
         }
     </script>
 </body>
 </html>
+
+```
