@@ -1398,6 +1398,39 @@
 }
 
 /* إخفاء FAB عند الطباعة */
+
+/* زر الإضافة العائم في الركن الأيسر العلوي */
+.add-activity-fab {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    background-color: #ffffff; /* خلفية بيضاء */
+    border-radius: 50%; /* دائرة */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    z-index: 9999;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    border: 2px solid var(--gold-400); /* إطار ذهبي بسيط */
+}
+
+.add-activity-fab:hover {
+    transform: scale(1.1) rotate(90deg);
+    box-shadow: 0 0 20px var(--gold-400);
+}
+
+/* علامة الزائد داخل الدائرة */
+.add-activity-fab::after {
+    content: '+';
+    font-size: 30px;
+    color: var(--primary-900); /* لون النص غامق */
+    font-weight: bold;
+    margin-top: -2px; /* ضبط المحاذاة */
+}
 @media print {
     .fab-container,
     .add-activity-modal {
