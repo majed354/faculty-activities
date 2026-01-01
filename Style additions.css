@@ -1399,37 +1399,39 @@
 
 /* إخفاء FAB عند الطباعة */
 
-/* زر الإضافة العائم في الركن الأيسر العلوي */
+/* زر الإضافة العائم - تصميم جديد ومكان مضمون */
 .add-activity-fab {
     position: fixed;
-    top: 20px;
-    left: 20px;
-    width: 50px;
-    height: 50px;
-    background-color: #ffffff; /* خلفية بيضاء */
-    border-radius: 50%; /* دائرة */
+    bottom: 30px;       /* مسافة من الأسفل */
+    left: 30px;         /* مسافة من اليسار */
+    width: 60px;        /* حجم أكبر قليلاً */
+    height: 60px;
+    background-color: #ffffff;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    z-index: 9999;
-    transition: all 0.3s ease;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.4); /* ظل قوي للبروز */
+    z-index: 2147483647; /* أعلى رقم طبقة ممكن لضمان الظهور فوق كل شيء */
     text-decoration: none;
-    border: 2px solid var(--gold-400); /* إطار ذهبي بسيط */
+    border: 3px solid var(--gold-400); /* إطار ذهبي */
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    cursor: pointer;
 }
 
 .add-activity-fab:hover {
-    transform: scale(1.1) rotate(90deg);
-    box-shadow: 0 0 20px var(--gold-400);
+    transform: scale(1.15) rotate(90deg);
+    box-shadow: 0 0 25px rgba(198, 169, 98, 0.6);
 }
 
-/* علامة الزائد داخل الدائرة */
+/* علامة الزائد */
 .add-activity-fab::after {
     content: '+';
-    font-size: 30px;
-    color: var(--primary-900); /* لون النص غامق */
+    font-size: 36px;
+    color: #000;
     font-weight: bold;
-    margin-top: -2px; /* ضبط المحاذاة */
+    line-height: 1;
+    margin-top: -4px;
 }
 @media print {
     .fab-container,
