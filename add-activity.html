@@ -9,137 +9,60 @@
     <link rel="stylesheet" href="style.css">
     
     <style>
-        /* تنسيقات خاصة لصفحة الإضافة */
-        body {
-            background-color: var(--primary-900);
-            min-height: 100vh;
-        }
-
+        /* نفس التنسيقات السابقة */
+        body { background-color: var(--primary-900); min-height: 100vh; }
         .login-container {
-            max-width: 400px;
-            margin: 100px auto;
-            padding: 40px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(198, 169, 98, 0.3);
-            border-radius: 20px;
-            text-align: center;
-            backdrop-filter: blur(10px);
+            max-width: 400px; margin: 100px auto; padding: 40px;
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(198, 169, 98, 0.3);
+            border-radius: 20px; text-align: center; backdrop-filter: blur(10px);
         }
-
         .form-container {
-            display: none; /* مخفي حتى تسجيل الدخول */
-            max-width: 900px;
-            margin: 40px auto;
-            padding: 30px;
-            background: rgba(12, 25, 41, 0.9);
-            border: 1px solid rgba(198, 169, 98, 0.2);
-            border-radius: 24px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            display: none; max-width: 900px; margin: 40px auto; padding: 30px;
+            background: rgba(12, 25, 41, 0.9); border: 1px solid rgba(198, 169, 98, 0.2);
+            border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
         }
-
         .form-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 30px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;
         }
-
-        .form-section {
-            display: none; /* الأقسام مخفية افتراضياً */
-            animation: fadeIn 0.4s ease;
+        .form-section { display: none; animation: fadeIn 0.4s ease; }
+        .form-section.active { display: block; }
+        .input-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
+        @media (max-width: 768px) { .input-grid { grid-template-columns: 1fr; } }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; color: var(--gold-400); margin-bottom: 8px; font-size: 0.9rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 12px; background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; border-radius: 10px;
+            font-family: 'Cairo', sans-serif; transition: all 0.3s;
         }
-
-        .form-section.active {
-            display: block;
+        .form-group option { background: #1a1a2e; color: #fff; }
+        .form-group input:focus, .form-group select:focus {
+            outline: none; border-color: var(--gold-400); background: rgba(255, 255, 255, 0.1);
         }
-
-        .input-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
+        
+        /* تنسيق الحقل الخارجي المخفي */
+        .external-input {
+            display: none; /* مخفي افتراضياً */
+            margin-top: 10px;
+            border-color: var(--sky-500) !important;
+            background: rgba(14, 165, 233, 0.1) !important;
         }
-
-        @media (max-width: 768px) {
-            .input-grid { grid-template-columns: 1fr; }
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            color: var(--gold-400);
-            margin-bottom: 8px;
-            font-size: 0.9rem;
-        }
-
-        .form-group input, 
-        .form-group select, 
-        .form-group textarea {
-            width: 100%;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #fff;
-            border-radius: 10px;
-            font-family: 'Cairo', sans-serif;
-            transition: all 0.3s;
-        }
-
-        .form-group input:focus, 
-        .form-group select:focus {
-            outline: none;
-            border-color: var(--gold-400);
-            background: rgba(255, 255, 255, 0.1);
-        }
+        .external-input::placeholder { color: #aaa; }
 
         .btn-submit {
-            background: linear-gradient(135deg, var(--gold-500), var(--gold-600));
-            color: #000;
-            font-weight: bold;
-            padding: 15px 40px;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            width: 100%;
-            font-size: 1.1rem;
-            margin-top: 20px;
-            transition: transform 0.2s;
+            background: linear-gradient(135deg, var(--gold-500), var(--gold-600)); color: #000;
+            font-weight: bold; padding: 15px 40px; border: none; border-radius: 12px;
+            cursor: pointer; width: 100%; font-size: 1.1rem; margin-top: 20px; transition: transform 0.2s;
         }
-
-        .btn-submit:hover {
-            transform: translateY(-2px);
-        }
-
-        .btn-submit:disabled {
-            background: #555;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        /* تنسيق اختيار النوع */
+        .btn-submit:hover { transform: translateY(-2px); }
+        .btn-submit:disabled { background: #555; cursor: not-allowed; }
         .type-selector {
-            margin-bottom: 30px;
-            background: rgba(255,255,255,0.05);
-            padding: 20px;
-            border-radius: 15px;
-            text-align: center;
+            margin-bottom: 30px; background: rgba(255,255,255,0.05);
+            padding: 20px; border-radius: 15px; text-align: center;
         }
-
-        .helper-text {
-            font-size: 0.75rem;
-            color: #888;
-            margin-top: 5px;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        .helper-text { font-size: 0.75rem; color: #888; margin-top: 5px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
@@ -217,7 +140,6 @@
                 <div class="form-group">
                     <label>أرقام المشاركين (IDs)</label>
                     <input type="text" id="part_ids" placeholder="4280112|4310115">
-                    <div class="helper-text">افصل بين الأرقام بعلامة |</div>
                 </div>
                 <div class="form-group">
                     <label>تنظيم القسم؟</label>
@@ -271,7 +193,6 @@
                 <div class="form-group">
                     <label>أرقام المؤلفين (IDs)</label>
                     <input type="text" id="pub_authors" placeholder="4280112|4310115">
-                    <div class="helper-text">افصل بين الأرقام بعلامة |</div>
                 </div>
                 <div class="form-group">
                     <label>اسم المجلة</label>
@@ -317,7 +238,10 @@
                 </div>
                 <div class="form-group">
                     <label>التخصص</label>
-                    <input type="text" id="thesis_spec" value="قراءات">
+                    <select id="thesis_spec">
+                        <option value="قراءات">قراءات</option>
+                        <option value="دراسات قرآنية">دراسات قرآنية</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>اسم الطالب</label>
@@ -327,22 +251,39 @@
                     <label>عنوان الرسالة</label>
                     <input type="text" id="thesis_title">
                 </div>
+
                 <div class="form-group">
-                    <label>رقم المشرف الرئيسي (ID)</label>
-                    <input type="text" id="thesis_supervisor">
+                    <label>المشرف الرئيسي</label>
+                    <select id="thesis_supervisor" class="faculty-select" onchange="toggleExternalInput(this)">
+                        <option value="">جاري التحميل...</option>
+                    </select>
+                    <input type="text" id="thesis_supervisor_ext" class="external-input" placeholder="اكتب اسم المشرف الخارجي هنا...">
                 </div>
+
                 <div class="form-group">
-                    <label>رقم المشرف المشارك (ID)</label>
-                    <input type="text" id="thesis_co_supervisor" placeholder="(اختياري)">
+                    <label>المشرف المشارك</label>
+                    <select id="thesis_co_supervisor" class="faculty-select" onchange="toggleExternalInput(this)">
+                        <option value="">-- اختياري --</option>
+                    </select>
+                    <input type="text" id="thesis_co_supervisor_ext" class="external-input" placeholder="اكتب اسم المشرف المشارك الخارجي...">
                 </div>
+
                 <div class="form-group">
-                    <label>رقم المناقش الأول (ID)</label>
-                    <input type="text" id="thesis_exam1">
+                    <label>المناقش الأول</label>
+                    <select id="thesis_exam1" class="faculty-select" onchange="toggleExternalInput(this)">
+                        <option value="">جاري التحميل...</option>
+                    </select>
+                    <input type="text" id="thesis_exam1_ext" class="external-input" placeholder="اكتب اسم المناقش الخارجي هنا...">
                 </div>
+
                 <div class="form-group">
-                    <label>رقم المناقش الثاني (ID)</label>
-                    <input type="text" id="thesis_exam2">
+                    <label>المناقش الثاني</label>
+                    <select id="thesis_exam2" class="faculty-select" onchange="toggleExternalInput(this)">
+                        <option value="">جاري التحميل...</option>
+                    </select>
+                    <input type="text" id="thesis_exam2_ext" class="external-input" placeholder="اكتب اسم المناقش الخارجي هنا...">
                 </div>
+
                 <div class="form-group">
                     <label>حالة الرسالة</label>
                     <select id="thesis_status">
@@ -362,10 +303,9 @@
     </div>
 
     <script>
-        // رابط السكريبت الخاص بك
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzbIi7bIwIZCXPtUHnUt5bS2GJAZZjfFqgKSqyEnC97KOPwx03ZGkXCFdZRTcndZOuM/exec';
+        let facultyList = [];
 
-        // 1. منطق تسجيل الدخول
         async function attemptLogin() {
             const id = document.getElementById('loginId').value;
             const pass = document.getElementById('loginPass').value;
@@ -378,7 +318,6 @@
             }
 
             try {
-                // التحقق من الملف faculty.csv
                 const response = await fetch('./data/faculty.csv');
                 if (!response.ok) throw new Error("File not found");
                 const csvText = await response.text();
@@ -386,13 +325,12 @@
                 Papa.parse(csvText, {
                     header: true,
                     complete: function(results) {
-                        const member = results.data.find(m => m.id && m.id.trim() === id.trim());
+                        facultyList = results.data.filter(m => m.id && m.name);
+                        populateFacultyDropdowns();
+                        const member = facultyList.find(m => m.id && m.id.trim() === id.trim());
                         if (member) {
-                            // دخول ناجح
                             document.getElementById('loginScreen').style.display = 'none';
                             document.getElementById('mainFormScreen').style.display = 'block';
-                            // تخزين معرف العضو لاستخدامه افتراضياً إذا أردت
-                            localStorage.setItem('currentUser', JSON.stringify(member));
                         } else {
                             errorMsg.textContent = "رقم العضو غير موجود في السجلات";
                             errorMsg.style.display = 'block';
@@ -400,19 +338,84 @@
                     }
                 });
             } catch (error) {
-                console.warn("Could not load faculty.csv, bypassing ID check based on user request context.");
-                // في حال فشل تحميل الملف (مثلاً محلياً)، اسمح بالدخول للتجربة إذا كانت كلمة المرور صحيحة
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('mainFormScreen').style.display = 'block';
             }
         }
 
-        // 2. إظهار النموذج المناسب
+        function populateFacultyDropdowns() {
+            const uniqueFaculty = [];
+            const map = new Map();
+            for (const item of facultyList) {
+                if(!map.has(item.id)){
+                    map.set(item.id, true);
+                    uniqueFaculty.push({ id: item.id, name: item.name });
+                }
+            }
+            uniqueFaculty.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+
+            const selects = document.querySelectorAll('.faculty-select');
+            
+            selects.forEach(select => {
+                const firstOption = select.options[0];
+                select.innerHTML = '';
+                select.appendChild(firstOption);
+
+                if (firstOption.text === "جاري التحميل...") {
+                    firstOption.text = "-- اختر عضو هيئة التدريس --";
+                }
+
+                // 1. إضافة خيار خارجي ثابت
+                const extOption = document.createElement('option');
+                extOption.value = "external";
+                extOption.text = "👤 مناقش/مشرف خارجي (إدخال يدوي)";
+                extOption.style.fontWeight = "bold";
+                extOption.style.color = "#0ea5e9";
+                select.appendChild(extOption);
+
+                // فاصل
+                const separator = document.createElement('option');
+                separator.disabled = true;
+                separator.text = "------------------";
+                select.appendChild(separator);
+
+                // 2. إضافة أعضاء القسم
+                uniqueFaculty.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.id;
+                    option.text = member.name;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        // دالة لإظهار/إخفاء حقل الإدخال اليدوي
+        function toggleExternalInput(selectElement) {
+            // نبحث عن حقل الإدخال الذي يلي القائمة مباشرة
+            const inputField = selectElement.nextElementSibling;
+            if (selectElement.value === 'external') {
+                inputField.style.display = 'block';
+                inputField.focus();
+            } else {
+                inputField.style.display = 'none';
+                inputField.value = ''; // تفريغ القيمة عند الإغلاق
+            }
+        }
+
+        // دالة مساعدة للحصول على القيمة النهائية (إما ID العضو أو الاسم الخارجي)
+        function getMemberValue(selectId) {
+            const select = document.getElementById(selectId);
+            const input = document.getElementById(selectId + '_ext');
+            
+            if (select.value === 'external') {
+                return input.value.trim(); // نرجع الاسم المكتوب
+            }
+            return select.value; // نرجع الـ ID
+        }
+
         function toggleForm() {
-            // إخفاء الكل
             document.querySelectorAll('.form-section').forEach(el => el.classList.remove('active'));
             document.getElementById('submitBtn').style.display = 'none';
-            
             const selectedType = document.getElementById('activityTypeSelect').value;
             if (selectedType) {
                 document.getElementById('form-' + selectedType).classList.add('active');
@@ -420,20 +423,17 @@
             }
         }
 
-        // 3. جمع وإرسال البيانات
         function submitData() {
             const btn = document.getElementById('submitBtn');
             const statusMsg = document.getElementById('statusMsg');
             const type = document.getElementById('activityTypeSelect').value;
 
-            // تعطيل الزر
             btn.disabled = true;
             btn.textContent = "جاري الإرسال...";
             statusMsg.textContent = "";
 
             let formData = { formType: type };
 
-            // جمع البيانات حسب النوع
             if (type === 'participations') {
                 formData.year = document.getElementById('part_year').value;
                 formData.category = document.getElementById('part_category').value;
@@ -464,16 +464,17 @@
                 formData.specialization = document.getElementById('thesis_spec').value;
                 formData.student_name = document.getElementById('thesis_student_name').value;
                 formData.title = document.getElementById('thesis_title').value;
-                formData.supervisor_id = document.getElementById('thesis_supervisor').value;
-                formData.co_supervisor_id = document.getElementById('thesis_co_supervisor').value;
-                formData.examiner1_id = document.getElementById('thesis_exam1').value;
-                formData.examiner2_id = document.getElementById('thesis_exam2').value;
+                
+                // استخدام الدالة المساعدة لجلب القيم الصحيحة (رقم أو اسم)
+                formData.supervisor_id = getMemberValue('thesis_supervisor');
+                formData.co_supervisor_id = getMemberValue('thesis_co_supervisor');
+                formData.examiner1_id = getMemberValue('thesis_exam1');
+                formData.examiner2_id = getMemberValue('thesis_exam2');
+
                 formData.status = document.getElementById('thesis_status').value;
                 formData.defense_date = document.getElementById('thesis_date').value;
             }
 
-            // إرسال البيانات
-            // نستخدم text/plain لتجنب مشاكل CORS مع Google Apps Script
             fetch(SCRIPT_URL, {
                 method: 'POST',
                 body: JSON.stringify(formData),
@@ -485,11 +486,7 @@
                     statusMsg.style.color = 'var(--emerald-500)';
                     statusMsg.textContent = `✅ تم الحفظ بنجاح! رقم العملية: ${data.id}`;
                     btn.textContent = "تم الإرسال";
-                    
-                    // إعادة تعيين النموذج بعد 3 ثواني
-                    setTimeout(() => {
-                        location.reload();
-                    }, 3000);
+                    setTimeout(() => { location.reload(); }, 3000);
                 } else {
                     throw new Error(data.message || 'Unknown error');
                 }
@@ -497,7 +494,7 @@
             .catch(error => {
                 console.error('Error:', error);
                 statusMsg.style.color = 'var(--rose-500)';
-                statusMsg.textContent = "❌ حدث خطأ أثناء الإرسال. تأكد من الاتصال.";
+                statusMsg.textContent = "❌ حدث خطأ أثناء الإرسال.";
                 btn.disabled = false;
                 btn.textContent = "حاول مرة أخرى";
             });
