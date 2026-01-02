@@ -340,7 +340,7 @@ function getStudentResearch() {
     return data.participations.filter(p => p.category === 'بحوث الطلاب');
 }
 
-// الفعاليات (مؤتمرات، ندوات، ورش عمل)
+// جميع الفعاليات والأنشطة (11 فئة)
 function getEvents() {
     return data.participations.filter(p => 
         p.category === 'مؤتمر' || 
@@ -349,7 +349,11 @@ function getEvents() {
         p.category === 'تحكيم علمي' ||
         p.category === 'تأليف كتب' ||
         p.category === 'استشارة علمية' ||
-        p.category === 'مشاركة إعلامية'
+        p.category === 'مشاركة إعلامية' ||
+        p.category === 'مناقشة خارجية' ||
+        p.category === 'جائزة' ||
+        p.category === 'براءة اختراع' ||
+        p.category === 'بحوث الطلاب'
     );
 }
 
@@ -1764,6 +1768,10 @@ function renderEvents() {
         else if (event.category === 'تأليف كتب') typeClass = 'book';
         else if (event.category === 'استشارة علمية') typeClass = 'consulting';
         else if (event.category === 'مشاركة إعلامية') typeClass = 'media';
+        else if (event.category === 'مناقشة خارجية') typeClass = 'discussion';
+        else if (event.category === 'جائزة') typeClass = 'award';
+        else if (event.category === 'براءة اختراع') typeClass = 'patent';
+        else if (event.category === 'بحوث الطلاب') typeClass = 'student-research';
         
         // الحصول على أسماء المشاركين
         const participants = (event.participant_ids || '').split('|')
