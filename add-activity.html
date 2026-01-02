@@ -172,6 +172,18 @@
                     <option value="event_award">جائزة علمية</option>
                     <option value="event_patent">براءة اختراع</option>
                 </optgroup>
+                
+                <optgroup label="📖 التأليف والنشر">
+                    <option value="event_book">تأليف / تحقيق كتاب</option>
+                </optgroup>
+                
+                <optgroup label="💼 الاستشارات">
+                    <option value="event_consulting">استشارة علمية</option>
+                </optgroup>
+                
+                <optgroup label="📺 الإعلام">
+                    <option value="event_media">مشاركة إعلامية (تلفزيون/إذاعة/بودكاست)</option>
+                </optgroup>
             </select>
         </div>
 
@@ -628,6 +640,30 @@
                     document.getElementById('part_title_label').textContent = "عنوان براءة الاختراع";
                     document.getElementById('part_location_label').textContent = "الجهة المسجلة لديها";
                     document.getElementById('part_ids_label').textContent = "صاحب البراءة";
+                }
+                // ====== تأليف كتب ======
+                else if (selection === 'event_book') {
+                    categoryField.value = 'تأليف كتب';
+                    typeField.value = 'نشر';
+                    document.getElementById('part_title_label').textContent = "عنوان الكتاب";
+                    document.getElementById('part_location_label').textContent = "دار النشر";
+                    document.getElementById('part_ids_label').textContent = "المؤلف / المحقق";
+                }
+                // ====== استشارة علمية ======
+                else if (selection === 'event_consulting') {
+                    categoryField.value = 'استشارة علمية';
+                    typeField.value = 'مشاركة';
+                    document.getElementById('part_title_label').textContent = "موضوع الاستشارة";
+                    document.getElementById('part_location_label').textContent = "الجهة المستفيدة";
+                    document.getElementById('part_ids_label').textContent = "المستشار";
+                }
+                // ====== مشاركة إعلامية ======
+                else if (selection === 'event_media') {
+                    categoryField.value = 'مشاركة إعلامية';
+                    typeField.value = 'مشاركة';
+                    document.getElementById('part_title_label').textContent = "عنوان اللقاء / البرنامج";
+                    document.getElementById('part_location_label').textContent = "القناة / الإذاعة / المنصة";
+                    document.getElementById('part_ids_label').textContent = "المشارك";
                 }
             }
             
