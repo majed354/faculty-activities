@@ -91,12 +91,13 @@ async function loadConfig() {
     try {
         const response = await fetch(`${DATA_BASE_URL}/config.json`);
         config = await response.json();
-        currentYear = config.current_year || 'all';
+        // دعم قيمة 'all' أو رقم السنة
+        currentYear = config.current_year === 'all' ? 'all' : (config.current_year || 1446);
     } catch (error) {
         console.warn('Using default config');
         config = {
-            current_year: 1446,
-            available_years: [1436, 1437, 1438, 1439, 1440, 1441, 1442, 1443, 1444, 1445, 1446, 1447],
+            current_year: 'all',
+            available_years: [1440, 1441, 1442, 1443, 1444, 1445, 1446, 1447],
             department_name: "قسم القراءات",
             university_name: "جامعة الطائف",
             weights: {
@@ -127,7 +128,7 @@ async function loadConfig() {
                 "أكثر من 500": 600
             }
         };
-        currentYear = 1446;
+        currentYear = 'all';
     }
 }
 
@@ -344,7 +345,11 @@ function getEvents() {
     return data.participations.filter(p => 
         p.category === 'مؤتمر' || 
         p.category === 'ندوة' || 
-        p.category === 'ورشة عمل'
+        p.category === 'ورشة عمل' ||
+        p.category === 'تحكيم علمي' ||
+        p.category === 'تأليف كتب' ||
+        p.category === 'استشارة علمية' ||
+        p.category === 'مشاركة إعلامية'
     );
 }
 
@@ -680,6 +685,7 @@ function populateYearSelector() {
     const allOption = document.createElement('option');
     allOption.value = 'all';
     allOption.textContent = 'الكل';
+    if (currentYear === 'all') allOption.selected = true;
     select.appendChild(allOption);
     
     // إضافة السنوات بترتيب تنازلي (الأحدث أولاً)
@@ -1754,6 +1760,10 @@ function renderEvents() {
         if (event.category === 'مؤتمر') typeClass = 'conference';
         else if (event.category === 'ندوة') typeClass = 'seminar';
         else if (event.category === 'ورشة عمل') typeClass = 'workshop';
+        else if (event.category === 'تحكيم علمي') typeClass = 'reviewing';
+        else if (event.category === 'تأليف كتب') typeClass = 'book';
+        else if (event.category === 'استشارة علمية') typeClass = 'consulting';
+        else if (event.category === 'مشاركة إعلامية') typeClass = 'media';
         
         // الحصول على أسماء المشاركين
         const participants = (event.participant_ids || '').split('|')
