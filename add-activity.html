@@ -716,12 +716,13 @@
             if (currentTargetSheet === 'publications') {
                 // الحقول الإلزامية للبحوث
                 const requiredFields = [
-                    { id: 'pub_year', name: 'السنة' },
-                    { id: 'pub_title', name: 'عنوان البحث' },
-                    { id: 'pub_authors_hidden', name: 'الأعضاء المشاركون' },
-                    { id: 'pub_journal', name: 'اسم المجلة' },
-                    { id: 'pub_date', name: 'تاريخ النشر' }
-                ];
+    { id: 'pub_year', name: 'السنة' },
+    { id: 'pub_title', name: 'عنوان البحث' },
+    { id: 'pub_authors_hidden', name: 'الأعضاء المشاركون' },
+    { id: 'pub_journal', name: 'اسم المجلة' },
+    { id: 'pub_date', name: 'تاريخ النشر' },
+    { id: 'pub_citations', name: 'نطاق الاستشهادات' }
+];
                 
                 requiredFields.forEach(field => {
                     const el = document.getElementById(field.id);
@@ -740,7 +741,9 @@
                     { id: 'thesis_year', name: 'السنة' },
                     { id: 'thesis_student_name', name: 'اسم الطالب' },
                     { id: 'thesis_title', name: 'عنوان الرسالة' },
-                    { id: 'thesis_supervisor', name: 'المشرف الرئيسي', isSelect: true }
+                    { id: 'thesis_supervisor', name: 'المشرف الرئيسي', isSelect: true },
+                    { id: 'thesis_exam1', name: 'المناقش الأول', isSelect: true },
+{                   { id: 'thesis_exam2', name: 'المناقش الثاني', isSelect: true }
                 ];
                 
                 requiredFields.forEach(field => {
