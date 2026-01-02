@@ -227,14 +227,13 @@
                 <div class="form-group" style="grid-column: span 2;">
                     <label>👤 اختر اسمك (وأسماء الباحثين معك إن وُجدوا) <span style="color: var(--rose-500);">*</span></label>
                     <div class="multi-select-wrapper">
-                        <select id="pub_author_select" class="faculty-select">
+                        <select id="pub_author_select" class="faculty-select" onchange="autoAddMember('pub_author_select', 'pub_authors_list', 'pub_authors_hidden')">
                             <option value="">-- اختر اسمك من القائمة --</option>
                         </select>
-                        <button type="button" class="btn-add-member" onclick="addMemberToList('pub_author_select', 'pub_authors_list', 'pub_authors_hidden')">إضافة +</button>
                     </div>
                     <div id="pub_authors_list" class="selected-members-list"></div>
                     <input type="hidden" id="pub_authors_hidden">
-                    <small style="color: var(--gray-400);">💡 ابدأ باختيار اسمك أولاً، ثم أضف أسماء الباحثين الآخرين من القسم إن وُجدوا</small>
+                    <small style="color: var(--gray-400);">💡 اختر اسمك، ثم أضف أسماء الباحثين الآخرين من القسم إن وُجدوا</small>
                 </div>
                 <div class="form-group">
                     <label>اسم المجلة <span style="color: var(--rose-500);">*</span></label>
@@ -377,14 +376,13 @@
                 <div class="form-group" style="grid-column: span 2;">
                     <label id="part_ids_label">👤 اختر اسمك (وأسماء المشاركين معك إن وُجدوا) <span style="color: var(--rose-500);">*</span></label>
                     <div class="multi-select-wrapper">
-                        <select id="part_ids_select" class="faculty-select">
+                        <select id="part_ids_select" class="faculty-select" onchange="autoAddMember('part_ids_select', 'part_ids_list', 'part_ids_hidden')">
                             <option value="">-- اختر اسمك من القائمة --</option>
                         </select>
-                        <button type="button" class="btn-add-member" onclick="addMemberToList('part_ids_select', 'part_ids_list', 'part_ids_hidden')">إضافة +</button>
                     </div>
                     <div id="part_ids_list" class="selected-members-list"></div>
                     <input type="hidden" id="part_ids_hidden">
-                    <small style="color: var(--gray-400);">💡 ابدأ باختيار اسمك أولاً، ثم أضف أسماء المشاركين الآخرين من القسم إن وُجدوا</small>
+                    <small style="color: var(--gray-400);">💡 اختر اسمك، ثم أضف أسماء المشاركين الآخرين من القسم إن وُجدوا</small>
                 </div>
 
                 <div id="div_org" class="form-group dynamic-field">
@@ -554,6 +552,29 @@
             
             const exists = selectedMembersData[hiddenInputId].find(m => m.id === memberId);
             if (exists) { alert('هذا العضو مضاف بالفعل!'); return; }
+
+            selectedMembersData[hiddenInputId].push({ id: memberId, name: memberName });
+            renderMembersList(hiddenInputId, listId);
+            select.value = "";
+            
+            // إزالة تنسيق الخطأ عند إضافة عضو
+            document.getElementById(listId)?.classList.remove('error-field');
+        }
+
+        // دالة الإضافة التلقائية عند الاختيار
+        function autoAddMember(selectId, listId, hiddenInputId) {
+            const select = document.getElementById(selectId);
+            const memberId = select.value;
+            const memberName = select.options[select.selectedIndex].text;
+            if (!memberId || memberId === 'external' || memberId === '') return;
+
+            if (!selectedMembersData[hiddenInputId]) selectedMembersData[hiddenInputId] = [];
+            
+            const exists = selectedMembersData[hiddenInputId].find(m => m.id === memberId);
+            if (exists) { 
+                select.value = "";
+                return; 
+            }
 
             selectedMembersData[hiddenInputId].push({ id: memberId, name: memberName });
             renderMembersList(hiddenInputId, listId);
