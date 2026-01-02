@@ -166,6 +166,24 @@
 }
 .event-card.media { border-color: rgba(236, 72, 153, 0.3); }
 
+/* جائزة */
+.event-card.award .event-header { 
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(250, 204, 21, 0.3)); 
+}
+.event-card.award { border-color: rgba(234, 179, 8, 0.3); }
+
+/* براءة اختراع */
+.event-card.patent .event-header { 
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(248, 113, 113, 0.3)); 
+}
+.event-card.patent { border-color: rgba(239, 68, 68, 0.3); }
+
+/* بحوث الطلاب */
+.event-card.student-research .event-header { 
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.3), rgba(34, 211, 238, 0.3)); 
+}
+.event-card.student-research { border-color: rgba(6, 182, 212, 0.3); }
+
 /* تحسينات على بطاقة الفعالية */
 .event-card .event-participation {
     display: inline-block;
