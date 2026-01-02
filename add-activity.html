@@ -312,7 +312,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>المناقش الأول <span style="color: var(--rose-500);">*</span></label>
+                    <label>المناقش الأول <span style="color: var(--amber-400); font-size: 0.8rem;">(للمنجزة)</span></label>
                     <select id="thesis_exam1" class="faculty-select" onchange="toggleExternalInput(this)">
                         <option value="">جاري التحميل...</option>
                     </select>
@@ -320,7 +320,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>المناقش الثاني <span style="color: var(--rose-500);">*</span></label>
+                    <label>المناقش الثاني <span style="color: var(--amber-400); font-size: 0.8rem;">(للمنجزة)</span></label>
                     <select id="thesis_exam2" class="faculty-select" onchange="toggleExternalInput(this)">
                         <option value="">جاري التحميل...</option>
                     </select>
@@ -328,14 +328,14 @@
                 </div>
 
                 <div class="form-group">
-                    <label>حالة الرسالة</label>
+                    <label>حالة الرسالة <span style="color: var(--rose-500);">*</span></label>
                     <select id="thesis_status">
                         <option value="منجزة">منجزة</option>
                         <option value="جارية">جارية</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>تاريخ المناقشة</label>
+                    <label>تاريخ المناقشة <span style="color: var(--amber-400); font-size: 0.8rem;">(للمنجزة)</span></label>
                     <input type="date" id="thesis_date">
                 </div>
             </div>
@@ -413,7 +413,8 @@
         </div>
 
         <p style="color: var(--gray-400); font-size: 0.85rem; margin-bottom: 10px; text-align: center;">
-            <span style="color: var(--rose-500);">*</span> الحقول المميزة بنجمة حمراء إلزامية
+            <span style="color: var(--rose-500);">*</span> حقل إلزامي &nbsp;|&nbsp; 
+            <span style="color: var(--amber-400);">(للمنجزة)</span> إلزامي فقط للرسائل المنجزة
         </p>
         <button id="submitBtn" onclick="submitData()" class="btn-submit" style="display:none;">📤 حفظ وإرسال البيانات</button>
         <p id="statusMsg" style="text-align: center; margin-top: 15px; font-weight: bold;"></p>
@@ -786,14 +787,12 @@
                 }
             }
             else if (currentTargetSheet === 'theses') {
-                // الحقول الإلزامية للرسائل
+                // الحقول الإلزامية للرسائل (دائماً)
                 const requiredFields = [
                     { id: 'thesis_year', name: 'السنة' },
                     { id: 'thesis_student_name', name: 'اسم الطالب' },
                     { id: 'thesis_title', name: 'عنوان الرسالة' },
-                    { id: 'thesis_supervisor', name: 'المشرف الرئيسي', isSelect: true },
-                    { id: 'thesis_exam1', name: 'المناقش الأول', isSelect: true },
-                    { id: 'thesis_exam2', name: 'المناقش الثاني', isSelect: true }
+                    { id: 'thesis_supervisor', name: 'المشرف الرئيسي', isSelect: true }
                 ];
                 
                 requiredFields.forEach(field => {
@@ -820,12 +819,35 @@
                     }
                 });
                 
-                // تحقق من تاريخ المناقشة إذا كانت الرسالة منجزة
+                // تحقق من المناقشين وتاريخ المناقشة فقط إذا كانت الرسالة منجزة
                 const status = document.getElementById('thesis_status').value;
                 if (status === 'منجزة') {
+                    // المناقشين إلزاميين للرسائل المنجزة
+                    const examinerFields = [
+                        { id: 'thesis_exam1', name: 'المناقش الأول' },
+                        { id: 'thesis_exam2', name: 'المناقش الثاني' }
+                    ];
+                    
+                    examinerFields.forEach(field => {
+                        const el = document.getElementById(field.id);
+                        let isEmpty = !el || !el.value || el.value === '' || el.value === 'external';
+                        if (el && el.value === 'external') {
+                            const extInput = document.getElementById(field.id + '_ext');
+                            isEmpty = !extInput || !extInput.value.trim();
+                        }
+                        if (isEmpty) {
+                            errors.push(field.name);
+                            if (el) {
+                                el.classList.add('error-field');
+                                if (!firstErrorField) firstErrorField = el;
+                            }
+                        }
+                    });
+                    
+                    // تاريخ المناقشة
                     const dateEl = document.getElementById('thesis_date');
                     if (!dateEl || !dateEl.value) {
-                        errors.push('تاريخ المناقشة (مطلوب للرسائل المنجزة)');
+                        errors.push('تاريخ المناقشة');
                         if (dateEl) {
                             dateEl.classList.add('error-field');
                             if (!firstErrorField) firstErrorField = dateEl;
