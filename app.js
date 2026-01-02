@@ -7,7 +7,7 @@
 // المتغيرات العامة
 // ========================================
 let config = {};
-let currentYear = 1446;
+let currentYear = null;
 let currentThesis = null;
 let currentLeaderboard = [];
 let showAllLeaderboard = false;
@@ -91,7 +91,7 @@ async function loadConfig() {
     try {
         const response = await fetch(`${DATA_BASE_URL}/config.json`);
         config = await response.json();
-        currentYear = config.current_year || 1446;
+        currentYear = config.current_year || 'all';
     } catch (error) {
         console.warn('Using default config');
         config = {
