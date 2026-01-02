@@ -96,7 +96,7 @@ async function loadConfig() {
         console.warn('Using default config');
         config = {
             current_year: 1446,
-            available_years: [1445, 1446, 1447],
+            available_years: [1436, 1437, 1438, 1439, 1440, 1441, 1442, 1443, 1444, 1445, 1446, 1447],
             department_name: "قسم القراءات",
             university_name: "جامعة الطائف",
             weights: {
@@ -148,11 +148,39 @@ async function loadAllData() {
 }
 
 async function loadYearData(year) {
-    data.faculty = allData.faculty.filter(f => parseInt(f.year) === year);
-    data.students = allData.students.filter(s => parseInt(s.year) === year);
-    data.theses = allData.theses.filter(t => parseInt(t.year) === year);
-    data.participations = allData.participations.filter(p => parseInt(p.year) === year);
-    data.publications = allData.publications.filter(p => parseInt(p.year) === year);
+    if (year === 'all') {
+        // عرض كل البيانات من جميع السنوات
+        data.faculty = [...allData.faculty];
+        data.students = [...allData.students];
+        data.theses = [...allData.theses];
+        data.participations = [...allData.participations];
+        data.publications = [...allData.publications];
+        
+        // إزالة التكرارات من أعضاء هيئة التدريس (نفس العضو قد يظهر في سنوات متعددة)
+        const uniqueFaculty = {};
+        allData.faculty.forEach(f => {
+            if (!uniqueFaculty[f.id] || f.active === 'نعم') {
+                uniqueFaculty[f.id] = f;
+            }
+        });
+        data.faculty = Object.values(uniqueFaculty);
+        
+        // تجميع أعداد الطلاب من كل السنوات (آخر قيمة لكل برنامج)
+        const latestStudents = {};
+        allData.students.forEach(s => {
+            const key = s.program;
+            if (!latestStudents[key] || parseInt(s.year) > parseInt(latestStudents[key].year)) {
+                latestStudents[key] = s;
+            }
+        });
+        data.students = Object.values(latestStudents);
+    } else {
+        data.faculty = allData.faculty.filter(f => parseInt(f.year) === year);
+        data.students = allData.students.filter(s => parseInt(s.year) === year);
+        data.theses = allData.theses.filter(t => parseInt(t.year) === year);
+        data.participations = allData.participations.filter(p => parseInt(p.year) === year);
+        data.publications = allData.publications.filter(p => parseInt(p.year) === year);
+    }
     
     // إعادة تعيين عرض المتصدرين
     showAllLeaderboard = false;
@@ -648,7 +676,15 @@ function populateYearSelector() {
     const select = document.getElementById('yearSelect');
     select.innerHTML = '';
     
-    (config.available_years || [1446]).forEach(year => {
+    // إضافة خيار "الكل" في البداية
+    const allOption = document.createElement('option');
+    allOption.value = 'all';
+    allOption.textContent = 'الكل';
+    select.appendChild(allOption);
+    
+    // إضافة السنوات بترتيب تنازلي (الأحدث أولاً)
+    const years = [...(config.available_years || [1446])].sort((a, b) => b - a);
+    years.forEach(year => {
         const option = document.createElement('option');
         option.value = year;
         option.textContent = year + 'هـ';
@@ -2606,7 +2642,12 @@ function setupFilters() {
 
 function setupYearSelector() {
     document.getElementById('yearSelect').addEventListener('change', (e) => {
-        currentYear = parseInt(e.target.value);
+        const selectedValue = e.target.value;
+        if (selectedValue === 'all') {
+            currentYear = 'all';
+        } else {
+            currentYear = parseInt(selectedValue);
+        }
         loadYearData(currentYear);
     });
 }
