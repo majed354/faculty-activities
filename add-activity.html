@@ -105,6 +105,25 @@
         .dynamic-field.visible { display: block; animation: fadeIn 0.3s; }
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* تنسيق الحقول الفارغة المطلوبة */
+        .error-field {
+            border-color: var(--rose-500) !important;
+            background: rgba(244, 63, 94, 0.1) !important;
+            animation: shake 0.5s ease;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        .error-message {
+            color: var(--rose-500);
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -191,15 +210,15 @@
             <h3 style="color: var(--emerald-500); margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">بيانات البحث المنشور (أعضاء)</h3>
             <div class="input-grid">
                 <div class="form-group">
-                    <label>السنة (هجري)</label>
+                    <label>السنة (هجري) <span style="color: var(--rose-500);">*</span></label>
                     <input type="number" id="pub_year" value="1446">
                 </div>
                 <div class="form-group">
-                    <label>عنوان البحث</label>
+                    <label>عنوان البحث <span style="color: var(--rose-500);">*</span></label>
                     <input type="text" id="pub_title">
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
-                    <label>الأعضاء المشاركون في البحث (من القسم)</label>
+                    <label>الأعضاء المشاركون في البحث (من القسم) <span style="color: var(--rose-500);">*</span></label>
                     <div class="multi-select-wrapper">
                         <select id="pub_author_select" class="faculty-select">
                             <option value="">-- اختر اسماً للإضافة --</option>
@@ -210,12 +229,12 @@
                     <input type="hidden" id="pub_authors_hidden">
                 </div>
                 <div class="form-group">
-                    <label>اسم المجلة</label>
+                    <label>اسم المجلة <span style="color: var(--rose-500);">*</span></label>
                     <input type="text" id="pub_journal">
                 </div>
                 
                 <div class="form-group">
-                    <label>تاريخ النشر</label>
+                    <label>تاريخ النشر <span style="color: var(--rose-500);">*</span></label>
                     <input type="date" id="pub_date">
                 </div>
 
@@ -243,7 +262,7 @@
             <h3 style="color: var(--amber-500); margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">بيانات الرسالة العلمية</h3>
             <div class="input-grid">
                 <div class="form-group">
-                    <label>السنة (هجري)</label>
+                    <label>السنة (هجري) <span style="color: var(--rose-500);">*</span></label>
                     <input type="number" id="thesis_year" value="1446">
                 </div>
                 <div class="form-group">
@@ -261,16 +280,16 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>اسم الطالب</label>
+                    <label>اسم الطالب <span style="color: var(--rose-500);">*</span></label>
                     <input type="text" id="thesis_student_name">
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
-                    <label>عنوان الرسالة</label>
+                    <label>عنوان الرسالة <span style="color: var(--rose-500);">*</span></label>
                     <input type="text" id="thesis_title">
                 </div>
 
                 <div class="form-group">
-                    <label>المشرف الرئيسي</label>
+                    <label>المشرف الرئيسي <span style="color: var(--rose-500);">*</span></label>
                     <select id="thesis_supervisor" class="faculty-select" onchange="toggleExternalInput(this)">
                         <option value="">جاري التحميل...</option>
                     </select>
@@ -323,17 +342,17 @@
 
             <div class="input-grid">
                 <div class="form-group">
-                    <label>السنة (هجري)</label>
+                    <label>السنة (هجري) <span style="color: var(--rose-500);">*</span></label>
                     <input type="number" id="part_year" value="1446">
                 </div>
                 
                 <div class="form-group">
-                    <label id="part_title_label">عنوان الفعالية / النشاط</label>
+                    <label id="part_title_label">عنوان الفعالية / النشاط <span style="color: var(--rose-500);">*</span></label>
                     <input type="text" id="part_title">
                 </div>
 
                 <div id="div_student_name" class="form-group dynamic-field">
-                    <label style="color: var(--sky-500);">اسم الطالب الباحث</label>
+                    <label style="color: var(--sky-500);">اسم الطالب الباحث <span style="color: var(--rose-500);">*</span></label>
                     <input type="text" id="part_student_name" placeholder="أدخل اسم الطالب...">
                 </div>
 
@@ -348,7 +367,7 @@
                 </div>
 
                 <div class="form-group" style="grid-column: span 2;">
-                    <label id="part_ids_label">الأعضاء المشاركون (من القسم)</label>
+                    <label id="part_ids_label">الأعضاء المشاركون (من القسم) <span style="color: var(--rose-500);">*</span></label>
                     <div class="multi-select-wrapper">
                         <select id="part_ids_select" class="faculty-select">
                             <option value="">-- اختر اسماً للإضافة --</option>
@@ -386,6 +405,9 @@
             </div>
         </div>
 
+        <p style="color: var(--gray-400); font-size: 0.85rem; margin-bottom: 10px; text-align: center;">
+            <span style="color: var(--rose-500);">*</span> الحقول المميزة بنجمة حمراء إلزامية
+        </p>
         <button id="submitBtn" onclick="submitData()" class="btn-submit" style="display:none;">📤 حفظ وإرسال البيانات</button>
         <p id="statusMsg" style="text-align: center; margin-top: 15px; font-weight: bold;"></p>
     </div>
@@ -401,6 +423,16 @@
             const today = new Date().toISOString().split('T')[0];
             document.querySelectorAll('input[type="date"]').forEach(input => {
                 input.value = today;
+            });
+            
+            // إزالة تنسيق الخطأ عند الكتابة في أي حقل
+            document.querySelectorAll('input, select, textarea').forEach(el => {
+                el.addEventListener('input', function() {
+                    this.classList.remove('error-field');
+                });
+                el.addEventListener('change', function() {
+                    this.classList.remove('error-field');
+                });
             });
         });
 
@@ -670,7 +702,141 @@
             document.getElementById('submitBtn').style.display = 'block';
         }
 
+        // ========================================
+        // دالة التحقق من الحقول الإلزامية
+        // ========================================
+        function validateForm() {
+            let errors = [];
+            let firstErrorField = null;
+            
+            // إزالة التنسيقات السابقة للأخطاء
+            document.querySelectorAll('.error-field').forEach(el => el.classList.remove('error-field'));
+            document.querySelectorAll('.error-message').forEach(el => el.remove());
+            
+            if (currentTargetSheet === 'publications') {
+                // الحقول الإلزامية للبحوث
+                const requiredFields = [
+                    { id: 'pub_year', name: 'السنة' },
+                    { id: 'pub_title', name: 'عنوان البحث' },
+                    { id: 'pub_authors_hidden', name: 'الأعضاء المشاركون' },
+                    { id: 'pub_journal', name: 'اسم المجلة' },
+                    { id: 'pub_date', name: 'تاريخ النشر' }
+                ];
+                
+                requiredFields.forEach(field => {
+                    const el = document.getElementById(field.id);
+                    if (!el || !el.value.trim()) {
+                        errors.push(field.name);
+                        if (el) {
+                            el.classList.add('error-field');
+                            if (!firstErrorField) firstErrorField = el;
+                        }
+                    }
+                });
+            }
+            else if (currentTargetSheet === 'theses') {
+                // الحقول الإلزامية للرسائل
+                const requiredFields = [
+                    { id: 'thesis_year', name: 'السنة' },
+                    { id: 'thesis_student_name', name: 'اسم الطالب' },
+                    { id: 'thesis_title', name: 'عنوان الرسالة' },
+                    { id: 'thesis_supervisor', name: 'المشرف الرئيسي', isSelect: true }
+                ];
+                
+                requiredFields.forEach(field => {
+                    const el = document.getElementById(field.id);
+                    let isEmpty = false;
+                    
+                    if (field.isSelect) {
+                        isEmpty = !el || !el.value || el.value === '' || el.value === 'external';
+                        // إذا كان خارجي، تحقق من حقل الإدخال الخارجي
+                        if (el && el.value === 'external') {
+                            const extInput = document.getElementById(field.id + '_ext');
+                            isEmpty = !extInput || !extInput.value.trim();
+                        }
+                    } else {
+                        isEmpty = !el || !el.value.trim();
+                    }
+                    
+                    if (isEmpty) {
+                        errors.push(field.name);
+                        if (el) {
+                            el.classList.add('error-field');
+                            if (!firstErrorField) firstErrorField = el;
+                        }
+                    }
+                });
+                
+                // تحقق من تاريخ المناقشة إذا كانت الرسالة منجزة
+                const status = document.getElementById('thesis_status').value;
+                if (status === 'منجزة') {
+                    const dateEl = document.getElementById('thesis_date');
+                    if (!dateEl || !dateEl.value) {
+                        errors.push('تاريخ المناقشة (مطلوب للرسائل المنجزة)');
+                        if (dateEl) {
+                            dateEl.classList.add('error-field');
+                            if (!firstErrorField) firstErrorField = dateEl;
+                        }
+                    }
+                }
+            }
+            else if (currentTargetSheet === 'participations') {
+                // الحقول الإلزامية للمشاركات
+                const requiredFields = [
+                    { id: 'part_year', name: 'السنة' },
+                    { id: 'part_title', name: 'العنوان' },
+                    { id: 'part_ids_hidden', name: 'الأعضاء المشاركون' }
+                ];
+                
+                requiredFields.forEach(field => {
+                    const el = document.getElementById(field.id);
+                    if (!el || !el.value.trim()) {
+                        errors.push(field.name);
+                        if (el) {
+                            el.classList.add('error-field');
+                            if (!firstErrorField) firstErrorField = el;
+                        }
+                    }
+                });
+                
+                // تحقق من اسم الطالب إذا كانت الفئة بحوث الطلاب
+                const category = document.getElementById('part_category_hidden').value;
+                if (category === 'بحوث الطلاب') {
+                    const studentNameEl = document.getElementById('part_student_name');
+                    if (!studentNameEl || !studentNameEl.value.trim()) {
+                        errors.push('اسم الطالب الباحث');
+                        if (studentNameEl) {
+                            studentNameEl.classList.add('error-field');
+                            if (!firstErrorField) firstErrorField = studentNameEl;
+                        }
+                    }
+                }
+            }
+            
+            // عرض رسالة الخطأ إذا وجدت أخطاء
+            if (errors.length > 0) {
+                const statusMsg = document.getElementById('statusMsg');
+                statusMsg.style.color = 'var(--rose-500)';
+                statusMsg.innerHTML = `⚠️ يرجى إكمال الحقول التالية:<br><strong>${errors.join('، ')}</strong>`;
+                
+                // التمرير للحقل الأول الفارغ
+                if (firstErrorField) {
+                    firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstErrorField.focus();
+                }
+                
+                return false;
+            }
+            
+            return true;
+        }
+
         function submitData() {
+            // التحقق من الحقول الإلزامية أولاً
+            if (!validateForm()) {
+                return;
+            }
+            
             const btn = document.getElementById('submitBtn');
             const statusMsg = document.getElementById('statusMsg');
 
