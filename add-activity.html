@@ -113,6 +113,13 @@
             animation: shake 0.5s ease;
         }
         
+        .selected-members-list.error-field {
+            border: 2px dashed var(--rose-500) !important;
+            padding: 10px;
+            border-radius: 8px;
+            min-height: 40px;
+        }
+        
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
             25% { transform: translateX(-5px); }
@@ -551,6 +558,9 @@
             selectedMembersData[hiddenInputId].push({ id: memberId, name: memberName });
             renderMembersList(hiddenInputId, listId);
             select.value = "";
+            
+            // إزالة تنسيق الخطأ عند إضافة عضو
+            document.getElementById(listId)?.classList.remove('error-field');
         }
 
         function removeMemberFromList(memberId, listId, hiddenInputId) {
@@ -598,17 +608,17 @@
                 const typeField = document.getElementById('part_type_hidden');
                 
                 // إعادة تعيين التسميات الافتراضية
-                document.getElementById('part_title_label').textContent = "عنوان الفعالية / النشاط";
+                document.getElementById('part_title_label').innerHTML = 'عنوان الفعالية / النشاط <span style="color: var(--rose-500);">*</span>';
                 document.getElementById('part_location_label').textContent = "المكان / الجهة المنظمة";
-                document.getElementById('part_ids_label').textContent = "الأعضاء المشاركون (من القسم)";
+                document.getElementById('part_ids_label').innerHTML = '👤 اختر اسمك (وأسماء المشاركين معك إن وُجدوا) <span style="color: var(--rose-500);">*</span>';
 
                 // ====== المناقشة الخارجية ======
                 if (selection === 'event_discussion_external') {
                     categoryField.value = 'مناقشة خارجية';
                     typeField.value = 'مناقشة';
-                    document.getElementById('part_title_label').textContent = "عنوان الرسالة";
+                    document.getElementById('part_title_label').innerHTML = 'عنوان الرسالة <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "الجامعة / الجهة";
-                    document.getElementById('part_ids_label').textContent = "المناقش (عضو هيئة التدريس)";
+                    document.getElementById('part_ids_label').innerHTML = '👤 المناقش (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
                 // ====== المؤتمرات ======
                 else if (selection === 'event_conf_attend') {
@@ -618,7 +628,7 @@
                 else if (selection === 'event_conf_participate') {
                     categoryField.value = 'مؤتمر';
                     typeField.value = 'مشاركة';
-                    document.getElementById('part_title_label').textContent = "عنوان الورقة / المشاركة";
+                    document.getElementById('part_title_label').innerHTML = 'عنوان الورقة / المشاركة <span style="color: var(--rose-500);">*</span>';
                 }
                 // ====== الندوات ======
                 else if (selection === 'event_seminar_attend') {
@@ -647,57 +657,57 @@
                     categoryField.value = 'بحوث الطلاب';
                     typeField.value = 'نشر';
                     document.getElementById('div_student_name').classList.add('visible');
-                    document.getElementById('part_title_label').textContent = "عنوان البحث";
+                    document.getElementById('part_title_label').innerHTML = 'عنوان البحث <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "اسم المجلة / جهة النشر";
-                    document.getElementById('part_ids_label').textContent = "المشرف (عضو هيئة التدريس)";
+                    document.getElementById('part_ids_label').innerHTML = '👤 المشرف (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
                 // ====== التحكيم العلمي ======
                 else if (selection === 'event_reviewing') {
                     categoryField.value = 'تحكيم علمي';
                     typeField.value = 'مشاركة';
-                    document.getElementById('part_title_label').textContent = "وصف التحكيم (بحث/رسالة/مجلة)";
+                    document.getElementById('part_title_label').innerHTML = 'وصف التحكيم (بحث/رسالة/مجلة) <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "الجهة المحكم لها";
-                    document.getElementById('part_ids_label').textContent = "المحكم (عضو هيئة التدريس)";
+                    document.getElementById('part_ids_label').innerHTML = '👤 المحكم (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
                 // ====== الجوائز ======
                 else if (selection === 'event_award') {
                     categoryField.value = 'جائزة';
                     typeField.value = 'مشاركة';
-                    document.getElementById('part_title_label').textContent = "اسم الجائزة";
+                    document.getElementById('part_title_label').innerHTML = 'اسم الجائزة <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "الجهة المانحة";
-                    document.getElementById('part_ids_label').textContent = "الحاصل على الجائزة";
+                    document.getElementById('part_ids_label').innerHTML = '👤 الحاصل على الجائزة (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
                 // ====== براءة الاختراع ======
                 else if (selection === 'event_patent') {
                     categoryField.value = 'براءة اختراع';
                     typeField.value = 'مشاركة';
-                    document.getElementById('part_title_label').textContent = "عنوان براءة الاختراع";
+                    document.getElementById('part_title_label').innerHTML = 'عنوان براءة الاختراع <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "الجهة المسجلة لديها";
-                    document.getElementById('part_ids_label').textContent = "صاحب البراءة";
+                    document.getElementById('part_ids_label').innerHTML = '👤 صاحب البراءة (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
                 // ====== تأليف كتب ======
                 else if (selection === 'event_book') {
                     categoryField.value = 'تأليف كتب';
                     typeField.value = 'نشر';
-                    document.getElementById('part_title_label').textContent = "عنوان الكتاب";
+                    document.getElementById('part_title_label').innerHTML = 'عنوان الكتاب <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "دار النشر";
-                    document.getElementById('part_ids_label').textContent = "المؤلف / المحقق";
+                    document.getElementById('part_ids_label').innerHTML = '👤 المؤلف / المحقق (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
                 // ====== استشارة علمية ======
                 else if (selection === 'event_consulting') {
                     categoryField.value = 'استشارة علمية';
                     typeField.value = 'مشاركة';
-                    document.getElementById('part_title_label').textContent = "موضوع الاستشارة";
+                    document.getElementById('part_title_label').innerHTML = 'موضوع الاستشارة <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "الجهة المستفيدة";
-                    document.getElementById('part_ids_label').textContent = "المستشار";
+                    document.getElementById('part_ids_label').innerHTML = '👤 المستشار (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
                 // ====== مشاركة إعلامية ======
                 else if (selection === 'event_media') {
                     categoryField.value = 'مشاركة إعلامية';
                     typeField.value = 'مشاركة';
-                    document.getElementById('part_title_label').textContent = "عنوان اللقاء / البرنامج";
+                    document.getElementById('part_title_label').innerHTML = 'عنوان اللقاء / البرنامج <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "القناة / الإذاعة / المنصة";
-                    document.getElementById('part_ids_label').textContent = "المشارك";
+                    document.getElementById('part_ids_label').innerHTML = '👤 المشارك (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
             }
             
@@ -711,6 +721,14 @@
             let errors = [];
             let firstErrorField = null;
             
+            // تحديث الحقول المخفية من البيانات المحفوظة قبل التحقق
+            if (selectedMembersData['pub_authors_hidden']) {
+                document.getElementById('pub_authors_hidden').value = selectedMembersData['pub_authors_hidden'].map(m => m.id).join('|');
+            }
+            if (selectedMembersData['part_ids_hidden']) {
+                document.getElementById('part_ids_hidden').value = selectedMembersData['part_ids_hidden'].map(m => m.id).join('|');
+            }
+            
             // إزالة التنسيقات السابقة للأخطاء
             document.querySelectorAll('.error-field').forEach(el => el.classList.remove('error-field'));
             document.querySelectorAll('.error-message').forEach(el => el.remove());
@@ -720,15 +738,13 @@
                 const requiredFields = [
                     { id: 'pub_year', name: 'السنة' },
                     { id: 'pub_title', name: 'عنوان البحث' },
-                    { id: 'pub_authors_hidden', name: 'اختيار اسمك' },
                     { id: 'pub_journal', name: 'اسم المجلة' },
-                    { id: 'pub_date', name: 'تاريخ النشر' },
-                    { id: 'pub_citations', name: 'نطاق الاستشهادات' }
+                    { id: 'pub_date', name: 'تاريخ النشر' }
                 ];
                 
                 requiredFields.forEach(field => {
                     const el = document.getElementById(field.id);
-                    if (!el || !el.value.trim()) {
+                    if (!el || !el.value || el.value.trim() === '') {
                         errors.push(field.name);
                         if (el) {
                             el.classList.add('error-field');
@@ -736,6 +752,17 @@
                         }
                     }
                 });
+                
+                // التحقق من اختيار الاسم
+                const authorsHidden = document.getElementById('pub_authors_hidden');
+                if (!authorsHidden || !authorsHidden.value || authorsHidden.value === '') {
+                    errors.push('اختيار اسمك');
+                    const authorsList = document.getElementById('pub_authors_list');
+                    if (authorsList) {
+                        authorsList.classList.add('error-field');
+                        if (!firstErrorField) firstErrorField = document.getElementById('pub_author_select');
+                    }
+                }
             }
             else if (currentTargetSheet === 'theses') {
                 // الحقول الإلزامية للرسائل
@@ -789,13 +816,12 @@
                 // الحقول الإلزامية للمشاركات
                 const requiredFields = [
                     { id: 'part_year', name: 'السنة' },
-                    { id: 'part_title', name: 'العنوان' },
-                    { id: 'part_ids_hidden', name: 'اختيار اسمك' }
+                    { id: 'part_title', name: 'العنوان' }
                 ];
                 
                 requiredFields.forEach(field => {
                     const el = document.getElementById(field.id);
-                    if (!el || !el.value.trim()) {
+                    if (!el || !el.value || el.value.trim() === '') {
                         errors.push(field.name);
                         if (el) {
                             el.classList.add('error-field');
@@ -803,6 +829,17 @@
                         }
                     }
                 });
+                
+                // التحقق من اختيار الاسم
+                const idsHidden = document.getElementById('part_ids_hidden');
+                if (!idsHidden || !idsHidden.value || idsHidden.value === '') {
+                    errors.push('اختيار اسمك');
+                    const idsList = document.getElementById('part_ids_list');
+                    if (idsList) {
+                        idsList.classList.add('error-field');
+                        if (!firstErrorField) firstErrorField = document.getElementById('part_ids_select');
+                    }
+                }
                 
                 // تحقق من اسم الطالب إذا كانت الفئة بحوث الطلاب
                 const category = document.getElementById('part_category_hidden').value;
