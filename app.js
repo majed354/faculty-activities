@@ -407,30 +407,30 @@ function calculateMemberPoints(memberId) {
     breakdown.studentResearch = studentResearch.length;
     points += studentResearch.length * (weights.student_research || 8);
     
-    // 3. الإشراف على الدكتوراه
+    // 3. الإشراف على الدكتوراه (النقاط تُحتسب فقط للرسائل المنجزة)
     const phdSupervised = data.theses.filter(t => 
-        t.type === 'دكتوراه' && String(t.supervisor_id).trim() === memberIdStr
+        t.type === 'دكتوراه' && String(t.supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
     );
     breakdown.phdSupervision = phdSupervised.length;
     points += phdSupervised.length * (weights.phd_supervision || 10);
     
-    // 4. الإشراف المشارك على الدكتوراه
+    // 4. الإشراف المشارك على الدكتوراه (النقاط تُحتسب فقط للرسائل المنجزة)
     const phdCoSupervised = data.theses.filter(t => 
-        t.type === 'دكتوراه' && String(t.co_supervisor_id).trim() === memberIdStr
+        t.type === 'دكتوراه' && String(t.co_supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
     );
     breakdown.phdCoSupervision = phdCoSupervised.length;
     points += phdCoSupervised.length * (weights.phd_co_supervision || 5);
     
-    // 5. الإشراف على الماجستير
+    // 5. الإشراف على الماجستير (النقاط تُحتسب فقط للرسائل المنجزة)
     const mastersSupervised = data.theses.filter(t => 
-        t.type === 'ماجستير' && String(t.supervisor_id).trim() === memberIdStr
+        t.type === 'ماجستير' && String(t.supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
     );
     breakdown.mastersSupervision = mastersSupervised.length;
     points += mastersSupervised.length * (weights.masters_supervision || 3);
     
-    // 6. الإشراف المشارك على الماجستير
+    // 6. الإشراف المشارك على الماجستير (النقاط تُحتسب فقط للرسائل المنجزة)
     const mastersCoSupervised = data.theses.filter(t => 
-        t.type === 'ماجستير' && String(t.co_supervisor_id).trim() === memberIdStr
+        t.type === 'ماجستير' && String(t.co_supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
     );
     breakdown.mastersCoSupervision = mastersCoSupervised.length;
     points += mastersCoSupervised.length * (weights.masters_co_supervision || 2);
