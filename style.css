@@ -489,13 +489,14 @@ body {
 }
 
 .podium-name {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: white;
-    max-width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: 120px;
+    line-height: 1.3;
+    text-align: center;
+    word-wrap: break-word;
+    white-space: normal;
 }
 
 .podium-points {
@@ -561,8 +562,10 @@ body {
 
 .leaderboard-name {
     flex: 1;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--gray-200);
+    line-height: 1.4;
+    word-wrap: break-word;
 }
 
 .leaderboard-points {
