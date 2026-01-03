@@ -912,6 +912,36 @@ function showMemberDetails(memberId) {
                             <span class="breakdown-label">حضور فعاليات</span>
                             <span class="breakdown-count">${breakdown.eventAttendance}</span>
                         </div>` : ''}
+                        ${breakdown.reviewing ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">✅</span>
+                            <span class="breakdown-label">تحكيم علمي</span>
+                            <span class="breakdown-count">${breakdown.reviewing}</span>
+                        </div>` : ''}
+                        ${breakdown.studentResearch ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📝</span>
+                            <span class="breakdown-label">بحوث طلاب (إشراف)</span>
+                            <span class="breakdown-count">${breakdown.studentResearch}</span>
+                        </div>` : ''}
+                        ${breakdown.book ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📖</span>
+                            <span class="breakdown-label">تأليف كتب</span>
+                            <span class="breakdown-count">${breakdown.book}</span>
+                        </div>` : ''}
+                        ${breakdown.consulting ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">💼</span>
+                            <span class="breakdown-label">استشارات (${breakdown.consultingHours || 0} ساعة)</span>
+                            <span class="breakdown-count">${breakdown.consulting}</span>
+                        </div>` : ''}
+                        ${breakdown.media ? `
+                        <div class="breakdown-item">
+                            <span class="breakdown-icon">📺</span>
+                            <span class="breakdown-label">مشاركات إعلامية</span>
+                            <span class="breakdown-count">${breakdown.media}</span>
+                        </div>` : ''}
                         ${breakdown.award ? `
                         <div class="breakdown-item">
                             <span class="breakdown-icon">🏆</span>
@@ -966,6 +996,48 @@ function showMemberDetails(memberId) {
                                     <span class="activity-badge event">${e.category}</span>
                                     <span class="activity-title">${e.title}</span>
                                     <span class="activity-meta">${e.location} - ${e.participation_type}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+                    
+                    ${memberActivities.externalDiscussions.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>🎓 المناقشات الخارجية (${memberActivities.externalDiscussions.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.externalDiscussions.map(d => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge discussion">مناقشة خارجية</span>
+                                    <span class="activity-title">${d.title}</span>
+                                    <span class="activity-meta">${d.location || 'جامعة خارجية'} - ${formatDate(d.date)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+                    
+                    ${memberActivities.reviewing.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>✅ التحكيم العلمي (${memberActivities.reviewing.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.reviewing.map(r => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge reviewing">تحكيم</span>
+                                    <span class="activity-title">${r.title}</span>
+                                    <span class="activity-meta">${r.location || ''} - ${formatDate(r.date)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+                    
+                    ${memberActivities.studentResearch.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>📝 بحوث الطلاب - إشراف (${memberActivities.studentResearch.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.studentResearch.map(s => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge student">بحث طالب</span>
+                                    <span class="activity-title">${s.title}</span>
+                                    <span class="activity-meta">${s.location || ''} - ${formatDate(s.date)}</span>
                                 </div>
                             `).join('')}
                         </div>
