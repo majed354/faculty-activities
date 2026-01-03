@@ -267,6 +267,13 @@ function getShortName(fullName) {
     return prefix + ' ' + shortName;
 }
 
+// دالة لتحويل مسمى نوع الرسالة للعرض
+function getThesisTypeName(type) {
+    if (type === 'ماجستير') return 'مشروع بحثي';
+    if (type === 'دكتوراه') return 'رسالة علمية';
+    return type;
+}
+
 function formatDate(dateStr) {
     if (!dateStr) return '-';
     const hijriMonths = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
@@ -758,24 +765,27 @@ function renderLeaderboard() {
     // المنصة - الثلاثة الأوائل
     if (currentLeaderboard[0]) {
         const firstName = document.getElementById('first-name');
-        firstName.textContent = getShortName(currentLeaderboard[0].name);
-        firstName.style.fontSize = '0.85rem';
+        firstName.textContent = currentLeaderboard[0].name;
+        firstName.style.fontSize = '0.8rem';
+        firstName.style.lineHeight = '1.3';
         firstName.style.cursor = 'pointer';
         firstName.onclick = () => showMemberDetails(currentLeaderboard[0].id);
         document.getElementById('first-points').textContent = currentLeaderboard[0].points + ' نقطة';
     }
     if (currentLeaderboard[1]) {
         const secondName = document.getElementById('second-name');
-        secondName.textContent = getShortName(currentLeaderboard[1].name);
-        secondName.style.fontSize = '0.85rem';
+        secondName.textContent = currentLeaderboard[1].name;
+        secondName.style.fontSize = '0.8rem';
+        secondName.style.lineHeight = '1.3';
         secondName.style.cursor = 'pointer';
         secondName.onclick = () => showMemberDetails(currentLeaderboard[1].id);
         document.getElementById('second-points').textContent = currentLeaderboard[1].points + ' نقطة';
     }
     if (currentLeaderboard[2]) {
         const thirdName = document.getElementById('third-name');
-        thirdName.textContent = getShortName(currentLeaderboard[2].name);
-        thirdName.style.fontSize = '0.85rem';
+        thirdName.textContent = currentLeaderboard[2].name;
+        thirdName.style.fontSize = '0.8rem';
+        thirdName.style.lineHeight = '1.3';
         thirdName.style.cursor = 'pointer';
         thirdName.onclick = () => showMemberDetails(currentLeaderboard[2].id);
         document.getElementById('third-points').textContent = currentLeaderboard[2].points + ' نقطة';
@@ -795,7 +805,7 @@ function renderLeaderboard() {
         item.onclick = () => showMemberDetails(member.id);
         item.innerHTML = `
             <span class="leaderboard-rank">${index + 4}</span>
-            <span class="leaderboard-name" style="font-size: 0.85rem;">${member.name}</span>
+            <span class="leaderboard-name">${member.name}</span>
             <span class="leaderboard-points">${member.points} نقطة</span>
         `;
         listContainer.appendChild(item);
@@ -853,37 +863,37 @@ function showMemberDetails(memberId) {
                         ${breakdown.phdSupervision ? `
                         <div class="breakdown-item">
                             <span class="breakdown-icon">🎓</span>
-                            <span class="breakdown-label">إشراف دكتوراه</span>
+                            <span class="breakdown-label">إشراف رسالة علمية</span>
                             <span class="breakdown-count">${breakdown.phdSupervision}</span>
                         </div>` : ''}
                         ${breakdown.phdCoSupervision ? `
                         <div class="breakdown-item">
                             <span class="breakdown-icon">🎓</span>
-                            <span class="breakdown-label">إشراف مشارك (دكتوراه)</span>
+                            <span class="breakdown-label">إشراف مشارك (رسالة)</span>
                             <span class="breakdown-count">${breakdown.phdCoSupervision}</span>
                         </div>` : ''}
                         ${breakdown.mastersSupervision ? `
                         <div class="breakdown-item">
                             <span class="breakdown-icon">📚</span>
-                            <span class="breakdown-label">إشراف ماجستير</span>
+                            <span class="breakdown-label">إشراف مشروع بحثي</span>
                             <span class="breakdown-count">${breakdown.mastersSupervision}</span>
                         </div>` : ''}
                         ${breakdown.mastersCoSupervision ? `
                         <div class="breakdown-item">
                             <span class="breakdown-icon">📚</span>
-                            <span class="breakdown-label">إشراف مشارك (ماجستير)</span>
+                            <span class="breakdown-label">إشراف مشارك (مشروع)</span>
                             <span class="breakdown-count">${breakdown.mastersCoSupervision}</span>
                         </div>` : ''}
                         ${breakdown.phdDiscussion ? `
                         <div class="breakdown-item">
                             <span class="breakdown-icon">📋</span>
-                            <span class="breakdown-label">مناقشة دكتوراه</span>
+                            <span class="breakdown-label">مناقشة رسالة علمية</span>
                             <span class="breakdown-count">${breakdown.phdDiscussion}</span>
                         </div>` : ''}
                         ${breakdown.mastersDiscussion ? `
                         <div class="breakdown-item">
                             <span class="breakdown-icon">📋</span>
-                            <span class="breakdown-label">مناقشة ماجستير</span>
+                            <span class="breakdown-label">مناقشة مشروع بحثي</span>
                             <span class="breakdown-count">${breakdown.mastersDiscussion}</span>
                         </div>` : ''}
                         ${breakdown.publications ? `
@@ -1241,7 +1251,7 @@ function renderDashboardCharts() {
         charts.theses = new Chart(thesesCtx, {
             type: 'doughnut',
             data: {
-                labels: ['دكتوراه منجزة', 'دكتوراه جارية', 'ماجستير منجزة', 'ماجستير جارية'],
+                labels: ['رسائل علمية منجزة', 'رسائل علمية جارية', 'مشاريع بحثية منجزة', 'مشاريع بحثية جارية'],
                 datasets: [{
                     data: [phdCompleted, phdOngoing, mastersCompleted, mastersOngoing],
                     backgroundColor: [
@@ -1398,7 +1408,7 @@ function renderTheses() {
         tr.style.cursor = 'pointer';
         tr.onclick = () => showThesisDetails(thesis);
         tr.innerHTML = `
-            <td><span class="badge badge-${(thesis.type || '').trim() === 'دكتوراه' ? 'phd' : 'masters'}">${thesis.type}</span></td>
+            <td><span class="badge badge-${(thesis.type || '').trim() === 'دكتوراه' ? 'phd' : 'masters'}">${getThesisTypeName(thesis.type)}</span></td>
             <td>${thesis.student_name}</td>
             <td>${thesis.title}</td>
             <td>${getMemberName(thesis.supervisor_id)}</td>
@@ -1414,7 +1424,8 @@ function showThesisDetails(thesis) {
     const modal = document.getElementById('thesisModal');
     const thesisType = (thesis.type || '').trim();
     const thesisSpec = (thesis.specialization || '').trim();
-    const programName = thesisType + ' ' + (thesisSpec === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
+    const thesisTypeName = getThesisTypeName(thesisType);
+    const programName = thesisTypeName + ' ' + (thesisSpec === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
     
     document.getElementById('modalBadge').textContent = programName;
     document.getElementById('modalBadge').className = 'thesis-badge ' + (thesisType === 'دكتوراه' ? 'phd' : 'masters');
@@ -1467,7 +1478,8 @@ function printThesis() {
     const thesis = currentThesis;
     const thesisType = (thesis.type || '').trim();
     const thesisSpec = (thesis.specialization || '').trim();
-    const programName = thesisType + ' ' + (thesisSpec === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
+    const thesisTypeName = getThesisTypeName(thesisType);
+    const programName = thesisTypeName + ' ' + (thesisSpec === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
     const universityName = config.university_name || 'جامعة الطائف';
     const departmentName = config.department_name || 'قسم القراءات';
     
@@ -1479,12 +1491,15 @@ function printThesis() {
     const examiner1 = thesis.examiner1_id?.trim() && examiner1Name !== '-' ? examiner1Name : null;
     const examiner2 = thesis.examiner2_id?.trim() && examiner2Name !== '-' ? examiner2Name : null;
     
+    // تحديد عنوان الصفحة حسب النوع
+    const pageTitle = thesisType === 'دكتوراه' ? 'بيانات الرسالة العلمية' : 'بيانات المشروع البحثي';
+    
     const printContent = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>بيانات الرسالة العلمية - ${thesis.student_name}</title>
+    <title>${pageTitle} - ${thesis.student_name}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;600;700&display=swap');
         
