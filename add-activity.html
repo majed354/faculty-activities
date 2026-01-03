@@ -398,6 +398,12 @@
                     <input type="number" id="part_attendance" placeholder="مثال: 45">
                 </div>
                 
+                <div id="div_consulting_hours" class="form-group dynamic-field">
+                    <label style="color: var(--amber-500);">عدد ساعات الاستشارة <span style="color: var(--rose-500);">*</span></label>
+                    <input type="number" id="part_consulting_hours" min="1" step="0.5" placeholder="مثال: 3">
+                    <small style="color: var(--gray-400);">💡 كل ساعة = 0.25 نقطة</small>
+                </div>
+                
                 <div class="form-group" id="div_student_participation">
                     <label>مشاركة طالب؟</label>
                     <select id="part_student">
@@ -722,6 +728,7 @@
                     document.getElementById('part_title_label').innerHTML = 'موضوع الاستشارة <span style="color: var(--rose-500);">*</span>';
                     document.getElementById('part_location_label').textContent = "الجهة المستفيدة";
                     document.getElementById('part_ids_label').innerHTML = '👤 المستشار (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
+                    document.getElementById('div_consulting_hours').classList.add('visible');
                 }
                 // ====== مشاركة إعلامية ======
                 else if (selection === 'event_media') {
@@ -896,6 +903,18 @@
                         }
                     }
                 }
+                
+                // تحقق من عدد الساعات إذا كانت الفئة استشارة علمية
+                if (category === 'استشارة علمية') {
+                    const hoursEl = document.getElementById('part_consulting_hours');
+                    if (!hoursEl || !hoursEl.value || parseFloat(hoursEl.value) <= 0) {
+                        errors.push('عدد ساعات الاستشارة');
+                        if (hoursEl) {
+                            hoursEl.classList.add('error-field');
+                            if (!firstErrorField) firstErrorField = hoursEl;
+                        }
+                    }
+                }
             }
             
             // عرض رسالة الخطأ إذا وجدت أخطاء
@@ -976,6 +995,12 @@
                 formData.organized_by_department = document.getElementById('part_org')?.value || 'لا';
                 formData.student_details = studentDetails; 
                 formData.notes = document.getElementById('part_notes').value;
+                
+                // إضافة ساعات الاستشارة إذا كانت الفئة استشارة علمية
+                if (formData.category === 'استشارة علمية') {
+                    const hoursEl = document.getElementById('part_consulting_hours');
+                    formData.consulting_hours = hoursEl ? parseFloat(hoursEl.value) || 0 : 0;
+                }
             }
 
             fetch(SCRIPT_URL, {
