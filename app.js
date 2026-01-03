@@ -199,15 +199,24 @@ function getMemberName(id) {
     const idStr = String(id).trim();
     if (idStr === '') return '-';
     
-    // البحث أولاً في بيانات السنة الحالية
-    let member = data.faculty.find(f => String(f.id).trim() === idStr);
+    // التحقق إذا كان المدخل معرف رقمي أم اسم نصي (للمناقشين الخارجيين)
+    // المعرف الرقمي يتكون من أرقام فقط أو يبدأ بأرقام
+    const isNumericId = /^\d+$/.test(idStr);
     
-    // إذا لم يوجد، البحث في كل البيانات
-    if (!member) {
-        member = allData.faculty.find(f => String(f.id).trim() === idStr);
+    if (isNumericId) {
+        // البحث أولاً في بيانات السنة الحالية
+        let member = data.faculty.find(f => String(f.id).trim() === idStr);
+        
+        // إذا لم يوجد، البحث في كل البيانات
+        if (!member) {
+            member = allData.faculty.find(f => String(f.id).trim() === idStr);
+        }
+        
+        return member ? member.name : '-';
+    } else {
+        // إذا كان نصاً (اسم مناقش خارجي)، نعيده كما هو
+        return idStr;
     }
-    
-    return member ? member.name : '-';
 }
 
 // دالة جديدة للحصول على بيانات العضو كاملة
@@ -217,12 +226,19 @@ function getMemberData(id) {
     const idStr = String(id).trim();
     if (idStr === '') return null;
     
-    let member = data.faculty.find(f => String(f.id).trim() === idStr);
-    if (!member) {
-        member = allData.faculty.find(f => String(f.id).trim() === idStr);
-    }
+    // التحقق إذا كان المدخل معرف رقمي
+    const isNumericId = /^\d+$/.test(idStr);
     
-    return member || null;
+    if (isNumericId) {
+        let member = data.faculty.find(f => String(f.id).trim() === idStr);
+        if (!member) {
+            member = allData.faculty.find(f => String(f.id).trim() === idStr);
+        }
+        return member || null;
+    } else {
+        // إذا كان نصاً (اسم مناقش خارجي)، نعيد كائن وهمي بالاسم
+        return { id: idStr, name: idStr, rank: 'خارجي', active: 'نعم' };
+    }
 }
 
 // دالة لاستخراج الاسم المختصر مع اللقب
