@@ -520,6 +520,25 @@ function calculateMemberPoints(memberId) {
                 breakdown.patent = (breakdown.patent || 0) + 1;
                 points += weights.patent || 15;
                 break;
+                
+            case 'تأليف كتب':
+                breakdown.book = (breakdown.book || 0) + 1;
+                points += weights.book || 20;
+                break;
+                
+            case 'استشارة علمية':
+                // حساب نقاط الاستشارة بناءً على عدد الساعات (0.25 نقطة لكل ساعة)
+                const hours = parseFloat(p.consulting_hours) || 1;
+                const consultingPoints = hours * 0.25;
+                breakdown.consulting = (breakdown.consulting || 0) + 1;
+                breakdown.consultingHours = (breakdown.consultingHours || 0) + hours;
+                points += consultingPoints;
+                break;
+                
+            case 'مشاركة إعلامية':
+                breakdown.media = (breakdown.media || 0) + 1;
+                points += weights.media || 5;
+                break;
         }
     });
     
