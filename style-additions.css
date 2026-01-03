@@ -1478,3 +1478,230 @@
         display: none !important;
     }
 }
+
+/* ========================================
+   أنماط تفاصيل العضو - Badges جديدة
+======================================== */
+.activity-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.activity-badge.discussion {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #1a1a2e;
+}
+
+.activity-badge.reviewing {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+}
+
+.activity-badge.student {
+    background: linear-gradient(135deg, #06b6d4, #0891b2);
+    color: white;
+}
+
+.activity-badge.event {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: white;
+}
+
+.activity-badge.award {
+    background: linear-gradient(135deg, #eab308, #ca8a04);
+    color: #1a1a2e;
+}
+
+.activity-badge.phd {
+    background: linear-gradient(135deg, var(--gold-500), var(--gold-600));
+    color: #1a1a2e;
+}
+
+.activity-badge.masters {
+    background: linear-gradient(135deg, var(--sky-500), var(--sky-600));
+    color: white;
+}
+
+/* تفاصيل الأنشطة في modal */
+.activity-item-detail {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 12px 15px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border-right: 3px solid var(--gold-400);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.activity-item-detail:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.activity-title {
+    color: #fff;
+    font-size: 0.9rem;
+    flex: 1;
+    min-width: 200px;
+}
+
+.activity-meta {
+    color: var(--gray-400);
+    font-size: 0.8rem;
+}
+
+.activity-role {
+    background: rgba(198, 169, 98, 0.2);
+    color: var(--gold-400);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+}
+
+.activity-group {
+    margin-bottom: 25px;
+}
+
+.activity-group h4 {
+    color: var(--gray-300);
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.activity-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* تحسين modal تفاصيل العضو */
+.member-modal-content {
+    max-width: 800px !important;
+}
+
+.member-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+.member-avatar-large {
+    font-size: 3rem;
+    background: rgba(198, 169, 98, 0.2);
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.member-info-main {
+    flex: 1;
+}
+
+.member-info-main h2 {
+    color: #fff;
+    margin: 0 0 8px 0;
+    font-size: 1.3rem;
+}
+
+.member-rank-badge {
+    background: linear-gradient(135deg, var(--gold-500), var(--gold-600));
+    color: #1a1a2e;
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+.member-email {
+    color: var(--gray-400);
+    font-size: 0.85rem;
+    display: block;
+    margin-top: 5px;
+}
+
+.member-points-display {
+    text-align: center;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1));
+    padding: 15px 25px;
+    border-radius: 15px;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.points-number {
+    display: block;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--emerald-400);
+}
+
+.points-label {
+    color: var(--gray-400);
+    font-size: 0.85rem;
+}
+
+.member-breakdown {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 25px;
+}
+
+.member-breakdown h3 {
+    color: var(--gold-400);
+    margin-bottom: 15px;
+    font-size: 1rem;
+}
+
+.breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.breakdown-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.breakdown-icon {
+    font-size: 1.2rem;
+}
+
+.breakdown-label {
+    color: var(--gray-400);
+    font-size: 0.8rem;
+    flex: 1;
+}
+
+.breakdown-count {
+    background: var(--gold-500);
+    color: #1a1a2e;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.member-activities-section h3 {
+    color: var(--gold-400);
+    margin-bottom: 20px;
+    font-size: 1rem;
+}
