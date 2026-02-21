@@ -6,7 +6,7 @@
   "college_name": "كلية الشريعة",
   "department_name": "كلية الشريعة",
   "university_name": "جامعة الطائف",
-  "google_sheets_api": "https://script.google.com/macros/s/AKfycbzbIi7bIwIZCXPtUHnUt5bS2GJAZZjfFqgKSqyEnC97KOPwx03ZGkXCFdZRTcndZOuM/exec",
+  "google_sheets_api": "https://script.google.com/macros/s/AKfycby-RsUQp3MRinDNo9lc1FvIjLvqGeJ0U9u5L4O4QJj2RzoVpOrbnsBhkTPFWUqSs6E/exec",
   "weights": {
     "phd_supervision": 10,
     "phd_co_supervision": 5,
