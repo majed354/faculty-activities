@@ -1,5 +1,5 @@
 // ========================================
-// نظام الأنشطة العلمية - قسم القراءات
+// نظام الأنشطة العلمية - كلية الشريعة
 // JavaScript Application - النسخة المحدثة
 // ========================================
 
@@ -8,9 +8,11 @@
 // ========================================
 let config = {};
 let currentYear = null;
+let currentDepartment = 'all';
 let currentThesis = null;
 let currentLeaderboard = [];
 let showAllLeaderboard = false;
+let sheetsDataLoaded = false;
 let allData = {
     faculty: [],
     students: [],
@@ -93,12 +95,16 @@ async function loadConfig() {
         config = await response.json();
         // دعم قيمة 'all' أو رقم السنة
         currentYear = config.current_year === 'all' ? 'all' : (config.current_year || 1446);
+        currentDepartment = config.current_department || 'all';
     } catch (error) {
         console.warn('Using default config');
         config = {
             current_year: 'all',
+            current_department: 'all',
             available_years: [1440, 1441, 1442, 1443, 1444, 1445, 1446, 1447],
-            department_name: "قسم القراءات",
+            departments: ["القراءات", "الشريعة", "الأنظمة", "الثقافة الإسلامية"],
+            college_name: "كلية الشريعة",
+            department_name: "كلية الشريعة",
             university_name: "جامعة الطائف",
             weights: {
                 phd_supervision: 10,
@@ -129,12 +135,108 @@ async function loadConfig() {
             }
         };
         currentYear = 'all';
+        currentDepartment = 'all';
     }
+}
+
+// ========================================
+// تحميل البيانات من Google Sheets (مباشرة)
+// ========================================
+async function loadFromGoogleSheets() {
+    const apiUrl = config.google_sheets_api;
+    if (!apiUrl) return false;
+
+    try {
+        console.log('📡 جاري تحميل البيانات من Google Sheets...');
+        const response = await fetch(`${apiUrl}?action=read`, {
+            mode: 'cors',
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const sheetsData = await response.json();
+
+        if (sheetsData.error) {
+            console.warn('⚠️ خطأ من Apps Script:', sheetsData.error);
+            return false;
+        }
+
+        // دمج البيانات من Google Sheets مع البيانات الحالية
+        if (sheetsData.faculty && sheetsData.faculty.length > 0) {
+            // إضافة أعضاء جدد غير موجودين
+            sheetsData.faculty.forEach(newMember => {
+                const exists = allData.faculty.some(f =>
+                    String(f.id).trim() === String(newMember.id).trim() &&
+                    String(f.year).trim() === String(newMember.year).trim()
+                );
+                if (!exists) allData.faculty.push(newMember);
+            });
+        }
+
+        if (sheetsData.publications && sheetsData.publications.length > 0) {
+            sheetsData.publications.forEach(newPub => {
+                const exists = allData.publications.some(p =>
+                    p.title === newPub.title && p.authors_ids === newPub.authors_ids
+                );
+                if (!exists) allData.publications.push(newPub);
+            });
+        }
+
+        if (sheetsData.theses && sheetsData.theses.length > 0) {
+            sheetsData.theses.forEach(newThesis => {
+                const exists = allData.theses.some(t =>
+                    t.student_name === newThesis.student_name && t.title === newThesis.title
+                );
+                if (!exists) allData.theses.push(newThesis);
+            });
+        }
+
+        if (sheetsData.participations && sheetsData.participations.length > 0) {
+            sheetsData.participations.forEach(newPart => {
+                const exists = allData.participations.some(p =>
+                    p.title === newPart.title && p.participant_ids === newPart.participant_ids && p.date === newPart.date
+                );
+                if (!exists) allData.participations.push(newPart);
+            });
+        }
+
+        console.log('✅ تم تحميل البيانات من Google Sheets بنجاح');
+        sheetsDataLoaded = true;
+        return true;
+    } catch (error) {
+        console.warn('⚠️ تعذر الاتصال بـ Google Sheets:', error.message);
+        return false;
+    }
+}
+
+// ========================================
+// دوال فلترة القسم
+// ========================================
+function getDepartmentFacultyIds(department) {
+    if (department === 'all') return null; // null يعني لا فلترة
+    return new Set(
+        allData.faculty
+            .filter(f => (f.department || '').trim() === department)
+            .map(f => String(f.id).trim())
+    );
+}
+
+function filterByDepartment(items, department, idField) {
+    if (department === 'all') return items;
+    const deptIds = getDepartmentFacultyIds(department);
+    if (!deptIds) return items;
+
+    return items.filter(item => {
+        // دعم حقول متعددة (مثل participant_ids أو authors_ids مفصولة بـ |)
+        const ids = (item[idField] || '').split('|').map(id => id.trim());
+        return ids.some(id => deptIds.has(id));
+    });
 }
 
 async function loadAllData() {
     showLoading();
-    
+
     const [faculty, students, theses, participations, publications] = await Promise.all([
         loadCSV(`${DATA_BASE_URL}/faculty.csv`),
         loadCSV(`${DATA_BASE_URL}/students_count.csv`),
@@ -142,9 +244,12 @@ async function loadAllData() {
         loadCSV(`${DATA_BASE_URL}/participations.csv`),
         loadCSV(`${DATA_BASE_URL}/publications.csv`)
     ]);
-    
+
     allData = { faculty, students, theses, participations, publications };
-    
+
+    // محاولة تحميل البيانات الحية من Google Sheets ودمجها
+    await loadFromGoogleSheets();
+
     await loadYearData(currentYear);
 }
 
@@ -156,7 +261,7 @@ async function loadYearData(year) {
         data.theses = [...allData.theses];
         data.participations = [...allData.participations];
         data.publications = [...allData.publications];
-        
+
         // إزالة التكرارات من أعضاء هيئة التدريس (نفس العضو قد يظهر في سنوات متعددة)
         const uniqueFaculty = {};
         allData.faculty.forEach(f => {
@@ -165,7 +270,7 @@ async function loadYearData(year) {
             }
         });
         data.faculty = Object.values(uniqueFaculty);
-        
+
         // تجميع أعداد الطلاب من كل السنوات (آخر قيمة لكل برنامج)
         const latestStudents = {};
         allData.students.forEach(s => {
@@ -182,10 +287,25 @@ async function loadYearData(year) {
         data.participations = allData.participations.filter(p => parseInt(p.year) === year);
         data.publications = allData.publications.filter(p => parseInt(p.year) === year);
     }
-    
+
+    // فلترة حسب القسم
+    if (currentDepartment !== 'all') {
+        data.faculty = data.faculty.filter(f => (f.department || '').trim() === currentDepartment);
+        const deptIds = new Set(data.faculty.map(f => String(f.id).trim()));
+        data.theses = data.theses.filter(t => deptIds.has(String(t.supervisor_id).trim()));
+        data.publications = data.publications.filter(p => {
+            const ids = (p.authors_ids || '').split('|').map(id => id.trim());
+            return ids.some(id => deptIds.has(id));
+        });
+        data.participations = data.participations.filter(p => {
+            const ids = (p.participant_ids || '').split('|').map(id => id.trim());
+            return ids.some(id => deptIds.has(id));
+        });
+    }
+
     // إعادة تعيين عرض المتصدرين
     showAllLeaderboard = false;
-    
+
     hideLoading();
     renderAll();
 }
@@ -726,14 +846,14 @@ function getRecentActivities(limit = 10) {
 function populateYearSelector() {
     const select = document.getElementById('yearSelect');
     select.innerHTML = '';
-    
+
     // إضافة خيار "الكل" في البداية
     const allOption = document.createElement('option');
     allOption.value = 'all';
     allOption.textContent = 'الكل';
     if (currentYear === 'all') allOption.selected = true;
     select.appendChild(allOption);
-    
+
     // إضافة السنوات بترتيب تنازلي (الأحدث أولاً)
     const years = [...(config.available_years || [1446])].sort((a, b) => b - a);
     years.forEach(year => {
@@ -742,6 +862,38 @@ function populateYearSelector() {
         option.textContent = year + 'هـ';
         if (year === currentYear) option.selected = true;
         select.appendChild(option);
+    });
+}
+
+function populateDepartmentSelector() {
+    const select = document.getElementById('deptSelect');
+    if (!select) return;
+    select.innerHTML = '';
+
+    // خيار الكل
+    const allOption = document.createElement('option');
+    allOption.value = 'all';
+    allOption.textContent = 'جميع الأقسام';
+    if (currentDepartment === 'all') allOption.selected = true;
+    select.appendChild(allOption);
+
+    // إضافة الأقسام
+    const departments = config.departments || ['القراءات'];
+    departments.forEach(dept => {
+        const option = document.createElement('option');
+        option.value = dept;
+        option.textContent = 'قسم ' + dept;
+        if (dept === currentDepartment) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
+function setupDepartmentSelector() {
+    const select = document.getElementById('deptSelect');
+    if (!select) return;
+    select.addEventListener('change', (e) => {
+        currentDepartment = e.target.value;
+        loadYearData(currentYear);
     });
 }
 
@@ -1915,7 +2067,7 @@ function renderEvents() {
                 <div class="event-location">📍 ${event.location || ''}</div>
                 <div class="event-participation">${event.participation_type || ''}</div>
                 ${participants.length > 0 ? `<div class="event-participants">${participants.map(p => `<span class="participant-tag">${p}</span>`).join('')}</div>` : ''}
-                ${event.organized_by_department === 'نعم' ? '<span class="organized-badge">من تنظيم القسم</span>' : ''}
+                ${event.organized_by_department === 'نعم' ? '<span class="organized-badge">من تنظيم الكلية</span>' : ''}
                 ${event.student_details && !isNaN(event.student_details) ? `<span class="attendance-badge">👥 ${event.student_details} حاضر</span>` : ''}
                 ${event.notes ? `<div class="event-notes">${event.notes}</div>` : ''}
             </div>
@@ -2494,7 +2646,7 @@ function generateActivityForm() {
                 </div>
                 ` : ''}
                 <div class="form-group">
-                    <label>هل الفعالية من تنظيم القسم؟</label>
+                    <label>هل الفعالية من تنظيم الكلية؟</label>
                     <select class="form-select" id="actOrganizedByDept">
                         <option value="لا">لا</option>
                         <option value="نعم">نعم</option>
@@ -2798,14 +2950,21 @@ function setupYearSelector() {
 async function init() {
     const hijriYear = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { year: 'numeric' }).replace(/[^0-9]/g, '');
     document.getElementById('currentYear').textContent = hijriYear;
-    
+
     await loadConfig();
     populateYearSelector();
+    populateDepartmentSelector();
     setupTabs();
     setupFilters();
     setupYearSelector();
+    setupDepartmentSelector();
     await loadAllData();
-    
+
+    // مؤشر حالة البيانات الحية
+    if (sheetsDataLoaded) {
+        console.log('🟢 البيانات محدثة من Google Sheets');
+    }
+
     // إنشاء واجهة إضافة الأنشطة
   //  createAddActivityUI();
 }

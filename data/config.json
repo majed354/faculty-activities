@@ -1,8 +1,12 @@
 {
   "current_year": "all",
+  "current_department": "all",
   "available_years": [1440, 1441, 1442, 1443, 1444, 1445, 1446, 1447],
-  "department_name": "قسم القراءات",
+  "departments": ["القراءات", "الشريعة", "الأنظمة", "الثقافة الإسلامية"],
+  "college_name": "كلية الشريعة",
+  "department_name": "كلية الشريعة",
   "university_name": "جامعة الطائف",
+  "google_sheets_api": "https://script.google.com/macros/s/AKfycbzbIi7bIwIZCXPtUHnUt5bS2GJAZZjfFqgKSqyEnC97KOPwx03ZGkXCFdZRTcndZOuM/exec",
   "weights": {
     "phd_supervision": 10,
     "phd_co_supervision": 5,

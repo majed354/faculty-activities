@@ -159,6 +159,19 @@
             <a href="index.html" style="color: var(--gold-400); text-decoration: none;">🏠 عودة للرئيسية</a>
         </div>
 
+        <!-- اختيار القسم -->
+        <div style="margin-bottom: 20px; background: rgba(198,169,98,0.1); padding: 15px; border-radius: 12px; border: 1px solid rgba(198,169,98,0.3);">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="color: var(--gold-400); font-weight: 600;">🏛️ القسم</label>
+                <select id="departmentSelect" style="max-width: 400px;">
+                    <option value="القراءات">قسم القراءات</option>
+                    <option value="الشريعة">قسم الشريعة</option>
+                    <option value="الأنظمة">قسم الأنظمة</option>
+                    <option value="الثقافة الإسلامية">قسم الثقافة الإسلامية</option>
+                </select>
+            </div>
+        </div>
+
         <div class="type-selector">
             <label style="color: #fff; margin-bottom: 10px; display: block; font-size: 1.1rem;">حدد نوع النشاط:</label>
             <select id="mainActivitySelect" onchange="handleActivityChange()" style="width: 100%; max-width: 500px; padding: 12px; border-radius: 8px; font-size: 1rem;">
@@ -171,7 +184,7 @@
 
                 <optgroup label="🎓 الإشراف والمناقشة">
                     <option value="thesis_supervision">إشراف على رسالة علمية</option>
-                    <option value="thesis_discussion_internal">مناقشة داخلية (داخل القسم)</option>
+                    <option value="thesis_discussion_internal">مناقشة داخلية (داخل الكلية)</option>
                     <option value="event_discussion_external">مناقشة خارجية (جامعة أخرى)</option>
                 </optgroup>
 
@@ -946,7 +959,10 @@
 
             btn.disabled = true; btn.textContent = "جاري الإرسال..."; statusMsg.textContent = "";
 
-            let formData = { formType: currentTargetSheet };
+            let formData = {
+                formType: currentTargetSheet,
+                department: document.getElementById('departmentSelect').value
+            };
 
             // 1. جمع البيانات (مع تحويل التاريخ للهجري)
             if (currentTargetSheet === 'publications') {
