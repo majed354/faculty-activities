@@ -19,6 +19,7 @@
     <!-- Styles -->
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style-additions.css">
+    <link rel="stylesheet" href="teaching-styles.css">
 </head>
 <body>
     <a href="add-activity.html" class="add-activity-fab" title="إضافة نشاط جديد"></a>
@@ -79,6 +80,10 @@
             <button class="nav-btn" data-tab="events">
                 <span class="nav-icon">🎯</span>
                 <span class="nav-text">الفعاليات العلمية</span>
+            </button>
+            <button class="nav-btn" data-tab="teaching">
+                <span class="nav-icon">🏫</span>
+                <span class="nav-text">النشاط التدريسي</span>
             </button>
             <button class="nav-btn" data-tab="quality">
                 <span class="nav-icon">📈</span>
@@ -286,6 +291,128 @@
             </div>
         </section>
 
+        <!-- ===== النشاط التدريسي ===== -->
+        <section id="teaching" class="tab-content">
+            <div class="section-header">
+                <h2>🏫 النشاط التدريسي</h2>
+                <div class="filters teaching-filters">
+                    <input type="text" id="teachingSearch" placeholder="🔍 بحث بالاسم أو الرقم الوظيفي...">
+                    <select id="teachingYearFilter">
+                        <option value="all">جميع السنوات</option>
+                    </select>
+                    <select id="teachingDeptFilter">
+                        <option value="all">جميع الأقسام</option>
+                    </select>
+                    <select id="teachingSortFilter">
+                        <option value="courses">ترتيب: عدد المقررات</option>
+                        <option value="students">ترتيب: عدد الطلاب</option>
+                        <option value="hours">ترتيب: الساعات الأسبوعية</option>
+                        <option value="name">ترتيب: الاسم</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- إحصائيات سريعة للنشاط التدريسي -->
+            <div class="teaching-stats-grid">
+                <div class="teaching-stat-card t-stat-courses">
+                    <div class="t-stat-icon">📖</div>
+                    <div class="t-stat-info">
+                        <span class="t-stat-number" id="tTotalCourses">0</span>
+                        <span class="t-stat-label">مقرر دراسي</span>
+                    </div>
+                </div>
+                <div class="teaching-stat-card t-stat-students">
+                    <div class="t-stat-icon">🎓</div>
+                    <div class="t-stat-info">
+                        <span class="t-stat-number" id="tTotalStudents">0</span>
+                        <span class="t-stat-label">طالب مسجل</span>
+                    </div>
+                </div>
+                <div class="teaching-stat-card t-stat-inperson">
+                    <div class="t-stat-icon">🏛️</div>
+                    <div class="t-stat-info">
+                        <span class="t-stat-number" id="tInPerson">0</span>
+                        <span class="t-stat-label">حضوري</span>
+                    </div>
+                </div>
+                <div class="teaching-stat-card t-stat-remote">
+                    <div class="t-stat-icon">💻</div>
+                    <div class="t-stat-info">
+                        <span class="t-stat-number" id="tRemote">0</span>
+                        <span class="t-stat-label">عن بعد</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- المخططات البيانية -->
+            <div class="teaching-charts-grid">
+                <div class="chart-card">
+                    <h3>اتجاه المقررات والطلاب عبر السنوات</h3>
+                    <canvas id="teachingTrendChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>توزيع طريقة التدريس</h3>
+                    <canvas id="teachingModeChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>توزيع المقررات حسب الأقسام</h3>
+                    <canvas id="teachingDeptChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>أكثر 10 أعضاء تدريساً</h3>
+                    <canvas id="teachingTopChart"></canvas>
+                </div>
+            </div>
+
+            <!-- جدول الأعضاء -->
+            <div class="teaching-table-section">
+                <div class="teaching-table-header">
+                    <h3>📋 تفاصيل النشاط التدريسي للأعضاء</h3>
+                    <button class="export-all-btn" id="exportAllTeaching" title="تصدير جميع البيانات">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        تصدير الكل
+                    </button>
+                </div>
+                <div class="data-table-container">
+                    <table class="data-table teaching-data-table" id="teachingTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>العضو</th>
+                                <th>القسم</th>
+                                <th>المرتبة</th>
+                                <th>المقررات</th>
+                                <th>الطلاب</th>
+                                <th>الساعات</th>
+                                <th>حضوري</th>
+                                <th>عن بعد</th>
+                                <th>إجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teachingTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modal تفاصيل النشاط التدريسي -->
+        <div id="teachingModal" class="modal">
+            <div class="modal-content teaching-modal-content">
+                <span class="modal-close" id="teachingModalClose">&times;</span>
+                <button class="print-icon-btn" id="teachingPrintBtn" title="طباعة / تنزيل">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                </button>
+                <div id="teachingModalBody">
+                    <!-- يُملأ بـ JavaScript -->
+                </div>
+            </div>
+        </div>
+
         <!-- ===== مؤشرات الجودة ===== -->
         <section id="quality" class="tab-content">
             <div class="section-header">
@@ -439,6 +566,7 @@
     </div>
 
     <script src="app.js"></script>
+    <script src="teaching.js"></script>
 
     <!-- Modal تفاصيل الرسالة -->
     <div id="thesisModal" class="modal">
