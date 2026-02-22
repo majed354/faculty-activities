@@ -8,6 +8,8 @@
 let teachingData = null;
 let teachingCharts = {};
 let allCoursesMap = null;
+let teachingInitialized = false;
+let teachingDataLoading = false;
 
 // فلاتر الجدول التفصيلي (مستقلة تماماً)
 let tableFilters = {
@@ -16,13 +18,15 @@ let tableFilters = {
     department: 'all',
     mode: 'all',
     rank: 'all',
-    sort: 'courses'
+    sort: 'sections'
 };
 
 // ========================================
-// تحميل البيانات
+// تحميل البيانات (lazy - تتأخر حتى يفتح المستخدم تبويب التدريس)
 // ========================================
 async function loadTeachingData() {
+    if (teachingData || teachingDataLoading) return;
+    teachingDataLoading = true;
     try {
         const response = await fetch(`${DATA_BASE_URL}/teaching_data.json`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -32,8 +36,18 @@ async function loadTeachingData() {
         initTeachingFilters();
         renderTeachingOverview();
         renderTeachingTable();
+        teachingInitialized = true;
     } catch (error) {
         console.warn('⚠️ تعذر تحميل بيانات النشاط التدريسي:', error.message);
+    } finally {
+        teachingDataLoading = false;
+    }
+}
+
+// تحميل بيانات التدريس عند الطلب فقط
+async function ensureTeachingLoaded() {
+    if (!teachingInitialized && !teachingDataLoading) {
+        await loadTeachingData();
     }
 }
 
@@ -143,10 +157,14 @@ function initTeachingFilters() {
         });
     }
 
-    // البحث
+    // البحث (مع debounce لتحسين الأداء)
+    let searchDebounce;
     document.getElementById('teachingSearch')?.addEventListener('input', (e) => {
-        tableFilters.search = e.target.value.trim();
-        renderTeachingTable();
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(() => {
+            tableFilters.search = e.target.value.trim();
+            renderTeachingTable();
+        }, 250);
     });
 
     // الترتيب
@@ -413,12 +431,14 @@ function computeFacultySummary(records) {
                 name: fi.n || '',
                 department: fi.d || '',
                 rank: fi.r || '',
+                totalSections: 0,
                 totalCourses: 0,
                 totalStudents: 0,
                 totalHours: 0,
                 inPerson: 0,
                 remote: 0,
-                years: new Set()
+                years: new Set(),
+                uniqueCourses: new Set()
             };
         }
 
@@ -426,7 +446,8 @@ function computeFacultySummary(records) {
         s.years.add(r.y);
 
         r.cs.forEach(c => {
-            s.totalCourses++;
+            s.totalSections++;
+            s.uniqueCourses.add(c.cc);
             s.totalStudents += c.e || 0;
             s.totalHours += c.h || 0;
             if (c.m === 'حضوري' || c.m === 'غير محدد') s.inPerson++;
@@ -438,6 +459,8 @@ function computeFacultySummary(records) {
     return Object.values(summary).map(s => {
         s.yearsCount = s.years.size;
         s.years = Array.from(s.years).sort();
+        s.totalCourses = s.uniqueCourses.size;
+        delete s.uniqueCourses;
         return s;
     });
 }
@@ -637,6 +660,7 @@ function renderTeachingTable() {
 
     // الترتيب
     switch (tableFilters.sort) {
+        case 'sections': facultySummary.sort((a, b) => b.totalSections - a.totalSections); break;
         case 'courses': facultySummary.sort((a, b) => b.totalCourses - a.totalCourses); break;
         case 'students': facultySummary.sort((a, b) => b.totalStudents - a.totalStudents); break;
         case 'hours': facultySummary.sort((a, b) => b.totalHours - a.totalHours); break;
@@ -647,7 +671,7 @@ function renderTeachingTable() {
     if (!tbody) return;
 
     if (facultySummary.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#888;">لا توجد بيانات مطابقة</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#888;">لا توجد بيانات مطابقة</td></tr>';
         return;
     }
 
@@ -665,6 +689,7 @@ function renderTeachingTable() {
             </td>
             <td><span class="dept-badge dept-${getDeptClass(f.department)}">${f.department}</span></td>
             <td>${f.rank}</td>
+            <td><strong>${f.totalSections.toLocaleString('ar-SA')}</strong></td>
             <td><strong>${f.totalCourses.toLocaleString('ar-SA')}</strong></td>
             <td>${f.totalStudents.toLocaleString('ar-SA')}</td>
             <td>${f.totalHours.toLocaleString('ar-SA')}</td>
@@ -714,10 +739,12 @@ function openTeachingModal(facultyId) {
         yearGroups[r.y].push(r);
     });
 
-    let totalCourses = 0, totalStudents = 0, totalHours = 0, inPerson = 0, remote = 0;
+    let totalSections = 0, totalStudents = 0, totalHours = 0, inPerson = 0, remote = 0;
+    const uniqueCourseCodes = new Set();
     records.forEach(r => {
         r.cs.forEach(c => {
-            totalCourses++;
+            totalSections++;
+            uniqueCourseCodes.add(c.cc);
             totalStudents += c.e || 0;
             totalHours += c.h || 0;
             if (c.m === 'حضوري' || c.m === 'غير محدد') inPerson++;
@@ -725,8 +752,8 @@ function openTeachingModal(facultyId) {
             else inPerson++;
         });
     });
-
-    const avgStudents = totalCourses > 0 ? Math.round(totalStudents / totalCourses) : 0;
+    const totalUniqueCourses = uniqueCourseCodes.size;
+    const avgStudents = totalSections > 0 ? Math.round(totalStudents / totalSections) : 0;
 
     const modalBody = document.getElementById('teachingModalBody');
     modalBody.innerHTML = `
@@ -739,7 +766,8 @@ function openTeachingModal(facultyId) {
         </div>
 
         <div class="t-modal-stats">
-            <div class="t-m-stat"><span class="t-m-num">${totalCourses}</span><span class="t-m-label">شعبة</span></div>
+            <div class="t-m-stat"><span class="t-m-num">${totalSections}</span><span class="t-m-label">شعبة</span></div>
+            <div class="t-m-stat"><span class="t-m-num">${totalUniqueCourses}</span><span class="t-m-label">مقرر</span></div>
             <div class="t-m-stat"><span class="t-m-num">${totalStudents.toLocaleString('ar-SA')}</span><span class="t-m-label">طالب شعبة</span></div>
             <div class="t-m-stat"><span class="t-m-num">${totalHours}</span><span class="t-m-label">ساعة</span></div>
             <div class="t-m-stat"><span class="t-m-num">${avgStudents}</span><span class="t-m-label">متوسط طلاب/شعبة</span></div>
@@ -893,8 +921,26 @@ function exportAllTeachingCSV() {
 function printTeachingReport() { window.print(); }
 
 // ========================================
-// التحميل عند بدء التشغيل
+// التحميل عند الطلب (lazy loading)
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(loadTeachingData, 500);
+    // مراقبة تبويب التدريس - تحميل البيانات فقط عند فتحه
+    const observer = new MutationObserver(() => {
+        const teachingTab = document.getElementById('teaching');
+        if (teachingTab && teachingTab.classList.contains('active') && !teachingInitialized) {
+            ensureTeachingLoaded();
+        }
+    });
+
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        observer.observe(mainContent, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+
+    // أيضاً نستمع للنقر على زر تبويب التدريس مباشرة
+    document.querySelectorAll('[data-tab="teaching"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!teachingInitialized) ensureTeachingLoaded();
+        });
+    });
 });

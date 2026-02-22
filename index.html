@@ -409,6 +409,13 @@
                 <div class="teaching-table-header">
                     <h3>📋 تفاصيل النشاط التدريسي للأعضاء</h3>
                     <div class="teaching-table-filters">
+                        <select id="teachingSortFilter">
+                            <option value="sections">ترتيب: عدد الشعب</option>
+                            <option value="courses">ترتيب: عدد المقررات</option>
+                            <option value="students">ترتيب: عدد الطلاب</option>
+                            <option value="hours">ترتيب: الساعات الأسبوعية</option>
+                            <option value="name">ترتيب: الاسم</option>
+                        </select>
                         <input type="text" id="teachingSearch" placeholder="🔍 بحث بالاسم أو الرقم الوظيفي...">
                         <select id="tblYearFilter">
                             <option value="all">جميع السنوات</option>
@@ -424,12 +431,6 @@
                         <select id="tblRankFilter">
                             <option value="all">جميع المراتب</option>
                         </select>
-                        <select id="teachingSortFilter">
-                            <option value="courses">ترتيب: عدد شعب المقررات</option>
-                            <option value="students">ترتيب: عدد الطلاب</option>
-                            <option value="hours">ترتيب: الساعات الأسبوعية</option>
-                            <option value="name">ترتيب: الاسم</option>
-                        </select>
                     </div>
                     <button class="export-all-btn" id="exportAllTeaching" title="تصدير جميع البيانات">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -444,7 +445,8 @@
                                 <th>العضو</th>
                                 <th>القسم</th>
                                 <th>المرتبة</th>
-                                <th>شعب المقررات</th>
+                                <th>الشعب</th>
+                                <th>المقررات</th>
                                 <th>الطلاب</th>
                                 <th>الساعات</th>
                                 <th>حضوري</th>
