@@ -293,21 +293,20 @@
 
         <!-- ===== النشاط التدريسي ===== -->
         <section id="teaching" class="tab-content">
+            <!-- شريط الفلاتر الإجمالي -->
             <div class="section-header">
                 <h2>🏫 النشاط التدريسي</h2>
-                <div class="filters teaching-filters">
-                    <input type="text" id="teachingSearch" placeholder="🔍 بحث بالاسم أو الرقم الوظيفي...">
+                <div class="filters teaching-global-filters">
                     <select id="teachingYearFilter">
                         <option value="all">جميع السنوات</option>
                     </select>
                     <select id="teachingDeptFilter">
                         <option value="all">جميع الأقسام</option>
                     </select>
-                    <select id="teachingSortFilter">
-                        <option value="courses">ترتيب: عدد المقررات</option>
-                        <option value="students">ترتيب: عدد الطلاب</option>
-                        <option value="hours">ترتيب: الساعات الأسبوعية</option>
-                        <option value="name">ترتيب: الاسم</option>
+                    <select id="teachingModeFilter">
+                        <option value="all">جميع طرق التدريس</option>
+                        <option value="حضوري">حضوري</option>
+                        <option value="عن بعد">عن بعد</option>
                     </select>
                 </div>
             </div>
@@ -318,14 +317,14 @@
                     <div class="t-stat-icon">📖</div>
                     <div class="t-stat-info">
                         <span class="t-stat-number" id="tTotalCourses">0</span>
-                        <span class="t-stat-label">مقرر دراسي</span>
+                        <span class="t-stat-label">شعبة دراسية</span>
                     </div>
                 </div>
                 <div class="teaching-stat-card t-stat-students">
                     <div class="t-stat-icon">🎓</div>
                     <div class="t-stat-info">
                         <span class="t-stat-number" id="tTotalStudents">0</span>
-                        <span class="t-stat-label">طالب مسجل</span>
+                        <span class="t-stat-label">طالب شعبة (بالمكرر)</span>
                     </div>
                 </div>
                 <div class="teaching-stat-card t-stat-inperson">
@@ -347,7 +346,7 @@
             <!-- المخططات البيانية -->
             <div class="teaching-charts-grid">
                 <div class="chart-card">
-                    <h3>اتجاه المقررات والطلاب عبر السنوات</h3>
+                    <h3>اتجاه شعب المقررات والطلاب عبر السنوات</h3>
                     <canvas id="teachingTrendChart"></canvas>
                 </div>
                 <div class="chart-card">
@@ -355,7 +354,7 @@
                     <canvas id="teachingModeChart"></canvas>
                 </div>
                 <div class="chart-card">
-                    <h3>توزيع المقررات حسب الأقسام</h3>
+                    <h3>توزيع شعب المقررات حسب الأقسام</h3>
                     <canvas id="teachingDeptChart"></canvas>
                 </div>
                 <div class="chart-card">
@@ -364,10 +363,33 @@
                 </div>
             </div>
 
-            <!-- جدول الأعضاء -->
+            <!-- البحث بالمقرر -->
+            <div class="course-search-section">
+                <div class="course-search-header">
+                    <h3>🔎 بحث بالمقرر</h3>
+                    <span class="course-search-hint">اكتب اسم أو رمز المقرر لمعرفة من درّسه عبر السنوات</span>
+                </div>
+                <div class="course-search-wrapper">
+                    <input type="text" id="courseSearchInput" placeholder="🔍 ابحث باسم المقرر أو رمزه..." autocomplete="off" />
+                    <button class="course-search-clear" onclick="clearCourseSearch()" title="مسح">✕</button>
+                    <div id="courseSearchDropdown" class="course-search-dropdown"></div>
+                </div>
+                <div id="courseSearchResults"></div>
+            </div>
+
+            <!-- جدول الأعضاء مع فلاتر خاصة -->
             <div class="teaching-table-section">
                 <div class="teaching-table-header">
                     <h3>📋 تفاصيل النشاط التدريسي للأعضاء</h3>
+                    <div class="teaching-table-filters">
+                        <input type="text" id="teachingSearch" placeholder="🔍 بحث بالاسم أو الرقم الوظيفي...">
+                        <select id="teachingSortFilter">
+                            <option value="courses">ترتيب: عدد شعب المقررات</option>
+                            <option value="students">ترتيب: عدد الطلاب</option>
+                            <option value="hours">ترتيب: الساعات الأسبوعية</option>
+                            <option value="name">ترتيب: الاسم</option>
+                        </select>
+                    </div>
                     <button class="export-all-btn" id="exportAllTeaching" title="تصدير جميع البيانات">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         تصدير الكل
@@ -381,7 +403,7 @@
                                 <th>العضو</th>
                                 <th>القسم</th>
                                 <th>المرتبة</th>
-                                <th>المقررات</th>
+                                <th>شعب المقررات</th>
                                 <th>الطلاب</th>
                                 <th>الساعات</th>
                                 <th>حضوري</th>

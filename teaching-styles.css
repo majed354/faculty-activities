@@ -2,6 +2,49 @@
    النشاط التدريسي - Teaching Activity Styles
 ======================================== */
 
+/* ===== الفلاتر الإجمالية ===== */
+.teaching-global-filters {
+    flex-wrap: wrap;
+}
+
+/* ===== فلاتر الجدول ===== */
+.teaching-table-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.teaching-table-filters input[type="text"] {
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0,0,0,0.2);
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.3s;
+    min-width: 200px;
+}
+
+.teaching-table-filters input[type="text"]:focus {
+    border-color: var(--gold-400);
+}
+
+.teaching-table-filters select {
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0,0,0,0.2);
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
+}
+
 /* ===== بطاقات الإحصائيات ===== */
 .teaching-stats-grid {
     display: grid;
@@ -89,9 +132,238 @@
     }
 }
 
-/* ===== الفلاتر ===== */
-.teaching-filters {
+/* ===== البحث بالمقرر ===== */
+.course-search-section {
+    background: linear-gradient(135deg, var(--primary-800), var(--primary-700));
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 30px;
+}
+
+.course-search-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
     flex-wrap: wrap;
+}
+
+.course-search-header h3 {
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.course-search-hint {
+    color: var(--gray-400);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+}
+
+.course-search-wrapper {
+    position: relative;
+    max-width: 600px;
+}
+
+.course-search-wrapper input {
+    width: 100%;
+    padding: 12px 40px 12px 16px;
+    border-radius: 12px;
+    border: 2px solid rgba(255,255,255,0.12);
+    background: rgba(0,0,0,0.25);
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    box-sizing: border-box;
+}
+
+.course-search-wrapper input:focus {
+    border-color: var(--gold-400);
+    box-shadow: 0 0 0 3px rgba(212,175,55,0.15);
+}
+
+.course-search-wrapper input::placeholder {
+    color: rgba(255,255,255,0.35);
+}
+
+.course-search-clear {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--gray-400);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.course-search-clear:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.1);
+}
+
+/* === Dropdown البحث === */
+.course-search-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    margin-top: 4px;
+    background: var(--primary-800);
+    border: 1px solid rgba(212,175,55,0.2);
+    border-radius: 12px;
+    max-height: 320px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+
+.course-dd-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.course-dd-item:last-child {
+    border-bottom: none;
+}
+
+.course-dd-item:hover {
+    background: rgba(212,175,55,0.1);
+}
+
+.course-dd-name {
+    flex: 1;
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.course-dd-code {
+    direction: ltr;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--gray-400);
+    background: rgba(0,0,0,0.2);
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+.course-dd-count {
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    color: var(--gold-400);
+    white-space: nowrap;
+}
+
+.course-dd-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--gray-400);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+}
+
+/* === نتائج البحث بالمقرر === */
+#courseSearchResults {
+    display: none;
+    margin-top: 20px;
+}
+
+.course-results-header {
+    margin-bottom: 16px;
+}
+
+.course-results-header h4 {
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 1.1rem;
+    margin: 0 0 8px;
+}
+
+.course-code-tag {
+    direction: ltr;
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--gold-400);
+    background: rgba(212,175,55,0.1);
+    padding: 3px 10px;
+    border-radius: 8px;
+    margin-right: 8px;
+}
+
+.course-results-stats {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.course-results-stats span {
+    color: var(--gray-400);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+}
+
+.course-results-table-wrap {
+    overflow-x: auto;
+}
+
+.course-results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-body);
+}
+
+.course-results-table thead th {
+    padding: 10px 8px;
+    color: var(--gold-400);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+    border-bottom: 2px solid rgba(212,175,55,0.2);
+    white-space: nowrap;
+    background: rgba(0,0,0,0.15);
+}
+
+.course-results-table tbody td {
+    padding: 10px 8px;
+    color: #d0d0d0;
+    font-size: 0.82rem;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.course-result-row {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.course-result-row:hover {
+    background: rgba(212,175,55,0.08) !important;
+}
+
+.course-result-row:nth-child(even) {
+    background: rgba(0,0,0,0.08);
+}
+
+.course-faculty-name {
+    text-align: right !important;
+    font-weight: 600;
+    color: #fff !important;
 }
 
 /* ===== جدول الأعضاء ===== */
@@ -116,6 +388,7 @@
     font-family: var(--font-body);
     font-size: 1.1rem;
     margin: 0;
+    white-space: nowrap;
 }
 
 .export-all-btn {
@@ -132,6 +405,7 @@
     font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.3s;
+    white-space: nowrap;
 }
 
 .export-all-btn:hover {
@@ -494,9 +768,11 @@
 /* ===== طباعة ===== */
 @media print {
     .main-header, .main-nav, .main-footer, .animated-bg,
-    .teaching-filters, .teaching-charts-grid, .export-all-btn,
+    .teaching-global-filters, .teaching-table-filters,
+    .teaching-charts-grid, .export-all-btn,
     .detail-btn, .t-modal-actions, .modal-close, .print-icon-btn,
-    .teaching-table-section, .loading-overlay, .add-activity-fab {
+    .teaching-table-section, .loading-overlay, .add-activity-fab,
+    .course-search-section {
         display: none !important;
     }
 
@@ -574,6 +850,24 @@
         margin: 10px;
         max-height: 95vh;
     }
+
+    .teaching-table-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .teaching-table-filters {
+        flex-direction: column;
+    }
+
+    .teaching-table-filters input[type="text"] {
+        min-width: auto;
+        width: 100%;
+    }
+
+    .course-search-wrapper {
+        max-width: 100%;
+    }
 }
 
 @media (max-width: 480px) {
@@ -587,5 +881,10 @@
 
     .t-modal-chart-row {
         grid-template-columns: 1fr;
+    }
+
+    .course-search-header {
+        flex-direction: column;
+        gap: 6px;
     }
 }
