@@ -2,31 +2,30 @@
    النشاط التدريسي - Teaching Activity Styles
 ======================================== */
 
-/* ===== الفلاتر الإجمالية ===== */
-.teaching-global-filters {
-    flex-wrap: wrap;
-}
-
-/* ===== فلاتر الجدول ===== */
+/* ===== فلاتر الجدول التفصيلي ===== */
 .teaching-table-filters {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
     flex: 1;
+    width: 100%;
+    order: 3;
+    margin-top: 4px;
 }
 
 .teaching-table-filters input[type="text"] {
-    padding: 8px 14px;
-    border-radius: 10px;
+    padding: 7px 12px;
+    border-radius: 8px;
     border: 1px solid rgba(255,255,255,0.15);
     background: rgba(0,0,0,0.2);
     color: #fff;
     font-family: var(--font-body);
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     outline: none;
     transition: border-color 0.3s;
-    min-width: 200px;
+    min-width: 180px;
+    flex: 1;
 }
 
 .teaching-table-filters input[type="text"]:focus {
@@ -34,15 +33,20 @@
 }
 
 .teaching-table-filters select {
-    padding: 8px 14px;
-    border-radius: 10px;
+    padding: 7px 10px;
+    border-radius: 8px;
     border: 1px solid rgba(255,255,255,0.15);
     background: rgba(0,0,0,0.2);
     color: #fff;
     font-family: var(--font-body);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     outline: none;
     cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.teaching-table-filters select:focus {
+    border-color: var(--gold-400);
 }
 
 /* ===== بطاقات الإحصائيات ===== */
@@ -768,8 +772,7 @@
 /* ===== طباعة ===== */
 @media print {
     .main-header, .main-nav, .main-footer, .animated-bg,
-    .teaching-global-filters, .teaching-table-filters,
-    .teaching-charts-grid, .export-all-btn,
+    .teaching-table-filters, .teaching-charts-grid, .export-all-btn,
     .detail-btn, .t-modal-actions, .modal-close, .print-icon-btn,
     .teaching-table-section, .loading-overlay, .add-activity-fab,
     .course-search-section {

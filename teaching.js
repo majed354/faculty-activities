@@ -1,17 +1,23 @@
 // ========================================
 // النشاط التدريسي - Teaching Activities Module
 // ========================================
+// نظام فلاتر مزدوج:
+// 1. الفلتر العلوي الثابت (yearSelect + deptSelect) → يؤثر على الإحصائيات والمخططات
+// 2. فلاتر الجدول التفصيلي → مستقلة تماماً عن الفلتر العلوي
 
 let teachingData = null;
 let teachingCharts = {};
-let teachingFilters = {
+let allCoursesMap = null;
+
+// فلاتر الجدول التفصيلي (مستقلة تماماً)
+let tableFilters = {
+    search: '',
     year: 'all',
     department: 'all',
     mode: 'all',
-    search: '',
+    rank: 'all',
     sort: 'courses'
 };
-let allCoursesMap = null;
 
 // ========================================
 // تحميل البيانات
@@ -24,7 +30,8 @@ async function loadTeachingData() {
         console.log('🏫 تم تحميل بيانات النشاط التدريسي:', teachingData.records.length, 'سجل');
         buildCoursesMap();
         initTeachingFilters();
-        renderTeaching();
+        renderTeachingOverview();
+        renderTeachingTable();
     } catch (error) {
         console.warn('⚠️ تعذر تحميل بيانات النشاط التدريسي:', error.message);
     }
@@ -61,57 +68,100 @@ function buildCoursesMap() {
 function initTeachingFilters() {
     if (!teachingData) return;
 
-    // === الفلاتر الإجمالية (أعلى الصفحة) ===
-    const yearSelect = document.getElementById('teachingYearFilter');
-    const deptSelect = document.getElementById('teachingDeptFilter');
-    const modeSelect = document.getElementById('teachingModeFilter');
+    // === ربط الفلتر العلوي الثابت بالإحصائيات والمخططات ===
+    const headerYear = document.getElementById('yearSelect');
+    const headerDept = document.getElementById('deptSelect');
 
-    if (yearSelect) {
-        yearSelect.innerHTML = '<option value="all">جميع السنوات</option>';
+    if (headerYear) {
+        headerYear.addEventListener('change', () => {
+            renderTeachingOverview();
+        });
+    }
+
+    if (headerDept) {
+        headerDept.addEventListener('change', () => {
+            renderTeachingOverview();
+        });
+    }
+
+    // === فلاتر الجدول التفصيلي (مستقلة تماماً) ===
+    // تعبئة السنوات
+    const tblYear = document.getElementById('tblYearFilter');
+    if (tblYear) {
+        tblYear.innerHTML = '<option value="all">جميع السنوات</option>';
         teachingData.years.forEach(y => {
-            yearSelect.innerHTML += `<option value="${y}">${y}هـ</option>`;
+            tblYear.innerHTML += `<option value="${y}">${y}هـ</option>`;
         });
-        yearSelect.addEventListener('change', (e) => {
-            teachingFilters.year = e.target.value;
-            renderTeaching();
+        tblYear.addEventListener('change', (e) => {
+            tableFilters.year = e.target.value;
+            renderTeachingTable();
         });
     }
 
-    if (deptSelect) {
-        deptSelect.innerHTML = '<option value="all">جميع الأقسام</option>';
+    // تعبئة الأقسام
+    const tblDept = document.getElementById('tblDeptFilter');
+    if (tblDept) {
+        tblDept.innerHTML = '<option value="all">جميع الأقسام</option>';
         teachingData.departments.forEach(d => {
-            deptSelect.innerHTML += `<option value="${d}">${d}</option>`;
+            tblDept.innerHTML += `<option value="${d}">${d}</option>`;
         });
-        deptSelect.addEventListener('change', (e) => {
-            teachingFilters.department = e.target.value;
-            renderTeaching();
-        });
-    }
-
-    if (modeSelect) {
-        modeSelect.addEventListener('change', (e) => {
-            teachingFilters.mode = e.target.value;
-            renderTeaching();
+        tblDept.addEventListener('change', (e) => {
+            tableFilters.department = e.target.value;
+            renderTeachingTable();
         });
     }
 
-    // === فلاتر الجدول (داخل قسم الجدول) ===
+    // فلتر طريقة التدريس
+    const tblMode = document.getElementById('tblModeFilter');
+    if (tblMode) {
+        tblMode.addEventListener('change', (e) => {
+            tableFilters.mode = e.target.value;
+            renderTeachingTable();
+        });
+    }
+
+    // تعبئة المراتب
+    const tblRank = document.getElementById('tblRankFilter');
+    if (tblRank) {
+        const ranksSet = new Set();
+        Object.values(teachingData.faculty_index).forEach(fi => {
+            if (fi.r) ranksSet.add(fi.r);
+        });
+        const ranks = Array.from(ranksSet).sort((a, b) => {
+            const order = ['أستاذ', 'أستاذ مشارك', 'أستاذ مساعد', 'محاضر', 'معيد'];
+            const ia = order.findIndex(o => a.includes(o));
+            const ib = order.findIndex(o => b.includes(o));
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        });
+        tblRank.innerHTML = '<option value="all">جميع المراتب</option>';
+        ranks.forEach(r => {
+            tblRank.innerHTML += `<option value="${r}">${r}</option>`;
+        });
+        tblRank.addEventListener('change', (e) => {
+            tableFilters.rank = e.target.value;
+            renderTeachingTable();
+        });
+    }
+
+    // البحث
     document.getElementById('teachingSearch')?.addEventListener('input', (e) => {
-        teachingFilters.search = e.target.value.trim();
+        tableFilters.search = e.target.value.trim();
         renderTeachingTable();
     });
 
+    // الترتيب
     document.getElementById('teachingSortFilter')?.addEventListener('change', (e) => {
-        teachingFilters.sort = e.target.value;
+        tableFilters.sort = e.target.value;
         renderTeachingTable();
     });
 
+    // تصدير
     document.getElementById('exportAllTeaching')?.addEventListener('click', exportAllTeachingCSV);
 
-    // === البحث بالمقرر ===
+    // البحث بالمقرر
     initCourseSearch();
 
-    // === Modal ===
+    // Modal
     document.getElementById('teachingModalClose')?.addEventListener('click', closeTeachingModal);
     document.getElementById('teachingPrintBtn')?.addEventListener('click', printTeachingReport);
     document.getElementById('teachingModal')?.addEventListener('click', (e) => {
@@ -195,7 +245,6 @@ function selectCourse(courseCode) {
 
     if (input) input.value = `${course.name} (${course.code})`;
 
-    // تجميع النتائج حسب السنة
     const yearGroups = {};
     course.sections.forEach(s => {
         if (!yearGroups[s.year]) yearGroups[s.year] = [];
@@ -262,39 +311,80 @@ function clearCourseSearch() {
 }
 
 // ========================================
-// حساب الإحصائيات
+// الفلترة: نظامان مستقلان
 // ========================================
-function getFilteredRecords() {
+
+// 1. فلترة الإحصائيات والمخططات (من الفلتر العلوي الثابت)
+function getOverviewFilteredRecords() {
     if (!teachingData) return [];
     let records = teachingData.records;
 
-    if (teachingFilters.year !== 'all') {
-        const year = parseInt(teachingFilters.year);
-        records = records.filter(r => r.y === year);
+    // قراءة السنة من الفلتر العلوي الثابت
+    const headerYear = document.getElementById('yearSelect')?.value;
+    if (headerYear && headerYear !== 'all') {
+        const year = parseInt(headerYear);
+        if (!isNaN(year)) {
+            records = records.filter(r => r.y === year);
+        }
     }
 
-    if (teachingFilters.department !== 'all') {
+    // قراءة القسم من الفلتر العلوي الثابت
+    const headerDept = document.getElementById('deptSelect')?.value;
+    if (headerDept && headerDept !== 'all') {
         records = records.filter(r => {
             const fi = teachingData.faculty_index[r.fid];
-            return fi && fi.d === teachingFilters.department;
+            return fi && fi.d === headerDept;
         });
-    }
-
-    // فلتر طريقة التدريس
-    if (teachingFilters.mode !== 'all') {
-        records = records.map(r => ({
-            ...r,
-            cs: r.cs.filter(c => {
-                if (teachingFilters.mode === 'حضوري') return c.m === 'حضوري' || c.m === 'غير محدد';
-                if (teachingFilters.mode === 'عن بعد') return c.m === 'عن بعد';
-                return true;
-            })
-        })).filter(r => r.cs.length > 0);
     }
 
     return records;
 }
 
+// 2. فلترة الجدول التفصيلي (مستقلة تماماً)
+function getTableFilteredRecords() {
+    if (!teachingData) return [];
+    let records = teachingData.records;
+
+    // فلتر السنة
+    if (tableFilters.year !== 'all') {
+        const year = parseInt(tableFilters.year);
+        records = records.filter(r => r.y === year);
+    }
+
+    // فلتر القسم
+    if (tableFilters.department !== 'all') {
+        records = records.filter(r => {
+            const fi = teachingData.faculty_index[r.fid];
+            return fi && fi.d === tableFilters.department;
+        });
+    }
+
+    // فلتر طريقة التدريس
+    if (tableFilters.mode !== 'all') {
+        records = records.map(r => ({
+            ...r,
+            cs: r.cs.filter(c => {
+                if (tableFilters.mode === 'حضوري') return c.m === 'حضوري' || c.m === 'غير محدد';
+                if (tableFilters.mode === 'عن بعد') return c.m === 'عن بعد';
+                return true;
+            })
+        })).filter(r => r.cs.length > 0);
+    }
+
+    // فلتر المرتبة
+    if (tableFilters.rank !== 'all') {
+        records = records.filter(r => {
+            const fi = teachingData.faculty_index[r.fid];
+            return fi && fi.r === tableFilters.rank;
+        });
+    }
+
+    return records;
+}
+
+// ========================================
+// حساب الإحصائيات
+// ========================================
 function computeTeachingStats(records) {
     let totalCourses = 0, totalStudents = 0, inPerson = 0, remote = 0, hybrid = 0;
 
@@ -305,7 +395,7 @@ function computeTeachingStats(records) {
             if (c.m === 'حضوري') inPerson++;
             else if (c.m === 'عن بعد') remote++;
             else if (c.m === 'مدمج') hybrid++;
-            else inPerson++; // default
+            else inPerson++;
         });
     });
 
@@ -359,9 +449,7 @@ function animateNumber(elementId, targetValue) {
     const el = document.getElementById(elementId);
     if (!el) return;
 
-    const start = parseInt(el.textContent.replace(/,/g, '').replace(/[٬٫٠-٩]/g, function(c) {
-        return '٠١٢٣٤٥٦٧٨٩'.indexOf(c) >= 0 ? '٠١٢٣٤٥٦٧٨٩'.indexOf(c) : c;
-    })) || 0;
+    const current = parseInt(el.textContent.replace(/[^\d]/g, '')) || 0;
     const duration = 800;
     const startTime = performance.now();
 
@@ -369,8 +457,8 @@ function animateNumber(elementId, targetValue) {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const eased = 1 - Math.pow(1 - progress, 3);
-        const current = Math.round(start + (targetValue - start) * eased);
-        el.textContent = current.toLocaleString('ar-SA');
+        const val = Math.round(current + (targetValue - current) * eased);
+        el.textContent = val.toLocaleString('ar-SA');
         if (progress < 1) requestAnimationFrame(update);
     }
 
@@ -378,22 +466,20 @@ function animateNumber(elementId, targetValue) {
 }
 
 // ========================================
-// الرسم الرئيسي
+// رسم الإحصائيات والمخططات (يتأثر بالفلتر العلوي الثابت فقط)
 // ========================================
-function renderTeaching() {
+function renderTeachingOverview() {
     if (!teachingData) return;
 
-    const records = getFilteredRecords();
+    const records = getOverviewFilteredRecords();
     const stats = computeTeachingStats(records);
 
-    // تحديث البطاقات
     animateNumber('tTotalCourses', stats.totalCourses);
     animateNumber('tTotalStudents', stats.totalStudents);
     animateNumber('tInPerson', stats.inPerson);
     animateNumber('tRemote', stats.remote);
 
     renderTeachingCharts(records);
-    renderTeachingTable();
 }
 
 // ========================================
@@ -437,46 +523,25 @@ function renderTrendChart(records) {
                     data: coursesData,
                     borderColor: '#d4af37',
                     backgroundColor: 'rgba(212,175,55,0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    yAxisID: 'y'
+                    fill: true, tension: 0.4, yAxisID: 'y'
                 },
                 {
                     label: 'عدد الطلاب',
                     data: studentsData,
                     borderColor: '#4ecdc4',
                     backgroundColor: 'rgba(78,205,196,0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    yAxisID: 'y1'
+                    fill: true, tension: 0.4, yAxisID: 'y1'
                 }
             ]
         },
         options: {
             responsive: true,
             interaction: { mode: 'index', intersect: false },
-            plugins: {
-                legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo' } } }
-            },
+            plugins: { legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo' } } } },
             scales: {
-                y: {
-                    type: 'linear',
-                    position: 'right',
-                    title: { display: true, text: 'شعب المقررات', color: '#d4af37', font: { family: 'Cairo' } },
-                    ticks: { color: '#d4af37' },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
-                },
-                y1: {
-                    type: 'linear',
-                    position: 'left',
-                    title: { display: true, text: 'الطلاب', color: '#4ecdc4', font: { family: 'Cairo' } },
-                    ticks: { color: '#4ecdc4' },
-                    grid: { drawOnChartArea: false }
-                },
-                x: {
-                    ticks: { color: '#e0e0e0', font: { family: 'Cairo' } },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
-                }
+                y: { type: 'linear', position: 'right', title: { display: true, text: 'شعب المقررات', color: '#d4af37', font: { family: 'Cairo' } }, ticks: { color: '#d4af37' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y1: { type: 'linear', position: 'left', title: { display: true, text: 'الطلاب', color: '#4ecdc4', font: { family: 'Cairo' } }, ticks: { color: '#4ecdc4' }, grid: { drawOnChartArea: false } },
+                x: { ticks: { color: '#e0e0e0', font: { family: 'Cairo' } }, grid: { color: 'rgba(255,255,255,0.05)' } }
             }
         }
     });
@@ -485,38 +550,19 @@ function renderTrendChart(records) {
 function renderModeChart(records) {
     const canvas = document.getElementById('teachingModeChart');
     if (!canvas) return;
-
     const stats = computeTeachingStats(records);
-
     if (teachingCharts.mode) teachingCharts.mode.destroy();
-
     teachingCharts.mode = new Chart(canvas, {
         type: 'doughnut',
         data: {
             labels: ['حضوري', 'عن بعد', 'مدمج'],
-            datasets: [{
-                data: [stats.inPerson, stats.remote, stats.hybrid],
-                backgroundColor: ['#4ecdc4', '#e74c3c', '#f39c12'],
-                borderColor: '#1a3a5c',
-                borderWidth: 2
-            }]
+            datasets: [{ data: [stats.inPerson, stats.remote, stats.hybrid], backgroundColor: ['#4ecdc4', '#e74c3c', '#f39c12'], borderColor: '#1a3a5c', borderWidth: 2 }]
         },
         options: {
             responsive: true,
             plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 13 }, padding: 20 }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(ctx) {
-                            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                            const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
-                            return `${ctx.label}: ${ctx.raw.toLocaleString('ar-SA')} (${pct}%)`;
-                        }
-                    }
-                }
+                legend: { position: 'bottom', labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 13 }, padding: 20 } },
+                tooltip: { callbacks: { label: function(ctx) { const total = ctx.dataset.data.reduce((a, b) => a + b, 0); const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0; return `${ctx.label}: ${ctx.raw.toLocaleString('ar-SA')} (${pct}%)`; } } }
             }
         }
     });
@@ -525,52 +571,25 @@ function renderModeChart(records) {
 function renderDeptChart(records) {
     const canvas = document.getElementById('teachingDeptChart');
     if (!canvas) return;
-
     const deptData = {};
     records.forEach(r => {
         const fi = teachingData.faculty_index[r.fid];
         const dept = fi ? fi.d : 'غير محدد';
-        if (!deptData[dept]) deptData[dept] = { courses: 0, students: 0 };
-        r.cs.forEach(c => {
-            deptData[dept].courses++;
-            deptData[dept].students += c.e || 0;
-        });
+        if (!deptData[dept]) deptData[dept] = { courses: 0 };
+        r.cs.forEach(() => { deptData[dept].courses++; });
     });
-
     const depts = Object.keys(deptData);
     const colors = ['#d4af37', '#4ecdc4', '#e74c3c', '#9b59b6', '#3498db'];
-
     if (teachingCharts.dept) teachingCharts.dept.destroy();
-
     teachingCharts.dept = new Chart(canvas, {
         type: 'bar',
-        data: {
-            labels: depts,
-            datasets: [
-                {
-                    label: 'شعب المقررات',
-                    data: depts.map(d => deptData[d].courses),
-                    backgroundColor: colors.map(c => c + '99'),
-                    borderColor: colors,
-                    borderWidth: 1
-                }
-            ]
-        },
+        data: { labels: depts, datasets: [{ label: 'شعب المقررات', data: depts.map(d => deptData[d].courses), backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 1 }] },
         options: {
-            responsive: true,
-            indexAxis: 'y',
-            plugins: {
-                legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo' } } }
-            },
+            responsive: true, indexAxis: 'y',
+            plugins: { legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo' } } } },
             scales: {
-                x: {
-                    ticks: { color: '#e0e0e0' },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
-                },
-                y: {
-                    ticks: { color: '#e0e0e0', font: { family: 'Cairo' } },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
-                }
+                x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: '#e0e0e0', font: { family: 'Cairo' } }, grid: { color: 'rgba(255,255,255,0.05)' } }
             }
         }
     });
@@ -579,80 +598,49 @@ function renderDeptChart(records) {
 function renderTopChart(records) {
     const canvas = document.getElementById('teachingTopChart');
     if (!canvas) return;
-
     const facultySummary = computeFacultySummary(records);
-    const top10 = facultySummary
-        .sort((a, b) => b.totalCourses - a.totalCourses)
-        .slice(0, 10);
-
+    const top10 = facultySummary.sort((a, b) => b.totalCourses - a.totalCourses).slice(0, 10);
     if (teachingCharts.top) teachingCharts.top.destroy();
-
     teachingCharts.top = new Chart(canvas, {
         type: 'bar',
         data: {
-            labels: top10.map(f => {
-                const parts = f.name.split(' ');
-                return parts.slice(0, 3).join(' ');
-            }),
-            datasets: [{
-                label: 'عدد شعب المقررات',
-                data: top10.map(f => f.totalCourses),
-                backgroundColor: 'rgba(212,175,55,0.7)',
-                borderColor: '#d4af37',
-                borderWidth: 1
-            }]
+            labels: top10.map(f => { const parts = f.name.split(' '); return parts.slice(0, 3).join(' '); }),
+            datasets: [{ label: 'عدد شعب المقررات', data: top10.map(f => f.totalCourses), backgroundColor: 'rgba(212,175,55,0.7)', borderColor: '#d4af37', borderWidth: 1 }]
         },
         options: {
-            responsive: true,
-            indexAxis: 'y',
-            plugins: {
-                legend: { display: false }
-            },
+            responsive: true, indexAxis: 'y',
+            plugins: { legend: { display: false } },
             scales: {
-                x: {
-                    ticks: { color: '#e0e0e0' },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
-                },
-                y: {
-                    ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
-                }
+                x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
             }
         }
     });
 }
 
 // ========================================
-// جدول الأعضاء
+// جدول الأعضاء (يتأثر بفلاتر الجدول المستقلة فقط)
 // ========================================
 function renderTeachingTable() {
     if (!teachingData) return;
 
-    const records = getFilteredRecords();
+    const records = getTableFilteredRecords();
     let facultySummary = computeFacultySummary(records);
 
-    // فلتر البحث (خاص بالجدول)
-    if (teachingFilters.search) {
-        const q = teachingFilters.search.toLowerCase();
+    // فلتر البحث بالاسم
+    if (tableFilters.search) {
+        const q = tableFilters.search.toLowerCase();
         facultySummary = facultySummary.filter(f =>
             f.name.toLowerCase().includes(q) || f.id.includes(q)
         );
     }
 
     // الترتيب
-    switch (teachingFilters.sort) {
-        case 'courses':
-            facultySummary.sort((a, b) => b.totalCourses - a.totalCourses);
-            break;
-        case 'students':
-            facultySummary.sort((a, b) => b.totalStudents - a.totalStudents);
-            break;
-        case 'hours':
-            facultySummary.sort((a, b) => b.totalHours - a.totalHours);
-            break;
-        case 'name':
-            facultySummary.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-            break;
+    switch (tableFilters.sort) {
+        case 'courses': facultySummary.sort((a, b) => b.totalCourses - a.totalCourses); break;
+        case 'students': facultySummary.sort((a, b) => b.totalStudents - a.totalStudents); break;
+        case 'hours': facultySummary.sort((a, b) => b.totalHours - a.totalHours); break;
+        case 'name': facultySummary.sort((a, b) => a.name.localeCompare(b.name, 'ar')); break;
     }
 
     const tbody = document.getElementById('teachingTableBody');
@@ -717,33 +705,15 @@ function openTeachingModal(facultyId) {
     const fi = teachingData.faculty_index[facultyId];
     if (!fi) return;
 
+    // عرض كل بيانات العضو (بدون فلاتر) حتى تكون النافذة شاملة
     let records = teachingData.records.filter(r => r.fid === facultyId);
 
-    if (teachingFilters.year !== 'all') {
-        const year = parseInt(teachingFilters.year);
-        records = records.filter(r => r.y === year);
-    }
-
-    // تطبيق فلتر طريقة التدريس في النافذة أيضاً
-    if (teachingFilters.mode !== 'all') {
-        records = records.map(r => ({
-            ...r,
-            cs: r.cs.filter(c => {
-                if (teachingFilters.mode === 'حضوري') return c.m === 'حضوري' || c.m === 'غير محدد';
-                if (teachingFilters.mode === 'عن بعد') return c.m === 'عن بعد';
-                return true;
-            })
-        })).filter(r => r.cs.length > 0);
-    }
-
-    // تجميع حسب السنة
     const yearGroups = {};
     records.forEach(r => {
         if (!yearGroups[r.y]) yearGroups[r.y] = [];
         yearGroups[r.y].push(r);
     });
 
-    // إحصائيات إجمالية
     let totalCourses = 0, totalStudents = 0, totalHours = 0, inPerson = 0, remote = 0;
     records.forEach(r => {
         r.cs.forEach(c => {
@@ -778,12 +748,8 @@ function openTeachingModal(facultyId) {
         </div>
 
         <div class="t-modal-chart-row">
-            <div class="t-modal-chart-box">
-                <canvas id="memberTrendChart"></canvas>
-            </div>
-            <div class="t-modal-chart-box">
-                <canvas id="memberModeChart"></canvas>
-            </div>
+            <div class="t-modal-chart-box"><canvas id="memberTrendChart"></canvas></div>
+            <div class="t-modal-chart-box"><canvas id="memberModeChart"></canvas></div>
         </div>
 
         <div class="t-modal-years">
@@ -792,13 +758,8 @@ function openTeachingModal(facultyId) {
                 let yc = 0, ys = 0;
                 const allCourses = [];
                 yearRecords.forEach(r => {
-                    r.cs.forEach(c => {
-                        yc++;
-                        ys += c.e || 0;
-                        allCourses.push({ ...c, semester: r.sn });
-                    });
+                    r.cs.forEach(c => { yc++; ys += c.e || 0; allCourses.push({ ...c, semester: r.sn }); });
                 });
-
                 return `
                     <div class="t-year-section">
                         <div class="t-year-header" onclick="this.parentElement.classList.toggle('collapsed')">
@@ -808,30 +769,14 @@ function openTeachingModal(facultyId) {
                         </div>
                         <div class="t-year-body">
                             <table class="t-courses-table">
-                                <thead>
-                                    <tr>
-                                        <th>الفصل</th>
-                                        <th>المقرر</th>
-                                        <th>الرمز</th>
-                                        <th>النوع</th>
-                                        <th>الدرجة</th>
-                                        <th>الطريقة</th>
-                                        <th>المقر</th>
-                                        <th>الساعات</th>
-                                        <th>طلاب الشعبة</th>
-                                    </tr>
-                                </thead>
+                                <thead><tr><th>الفصل</th><th>المقرر</th><th>الرمز</th><th>النوع</th><th>الدرجة</th><th>الطريقة</th><th>المقر</th><th>الساعات</th><th>طلاب الشعبة</th></tr></thead>
                                 <tbody>
                                     ${allCourses.map(c => `
                                         <tr>
-                                            <td>${c.semester}</td>
-                                            <td>${c.cn}</td>
-                                            <td class="code-cell">${c.cc}</td>
-                                            <td>${c.a || '-'}</td>
-                                            <td>${c.dg || '-'}</td>
+                                            <td>${c.semester}</td><td>${c.cn}</td><td class="code-cell">${c.cc}</td>
+                                            <td>${c.a || '-'}</td><td>${c.dg || '-'}</td>
                                             <td><span class="mode-badge-sm mode-${c.m === 'عن بعد' ? 'remote' : 'inperson'}">${c.m}</span></td>
-                                            <td>${c.l || '-'}</td>
-                                            <td>${c.h || 0}</td>
+                                            <td>${c.l || '-'}</td><td>${c.h || 0}</td>
                                             <td><strong>${(c.e || 0).toLocaleString('ar-SA')}</strong></td>
                                         </tr>
                                     `).join('')}
@@ -851,7 +796,6 @@ function openTeachingModal(facultyId) {
         </div>
     `;
 
-    // رسم المخططات في Modal
     renderMemberTrendChart(yearGroups);
     renderMemberModeChart(records);
 
@@ -867,46 +811,20 @@ function closeTeachingModal() {
 function renderMemberTrendChart(yearGroups) {
     const canvas = document.getElementById('memberTrendChart');
     if (!canvas) return;
-
     const years = Object.keys(yearGroups).sort();
-    const coursesData = [];
-    const studentsData = [];
-
+    const coursesData = [], studentsData = [];
     years.forEach(y => {
         let c = 0, s = 0;
-        yearGroups[y].forEach(r => {
-            r.cs.forEach(course => {
-                c++;
-                s += course.e || 0;
-            });
-        });
-        coursesData.push(c);
-        studentsData.push(s);
+        yearGroups[y].forEach(r => { r.cs.forEach(course => { c++; s += course.e || 0; }); });
+        coursesData.push(c); studentsData.push(s);
     });
-
     new Chart(canvas, {
         type: 'bar',
         data: {
             labels: years.map(y => y + 'هـ'),
             datasets: [
-                {
-                    label: 'شعب المقررات',
-                    data: coursesData,
-                    backgroundColor: 'rgba(212,175,55,0.7)',
-                    borderColor: '#d4af37',
-                    borderWidth: 1,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'الطلاب',
-                    data: studentsData,
-                    type: 'line',
-                    borderColor: '#4ecdc4',
-                    backgroundColor: 'rgba(78,205,196,0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    yAxisID: 'y1'
-                }
+                { label: 'شعب المقررات', data: coursesData, backgroundColor: 'rgba(212,175,55,0.7)', borderColor: '#d4af37', borderWidth: 1, yAxisID: 'y' },
+                { label: 'الطلاب', data: studentsData, type: 'line', borderColor: '#4ecdc4', backgroundColor: 'rgba(78,205,196,0.1)', fill: true, tension: 0.4, yAxisID: 'y1' }
             ]
         },
         options: {
@@ -927,35 +845,12 @@ function renderMemberTrendChart(yearGroups) {
 function renderMemberModeChart(records) {
     const canvas = document.getElementById('memberModeChart');
     if (!canvas) return;
-
     let ip = 0, rm = 0, hy = 0;
-    records.forEach(r => {
-        r.cs.forEach(c => {
-            if (c.m === 'حضوري' || c.m === 'غير محدد') ip++;
-            else if (c.m === 'عن بعد') rm++;
-            else if (c.m === 'مدمج') hy++;
-            else ip++;
-        });
-    });
-
+    records.forEach(r => { r.cs.forEach(c => { if (c.m === 'حضوري' || c.m === 'غير محدد') ip++; else if (c.m === 'عن بعد') rm++; else if (c.m === 'مدمج') hy++; else ip++; }); });
     new Chart(canvas, {
         type: 'doughnut',
-        data: {
-            labels: ['حضوري', 'عن بعد', 'مدمج'],
-            datasets: [{
-                data: [ip, rm, hy],
-                backgroundColor: ['#4ecdc4', '#e74c3c', '#f39c12'],
-                borderColor: '#1a3a5c',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom', labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } } },
-                title: { display: true, text: 'طريقة التدريس', color: '#e0e0e0', font: { family: 'Cairo', size: 13 } }
-            }
-        }
+        data: { labels: ['حضوري', 'عن بعد', 'مدمج'], datasets: [{ data: [ip, rm, hy], backgroundColor: ['#4ecdc4', '#e74c3c', '#f39c12'], borderColor: '#1a3a5c', borderWidth: 2 }] },
+        options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } } }, title: { display: true, text: 'طريقة التدريس', color: '#e0e0e0', font: { family: 'Cairo', size: 13 } } } }
     });
 }
 
@@ -964,67 +859,38 @@ function renderMemberModeChart(records) {
 // ========================================
 function exportFacultyReport(facultyId) {
     if (!teachingData) return;
-
     const fi = teachingData.faculty_index[facultyId];
     if (!fi) return;
-
     let records = teachingData.records.filter(r => r.fid === facultyId);
-
-    if (teachingFilters.year !== 'all') {
-        records = records.filter(r => r.y === parseInt(teachingFilters.year));
-    }
-
     const BOM = '\uFEFF';
-    let csv = BOM;
-    csv += 'تقرير النشاط التدريسي\n';
-    csv += `العضو: ${fi.n}\n`;
-    csv += `الرقم الوظيفي: ${facultyId}\n`;
-    csv += `القسم: ${fi.d}\n`;
-    csv += `المرتبة: ${fi.r}\n\n`;
+    let csv = BOM + 'تقرير النشاط التدريسي\n';
+    csv += `العضو: ${fi.n}\nالرقم الوظيفي: ${facultyId}\nالقسم: ${fi.d}\nالمرتبة: ${fi.r}\n\n`;
     csv += 'السنة,الفصل,رمز المقرر,اسم المقرر,النوع,الدرجة,طريقة التدريس,المقر,الساعات الأسبوعية,طلاب الشعبة\n';
-
-    records.forEach(r => {
-        r.cs.forEach(c => {
-            csv += `${r.y},${r.sn},${c.cc},"${c.cn}",${c.a || ''},${c.dg || ''},${c.m},${c.l || ''},${c.h || 0},${c.e || 0}\n`;
-        });
-    });
-
+    records.forEach(r => { r.cs.forEach(c => { csv += `${r.y},${r.sn},${c.cc},"${c.cn}",${c.a || ''},${c.dg || ''},${c.m},${c.l || ''},${c.h || 0},${c.e || 0}\n`; }); });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const a = document.createElement('a'); a.href = url;
     a.download = `تقرير_تدريسي_${fi.n.replace(/\s+/g, '_')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    a.click(); URL.revokeObjectURL(url);
 }
 
 function exportAllTeachingCSV() {
     if (!teachingData) return;
-
-    const records = getFilteredRecords();
+    const records = getTableFilteredRecords();
     const BOM = '\uFEFF';
-    let csv = BOM;
-    csv += 'الرقم الوظيفي,الاسم,القسم,المرتبة,السنة,الفصل,رمز المقرر,اسم المقرر,النوع,الدرجة,طريقة التدريس,المقر,الساعات الأسبوعية,طلاب الشعبة\n';
-
+    let csv = BOM + 'الرقم الوظيفي,الاسم,القسم,المرتبة,السنة,الفصل,رمز المقرر,اسم المقرر,النوع,الدرجة,طريقة التدريس,المقر,الساعات الأسبوعية,طلاب الشعبة\n';
     records.forEach(r => {
         const fi = teachingData.faculty_index[r.fid] || {};
-        r.cs.forEach(c => {
-            csv += `${r.fid},"${fi.n || ''}",${fi.d || ''},${fi.r || ''},${r.y},${r.sn},${c.cc},"${c.cn}",${c.a || ''},${c.dg || ''},${c.m},${c.l || ''},${c.h || 0},${c.e || 0}\n`;
-        });
+        r.cs.forEach(c => { csv += `${r.fid},"${fi.n || ''}",${fi.d || ''},${fi.r || ''},${r.y},${r.sn},${c.cc},"${c.cn}",${c.a || ''},${c.dg || ''},${c.m},${c.l || ''},${c.h || 0},${c.e || 0}\n`; });
     });
-
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `النشاط_التدريسي_${teachingFilters.year === 'all' ? 'الكل' : teachingFilters.year}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `النشاط_التدريسي_${tableFilters.year === 'all' ? 'الكل' : tableFilters.year}.csv`;
+    a.click(); URL.revokeObjectURL(url);
 }
 
-function printTeachingReport() {
-    window.print();
-}
+function printTeachingReport() { window.print(); }
 
 // ========================================
 // التحميل عند بدء التشغيل

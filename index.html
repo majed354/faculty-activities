@@ -293,22 +293,8 @@
 
         <!-- ===== النشاط التدريسي ===== -->
         <section id="teaching" class="tab-content">
-            <!-- شريط الفلاتر الإجمالي -->
             <div class="section-header">
                 <h2>🏫 النشاط التدريسي</h2>
-                <div class="filters teaching-global-filters">
-                    <select id="teachingYearFilter">
-                        <option value="all">جميع السنوات</option>
-                    </select>
-                    <select id="teachingDeptFilter">
-                        <option value="all">جميع الأقسام</option>
-                    </select>
-                    <select id="teachingModeFilter">
-                        <option value="all">جميع طرق التدريس</option>
-                        <option value="حضوري">حضوري</option>
-                        <option value="عن بعد">عن بعد</option>
-                    </select>
-                </div>
             </div>
 
             <!-- إحصائيات سريعة للنشاط التدريسي -->
@@ -383,6 +369,20 @@
                     <h3>📋 تفاصيل النشاط التدريسي للأعضاء</h3>
                     <div class="teaching-table-filters">
                         <input type="text" id="teachingSearch" placeholder="🔍 بحث بالاسم أو الرقم الوظيفي...">
+                        <select id="tblYearFilter">
+                            <option value="all">جميع السنوات</option>
+                        </select>
+                        <select id="tblDeptFilter">
+                            <option value="all">جميع الأقسام</option>
+                        </select>
+                        <select id="tblModeFilter">
+                            <option value="all">جميع طرق التدريس</option>
+                            <option value="حضوري">حضوري</option>
+                            <option value="عن بعد">عن بعد</option>
+                        </select>
+                        <select id="tblRankFilter">
+                            <option value="all">جميع المراتب</option>
+                        </select>
                         <select id="teachingSortFilter">
                             <option value="courses">ترتيب: عدد شعب المقررات</option>
                             <option value="students">ترتيب: عدد الطلاب</option>
