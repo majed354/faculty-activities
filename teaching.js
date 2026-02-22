@@ -27,21 +27,47 @@ let tableFilters = {
 async function loadTeachingData() {
     if (teachingData || teachingDataLoading) return;
     teachingDataLoading = true;
+    showTeachingLoader(true);
     try {
+        const t0 = performance.now();
         const response = await fetch(`${DATA_BASE_URL}/teaching_data.json`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         teachingData = await response.json();
-        console.log('🏫 تم تحميل بيانات النشاط التدريسي:', teachingData.records.length, 'سجل');
+        console.log(`🏫 تحميل JSON: ${Math.round(performance.now() - t0)}ms`);
+
         buildCoursesMap();
         initTeachingFilters();
-        renderTeachingOverview();
+
+        // المرحلة 1: عرض الجدول فوراً (الأهم للمستخدم)
         renderTeachingTable();
         teachingInitialized = true;
+
+        // المرحلة 2: تأجيل المخططات للإطار التالي حتى يظهر الجدول بدون تجميد
+        requestAnimationFrame(() => {
+            renderTeachingOverview();
+            chartsVisible = true;
+            showTeachingLoader(false);
+            console.log(`🏫 اكتمال التحميل: ${Math.round(performance.now() - t0)}ms`);
+        });
     } catch (error) {
         console.warn('⚠️ تعذر تحميل بيانات النشاط التدريسي:', error.message);
+        showTeachingLoader(false);
     } finally {
         teachingDataLoading = false;
     }
+}
+
+// مؤشر التحميل
+function showTeachingLoader(show) {
+    let loader = document.getElementById('teachingLoader');
+    if (show && !loader) {
+        loader = document.createElement('div');
+        loader.id = 'teachingLoader';
+        loader.innerHTML = '<div class="t-loader-spinner"></div><span>جاري تحميل بيانات النشاط التدريسي...</span>';
+        const teaching = document.getElementById('teaching');
+        if (teaching) teaching.insertBefore(loader, teaching.children[1]);
+    }
+    if (loader) loader.style.display = show ? 'flex' : 'none';
 }
 
 // تحميل بيانات التدريس عند الطلب فقط
@@ -509,10 +535,14 @@ function renderTeachingOverview() {
 // المخططات البيانية
 // ========================================
 function renderTeachingCharts(records) {
+    // رسم المخططات بشكل تدريجي لمنع تجميد الصفحة
     renderTrendChart(records);
     renderModeChart(records);
-    renderDeptChart(records);
-    renderTopChart(records);
+    // تأجيل المخططين الأخيرين للإطار التالي
+    requestAnimationFrame(() => {
+        renderDeptChart(records);
+        renderTopChart(records);
+    });
 }
 
 function renderTrendChart(records) {
@@ -558,7 +588,7 @@ function renderTrendChart(records) {
             ]
         },
         options: {
-            responsive: true,
+            responsive: true, resizeDelay: 300, animation: { duration: 0 },
             interaction: { mode: 'index', intersect: false },
             plugins: { legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo' } } } },
             scales: {
@@ -582,7 +612,7 @@ function renderModeChart(records) {
             datasets: [{ data: [stats.inPerson, stats.remote, stats.hybrid], backgroundColor: ['#4ecdc4', '#e74c3c', '#f39c12'], borderColor: '#1a3a5c', borderWidth: 2 }]
         },
         options: {
-            responsive: true,
+            responsive: true, resizeDelay: 300, animation: { duration: 0 },
             plugins: {
                 legend: { position: 'bottom', labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 13 }, padding: 20 } },
                 tooltip: { callbacks: { label: function(ctx) { const total = ctx.dataset.data.reduce((a, b) => a + b, 0); const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0; return `${ctx.label}: ${ctx.raw.toLocaleString('ar-SA')} (${pct}%)`; } } }
@@ -608,7 +638,7 @@ function renderDeptChart(records) {
         type: 'bar',
         data: { labels: depts, datasets: [{ label: 'شعب المقررات', data: depts.map(d => deptData[d].courses), backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 1 }] },
         options: {
-            responsive: true, indexAxis: 'y',
+            responsive: true, resizeDelay: 300, animation: { duration: 0 }, indexAxis: 'y',
             plugins: { legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo' } } } },
             scales: {
                 x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
@@ -631,7 +661,7 @@ function renderTopChart(records) {
             datasets: [{ label: 'عدد شعب المقررات', data: top10.map(f => f.totalCourses), backgroundColor: 'rgba(212,175,55,0.7)', borderColor: '#d4af37', borderWidth: 1 }]
         },
         options: {
-            responsive: true, indexAxis: 'y',
+            responsive: true, resizeDelay: 300, animation: { duration: 0 }, indexAxis: 'y',
             plugins: { legend: { display: false } },
             scales: {
                 x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
@@ -824,11 +854,14 @@ function openTeachingModal(facultyId) {
         </div>
     `;
 
-    renderMemberTrendChart(yearGroups);
-    renderMemberModeChart(records);
-
+    // عرض النافذة فوراً ثم رسم المخططات في الإطار التالي
     document.getElementById('teachingModal').classList.add('active');
     document.body.style.overflow = 'hidden';
+
+    requestAnimationFrame(() => {
+        renderMemberTrendChart(yearGroups);
+        renderMemberModeChart(records);
+    });
 }
 
 function closeTeachingModal() {
@@ -856,7 +889,7 @@ function renderMemberTrendChart(yearGroups) {
             ]
         },
         options: {
-            responsive: true,
+            responsive: true, resizeDelay: 300, animation: { duration: 0 },
             plugins: {
                 legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } } },
                 title: { display: true, text: 'شعب المقررات والطلاب عبر السنوات', color: '#e0e0e0', font: { family: 'Cairo', size: 13 } }
@@ -878,7 +911,7 @@ function renderMemberModeChart(records) {
     new Chart(canvas, {
         type: 'doughnut',
         data: { labels: ['حضوري', 'عن بعد', 'مدمج'], datasets: [{ data: [ip, rm, hy], backgroundColor: ['#4ecdc4', '#e74c3c', '#f39c12'], borderColor: '#1a3a5c', borderWidth: 2 }] },
-        options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } } }, title: { display: true, text: 'طريقة التدريس', color: '#e0e0e0', font: { family: 'Cairo', size: 13 } } } }
+        options: { responsive: true, resizeDelay: 300, animation: { duration: 0 }, plugins: { legend: { position: 'bottom', labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } } }, title: { display: true, text: 'طريقة التدريس', color: '#e0e0e0', font: { family: 'Cairo', size: 13 } } } }
     });
 }
 
@@ -921,14 +954,29 @@ function exportAllTeachingCSV() {
 function printTeachingReport() { window.print(); }
 
 // ========================================
-// التحميل عند الطلب (lazy loading)
+// التحميل عند الطلب (lazy loading) + إدارة المخططات
 // ========================================
+let chartsVisible = false;
+
 document.addEventListener('DOMContentLoaded', () => {
-    // مراقبة تبويب التدريس - تحميل البيانات فقط عند فتحه
+    // مراقبة تبويب التدريس
     const observer = new MutationObserver(() => {
         const teachingTab = document.getElementById('teaching');
-        if (teachingTab && teachingTab.classList.contains('active') && !teachingInitialized) {
+        if (!teachingTab) return;
+
+        const isActive = teachingTab.classList.contains('active');
+
+        if (isActive && !teachingInitialized) {
             ensureTeachingLoaded();
+        } else if (isActive && teachingInitialized && !chartsVisible) {
+            // عند العودة للتبويب: إعادة رسم المخططات بتأخير لمنع التجميد
+            chartsVisible = true;
+            requestAnimationFrame(() => renderTeachingOverview());
+        } else if (!isActive && chartsVisible) {
+            // عند مغادرة التبويب: تدمير المخططات لتوفير الذاكرة ومنع resize المكلف
+            chartsVisible = false;
+            Object.values(teachingCharts).forEach(c => { try { c.destroy(); } catch(e) {} });
+            teachingCharts = {};
         }
     });
 
@@ -937,10 +985,15 @@ document.addEventListener('DOMContentLoaded', () => {
         observer.observe(mainContent, { subtree: true, attributes: true, attributeFilter: ['class'] });
     }
 
-    // أيضاً نستمع للنقر على زر تبويب التدريس مباشرة
+    // النقر على زر التبويب مباشرة
     document.querySelectorAll('[data-tab="teaching"]').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (!teachingInitialized) ensureTeachingLoaded();
+            if (!teachingInitialized) {
+                ensureTeachingLoaded();
+            } else if (!chartsVisible) {
+                chartsVisible = true;
+                requestAnimationFrame(() => renderTeachingOverview());
+            }
         });
     });
 });

@@ -2,6 +2,26 @@
    النشاط التدريسي - Teaching Activity Styles
 ======================================== */
 
+/* ===== مؤشر التحميل ===== */
+#teachingLoader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 20px;
+    color: #d4af37;
+    font-family: 'Cairo', sans-serif;
+    font-size: 15px;
+}
+.t-loader-spinner {
+    width: 28px; height: 28px;
+    border: 3px solid rgba(212,175,55,0.2);
+    border-top-color: #d4af37;
+    border-radius: 50%;
+    animation: t-spin 0.7s linear infinite;
+}
+@keyframes t-spin { to { transform: rotate(360deg); } }
+
 /* ===== فلاتر الجدول التفصيلي ===== */
 .teaching-table-filters {
     display: flex;
