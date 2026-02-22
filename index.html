@@ -22,6 +22,42 @@
     <link rel="stylesheet" href="teaching-styles.css">
 </head>
 <body>
+    <!-- ===== شاشة تسجيل الدخول ===== -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="animated-bg">
+            <div class="floating-shape shape-1"></div>
+            <div class="floating-shape shape-2"></div>
+            <div class="floating-shape shape-3"></div>
+            <div class="geometric-pattern"></div>
+        </div>
+        <div class="login-box">
+            <div class="login-logo">
+                <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="30" cy="30" r="28" stroke="currentColor" stroke-width="2"/>
+                    <path d="M30 8 L30 52 M8 30 L52 30" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+                    <circle cx="30" cy="30" r="18" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="30" cy="30" r="8" fill="currentColor"/>
+                </svg>
+            </div>
+            <h2 class="login-title">النشاط العلمي لكلية الشريعة</h2>
+            <p class="login-subtitle">جامعة الطائف</p>
+            <div class="login-form">
+                <div class="login-field">
+                    <label for="loginEmployeeId">الرقم الوظيفي</label>
+                    <input type="text" id="loginEmployeeId" placeholder="أدخل رقمك الوظيفي" autocomplete="off">
+                </div>
+                <div class="login-field">
+                    <label for="loginPassword">كلمة المرور</label>
+                    <input type="password" id="loginPassword" placeholder="••••">
+                </div>
+                <button id="loginBtn" onclick="handleLogin()">دخول</button>
+                <p id="loginErrorMsg" class="login-error"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== المحتوى الرئيسي (مخفي حتى تسجيل الدخول) ===== -->
+    <div id="mainApp" style="display: none;">
     <a href="add-activity.html" class="add-activity-fab" title="إضافة نشاط جديد"></a>
     <!-- خلفية متحركة -->
     <div class="animated-bg">
@@ -50,6 +86,11 @@
             </div>
             
             <div class="header-controls">
+                <div class="welcome-badge" id="welcomeBadge" style="display: none;">
+                    <span class="welcome-icon">👋</span>
+                    <span class="welcome-text" id="welcomeText"></span>
+                    <button class="logout-btn" onclick="handleLogout()" title="تسجيل خروج">✕</button>
+                </div>
                 <div class="year-selector">
                     <label for="deptSelect">القسم</label>
                     <select id="deptSelect"></select>
@@ -576,6 +617,7 @@
             </div>
         </div>
     </footer>
+    </div><!-- نهاية mainApp -->
 
     <!-- مؤشر التحميل -->
     <div class="loading-overlay" id="loadingOverlay">
@@ -587,6 +629,97 @@
         </div>
     </div>
 
+    <script>
+    // ========================================
+    // نظام تسجيل الدخول
+    // ========================================
+    let facultyListForLogin = [];
+
+    async function loadFacultyForLogin() {
+        try {
+            const response = await fetch('./data/faculty.csv');
+            const text = await response.text();
+            const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+            facultyListForLogin = result.data.filter(m => m.id && m.name);
+        } catch (e) {
+            console.error('خطأ في تحميل بيانات الأعضاء:', e);
+        }
+    }
+
+    async function handleLogin() {
+        const empId = document.getElementById('loginEmployeeId').value.trim();
+        const pass = document.getElementById('loginPassword').value;
+        const errorMsg = document.getElementById('loginErrorMsg');
+        errorMsg.textContent = '';
+
+        if (!empId) {
+            errorMsg.textContent = 'يرجى إدخال الرقم الوظيفي';
+            return;
+        }
+        if (pass !== '1429') {
+            errorMsg.textContent = 'كلمة المرور غير صحيحة';
+            return;
+        }
+
+        if (facultyListForLogin.length === 0) {
+            await loadFacultyForLogin();
+        }
+
+        const member = facultyListForLogin.find(m => m.id && m.id.trim() === empId);
+        if (!member) {
+            errorMsg.textContent = 'الرقم الوظيفي غير موجود في سجلات الأعضاء';
+            return;
+        }
+
+        // حفظ بيانات الجلسة
+        sessionStorage.setItem('loggedIn', 'true');
+        sessionStorage.setItem('employeeId', empId);
+        sessionStorage.setItem('employeeName', member.name);
+
+        showMainApp(member.name);
+    }
+
+    function showMainApp(memberName) {
+        document.getElementById('loginOverlay').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+
+        // عرض رسالة الترحيب
+        const welcomeBadge = document.getElementById('welcomeBadge');
+        const welcomeText = document.getElementById('welcomeText');
+        welcomeText.textContent = 'مرحباً، ' + memberName;
+        welcomeBadge.style.display = 'flex';
+    }
+
+    function handleLogout() {
+        sessionStorage.removeItem('loggedIn');
+        sessionStorage.removeItem('employeeId');
+        sessionStorage.removeItem('employeeName');
+        document.getElementById('mainApp').style.display = 'none';
+        document.getElementById('loginOverlay').style.display = 'flex';
+        document.getElementById('loginEmployeeId').value = '';
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('welcomeBadge').style.display = 'none';
+    }
+
+    // التحقق عند تحميل الصفحة
+    document.addEventListener('DOMContentLoaded', async function() {
+        // التحقق من وجود جلسة سابقة
+        if (sessionStorage.getItem('loggedIn') === 'true') {
+            const name = sessionStorage.getItem('employeeName');
+            showMainApp(name);
+        } else {
+            document.getElementById('loginOverlay').style.display = 'flex';
+        }
+
+        // تفعيل الدخول بالضغط على Enter
+        document.getElementById('loginPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') handleLogin();
+        });
+        document.getElementById('loginEmployeeId').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') document.getElementById('loginPassword').focus();
+        });
+    });
+    </script>
     <script src="app.js"></script>
     <script src="teaching.js"></script>
 

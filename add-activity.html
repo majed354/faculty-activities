@@ -471,7 +471,7 @@
         }
 
         async function attemptLogin() {
-            const id = document.getElementById('loginId').value;
+            const id = document.getElementById('loginId').value.trim();
             const pass = document.getElementById('loginPass').value;
             const errorMsg = document.getElementById('loginError');
 
@@ -485,14 +485,18 @@
                 const response = await fetch('./data/faculty.csv');
                 if (!response.ok) throw new Error("File not found");
                 const csvText = await response.text();
-                
+
                 Papa.parse(csvText, {
                     header: true,
                     complete: function(results) {
                         facultyList = results.data.filter(m => m.id && m.name);
                         populateFacultyDropdowns();
-                        const member = facultyList.find(m => m.id && m.id.trim() === id.trim());
+                        const member = facultyList.find(m => m.id && m.id.trim() === id);
                         if (member) {
+                            // حفظ بيانات الجلسة
+                            sessionStorage.setItem('loggedIn', 'true');
+                            sessionStorage.setItem('employeeId', id);
+                            sessionStorage.setItem('employeeName', member.name);
                             document.getElementById('loginScreen').style.display = 'none';
                             document.getElementById('mainFormScreen').style.display = 'block';
                         } else {
@@ -506,6 +510,31 @@
                 document.getElementById('mainFormScreen').style.display = 'block';
             }
         }
+
+        // التحقق من الجلسة عند تحميل الصفحة - تخطي تسجيل الدخول إذا كان مسجلاً بالفعل
+        async function checkSessionAndInit() {
+            if (sessionStorage.getItem('loggedIn') === 'true') {
+                // مسجل الدخول بالفعل من الصفحة الرئيسية
+                try {
+                    const response = await fetch('./data/faculty.csv');
+                    if (!response.ok) throw new Error("File not found");
+                    const csvText = await response.text();
+                    Papa.parse(csvText, {
+                        header: true,
+                        complete: function(results) {
+                            facultyList = results.data.filter(m => m.id && m.name);
+                            populateFacultyDropdowns();
+                            document.getElementById('loginScreen').style.display = 'none';
+                            document.getElementById('mainFormScreen').style.display = 'block';
+                        }
+                    });
+                } catch (error) {
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('mainFormScreen').style.display = 'block';
+                }
+            }
+        }
+        checkSessionAndInit();
 
         function populateFacultyDropdowns() {
             const uniqueFaculty = [];
