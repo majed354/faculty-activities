@@ -789,55 +789,168 @@
     box-shadow: 0 8px 24px rgba(212,175,55,0.3);
 }
 
-/* ===== طباعة ===== */
+/* ===== طباعة تقرير العضو ===== */
 @media print {
-    .main-header, .main-nav, .main-footer, .animated-bg,
-    .teaching-table-filters, .teaching-charts-grid, .export-all-btn,
-    .detail-btn, .t-modal-actions, .modal-close, .print-icon-btn,
-    .teaching-table-section, .loading-overlay, .add-activity-fab,
-    .course-search-section {
+    /* --- عند طباعة تقرير العضو: إخفاء كل شيء ما عدا النافذة --- */
+    body.printing-teaching-modal .main-header,
+    body.printing-teaching-modal .main-nav,
+    body.printing-teaching-modal .main-footer,
+    body.printing-teaching-modal .animated-bg,
+    body.printing-teaching-modal .loading-overlay,
+    body.printing-teaching-modal .add-activity-fab,
+    body.printing-teaching-modal .fab-container,
+    body.printing-teaching-modal .welcome-badge,
+    body.printing-teaching-modal #loginOverlay,
+    body.printing-teaching-modal #teachingLoader {
         display: none !important;
     }
 
-    .teaching-modal-content {
-        max-width: 100%;
-        max-height: none;
+    /* إخفاء كل أقسام التبويبات */
+    body.printing-teaching-modal .tab-content {
+        display: none !important;
+    }
+
+    /* إخفاء عناصر النافذة غير المطلوبة */
+    body.printing-teaching-modal .modal-close,
+    body.printing-teaching-modal .print-icon-btn,
+    body.printing-teaching-modal .t-modal-actions,
+    body.printing-teaching-modal .t-modal-chart-row {
+        display: none !important;
+    }
+
+    /* --- إظهار النافذة فقط --- */
+    body.printing-teaching-modal #teachingModal {
+        display: block !important;
+        position: static !important;
+        overflow: visible !important;
+        background: transparent !important;
+    }
+
+    body.printing-teaching-modal .teaching-modal-content {
+        position: static !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 15px !important;
         background: #fff !important;
         color: #000 !important;
         box-shadow: none !important;
         border: none !important;
+        transform: none !important;
     }
 
-    .t-modal-header, .t-modal-stats, .t-modal-years {
+    body.printing-teaching-modal #teachingModalBody {
+        overflow: visible !important;
+    }
+
+    /* --- ألوان صديقة للطباعة --- */
+    body.printing-teaching-modal .t-modal-header,
+    body.printing-teaching-modal .t-modal-stats,
+    body.printing-teaching-modal .t-modal-years {
         color: #000 !important;
     }
 
-    .t-modal-info h2, .t-year-header h3, .t-m-num {
+    body.printing-teaching-modal .t-modal-info h2,
+    body.printing-teaching-modal .t-year-header h3,
+    body.printing-teaching-modal .t-m-num {
         color: #000 !important;
     }
 
-    .t-modal-info p, .t-m-label, .t-year-summary {
+    body.printing-teaching-modal .t-modal-info p,
+    body.printing-teaching-modal .t-m-label,
+    body.printing-teaching-modal .t-year-summary {
         color: #555 !important;
     }
 
-    .t-courses-table thead th {
-        color: #000 !important;
-        border-bottom-color: #000 !important;
+    body.printing-teaching-modal .t-modal-avatar {
+        font-size: 28px !important;
     }
 
-    .t-courses-table tbody td {
-        color: #333 !important;
+    /* --- الإحصائيات --- */
+    body.printing-teaching-modal .t-modal-stats {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        margin: 10px 0 !important;
     }
 
-    .t-m-stat, .t-modal-chart-box, .t-year-section {
-        border-color: #ddd !important;
+    body.printing-teaching-modal .t-m-stat {
+        border: 1px solid #ccc !important;
         background: #f9f9f9 !important;
+        padding: 6px 10px !important;
+        border-radius: 6px !important;
     }
 
-    .mode-badge-sm {
-        border: 1px solid #999;
+    /* --- جداول المقررات --- */
+    body.printing-teaching-modal .t-year-section {
+        border: 1px solid #ddd !important;
+        background: #fff !important;
+        margin-bottom: 8px !important;
+        page-break-inside: avoid;
+    }
+
+    body.printing-teaching-modal .t-year-header {
+        background: #f0f0f0 !important;
+        cursor: default !important;
+    }
+
+    body.printing-teaching-modal .t-year-header h3 {
+        font-size: 13px !important;
+    }
+
+    body.printing-teaching-modal .t-year-body {
+        display: block !important;
+        max-height: none !important;
+    }
+
+    body.printing-teaching-modal .t-year-toggle {
+        display: none !important;
+    }
+
+    body.printing-teaching-modal .t-courses-table {
+        width: 100% !important;
+        font-size: 10px !important;
+        border-collapse: collapse !important;
+    }
+
+    body.printing-teaching-modal .t-courses-table thead th {
+        color: #000 !important;
+        background: #e8e8e8 !important;
+        border: 1px solid #bbb !important;
+        padding: 4px 5px !important;
+        font-size: 10px !important;
+    }
+
+    body.printing-teaching-modal .t-courses-table tbody td {
+        color: #333 !important;
+        border: 1px solid #ddd !important;
+        padding: 3px 5px !important;
+        font-size: 10px !important;
+    }
+
+    body.printing-teaching-modal .mode-badge-sm {
+        border: 1px solid #999 !important;
         color: #333 !important;
         background: #eee !important;
+        font-size: 9px !important;
+        padding: 1px 4px !important;
+    }
+
+    body.printing-teaching-modal .code-cell {
+        font-size: 9px !important;
+    }
+
+    /* --- منع القطع غير المناسب --- */
+    body.printing-teaching-modal .t-courses-table tr {
+        page-break-inside: avoid;
+    }
+
+    /* --- حجم الصفحة --- */
+    @page {
+        size: A4;
+        margin: 10mm;
     }
 }
 

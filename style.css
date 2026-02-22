@@ -1394,24 +1394,19 @@ body {
     .loading-overlay {
         display: none;
     }
-    
+
     body {
         background: white;
         color: black;
     }
-    
+
     .main-header {
         background: white;
         border-bottom: 2px solid #333;
     }
-    
+
     .logo-text h1 {
         color: #333;
-    }
-    
-    .tab-content {
-        display: block !important;
-        page-break-before: always;
     }
 }
 /* Modal الرسالة */

@@ -951,7 +951,14 @@ function exportAllTeachingCSV() {
     a.click(); URL.revokeObjectURL(url);
 }
 
-function printTeachingReport() { window.print(); }
+function printTeachingReport() {
+    document.body.classList.add('printing-teaching-modal');
+    window.print();
+    window.addEventListener('afterprint', function handler() {
+        document.body.classList.remove('printing-teaching-modal');
+        window.removeEventListener('afterprint', handler);
+    });
+}
 
 // ========================================
 // التحميل عند الطلب (lazy loading) + إدارة المخططات
