@@ -16,6 +16,7 @@ let tableFilters = {
     search: '',
     year: 'all',
     department: 'all',
+    program: 'all',
     mode: 'all',
     rank: 'all',
     sort: 'sections'
@@ -124,6 +125,14 @@ function initTeachingFilters() {
         });
     }
 
+    // فلتر البرنامج العلوي (يؤثر على الإحصائيات والمخططات)
+    const headerProg = document.getElementById('programSelect');
+    if (headerProg) {
+        headerProg.addEventListener('change', () => {
+            renderTeachingOverview();
+        });
+    }
+
     // === فلاتر الجدول التفصيلي (مستقلة تماماً) ===
     // تعبئة السنوات
     const tblYear = document.getElementById('tblYearFilter');
@@ -147,6 +156,31 @@ function initTeachingFilters() {
         });
         tblDept.addEventListener('change', (e) => {
             tableFilters.department = e.target.value;
+            renderTeachingTable();
+        });
+    }
+
+    // تعبئة فلتر البرنامج
+    const tblProgram = document.getElementById('tblProgramFilter');
+    if (tblProgram) {
+        tblProgram.innerHTML = '<option value="all">جميع البرامج</option>';
+        const programs = (typeof config !== 'undefined' && config.programs) || [];
+        const degrees = ['بكالوريوس', 'ماجستير', 'دكتوراه'];
+        degrees.forEach(deg => {
+            const degProgs = programs.filter(p => p.degree === deg);
+            if (degProgs.length === 0) return;
+            const group = document.createElement('optgroup');
+            group.label = deg;
+            degProgs.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.name + ' - ' + p.degree;
+                opt.textContent = p.name;
+                group.appendChild(opt);
+            });
+            tblProgram.appendChild(group);
+        });
+        tblProgram.addEventListener('change', (e) => {
+            tableFilters.program = e.target.value;
             renderTeachingTable();
         });
     }
@@ -381,6 +415,12 @@ function getOverviewFilteredRecords() {
         });
     }
 
+    // فلتر البرنامج من الفلتر العلوي الثابت
+    const headerProg = (typeof currentProgram !== 'undefined') ? currentProgram : 'all';
+    if (headerProg && headerProg !== 'all') {
+        records = filterRecordsByProgram(records, headerProg);
+    }
+
     return records;
 }
 
@@ -401,6 +441,11 @@ function getTableFilteredRecords() {
             const fi = teachingData.faculty_index[r.fid];
             return fi && fi.d === tableFilters.department;
         });
+    }
+
+    // فلتر البرنامج
+    if (tableFilters.program !== 'all') {
+        records = filterRecordsByProgram(records, tableFilters.program);
     }
 
     // فلتر طريقة التدريس
@@ -538,10 +583,14 @@ function renderTeachingCharts(records) {
     // رسم المخططات بشكل تدريجي لمنع تجميد الصفحة
     renderTrendChart(records);
     renderModeChart(records);
-    // تأجيل المخططين الأخيرين للإطار التالي
+    // تأجيل المخططات التالية للإطار التالي
     requestAnimationFrame(() => {
         renderDeptChart(records);
         renderTopChart(records);
+        requestAnimationFrame(() => {
+            renderProgramChart(records);
+            renderProgramStats(records);
+        });
     });
 }
 
@@ -916,6 +965,216 @@ function renderMemberModeChart(records) {
 }
 
 // ========================================
+// فلترة السجلات حسب البرنامج
+// ========================================
+function filterRecordsByProgram(records, selectedProgram) {
+    if (!selectedProgram || selectedProgram === 'all') return records;
+    const parts = selectedProgram.split(' - ');
+    const progName = parts[0];
+    const progDeg = parts[1] || '';
+    return records.map(r => ({
+        ...r,
+        cs: r.cs.filter(c => {
+            const code = (c.cc || '').trim();
+            const progs = (typeof courseCodeToPrograms !== 'undefined') ? courseCodeToPrograms[code] : null;
+            if (!progs) return false;
+            return progs.some(p => p.program === progName && p.degree === progDeg);
+        })
+    })).filter(r => r.cs.length > 0);
+}
+
+// ========================================
+// مخطط البرامج الأكاديمية
+// ========================================
+function renderProgramChart(records) {
+    const canvas = document.getElementById('teachingProgramChart');
+    if (!canvas || typeof courseCodeToPrograms === 'undefined') return;
+
+    const progData = {};
+    const programs = (typeof config !== 'undefined' && config.programs) || [];
+    programs.forEach(p => {
+        progData[p.name + ' - ' + p.degree] = { sections: 0, students: 0 };
+    });
+    progData['غير مصنف'] = { sections: 0, students: 0 };
+
+    records.forEach(r => {
+        r.cs.forEach(c => {
+            const code = (c.cc || '').trim();
+            const progs = courseCodeToPrograms[code];
+            if (progs && progs.length > 0) {
+                progs.forEach(p => {
+                    if (progData[p.key]) {
+                        progData[p.key].sections++;
+                        progData[p.key].students += c.e || 0;
+                    }
+                });
+            } else {
+                progData['غير مصنف'].sections++;
+                progData['غير مصنف'].students += c.e || 0;
+            }
+        });
+    });
+
+    // ترتيب حسب عدد الشعب (الأكبر أولاً)
+    const entries = Object.entries(progData).filter(([, v]) => v.sections > 0)
+        .sort((a, b) => b[1].sections - a[1].sections);
+
+    const labels = entries.map(([k]) => k);
+    const data = entries.map(([, v]) => v.sections);
+
+    const degreeColors = {
+        'بكالوريوس': '#4ecdc4',
+        'ماجستير': '#d4af37',
+        'دكتوراه': '#e74c3c'
+    };
+    const bgColors = labels.map(l => {
+        if (l === 'غير مصنف') return 'rgba(156,163,175,0.6)';
+        const deg = l.split(' - ')[1];
+        const base = degreeColors[deg] || '#9ca3af';
+        return base + '99';
+    });
+    const borderColors = labels.map(l => {
+        if (l === 'غير مصنف') return '#9ca3af';
+        const deg = l.split(' - ')[1];
+        return degreeColors[deg] || '#9ca3af';
+    });
+
+    if (teachingCharts.program) teachingCharts.program.destroy();
+
+    teachingCharts.program = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'عدد الشعب',
+                data: data,
+                backgroundColor: bgColors,
+                borderColor: borderColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true, resizeDelay: 300, animation: { duration: 0 },
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        afterLabel: function(ctx) {
+                            const key = labels[ctx.dataIndex];
+                            const entry = progData[key];
+                            return `الطلاب: ${entry.students.toLocaleString('ar-SA')}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            }
+        }
+    });
+}
+
+// ========================================
+// إحصائيات البرامج الأكاديمية
+// ========================================
+function renderProgramStats(records) {
+    const tbody = document.getElementById('programStatsBody');
+    if (!tbody || typeof courseCodeToPrograms === 'undefined') return;
+
+    const programs = (typeof config !== 'undefined' && config.programs) || [];
+    const stats = [];
+
+    programs.forEach(p => {
+        const key = p.name + ' - ' + p.degree;
+        let totalSections = 0, totalStudents = 0;
+        let nonSharedSections = 0, nonSharedStudents = 0;
+        const facultySet = new Set();
+        const nonSharedFacultySet = new Set();
+
+        // المقررات الفريدة للبرنامج (غير المتطلبات الجامعية المشتركة)
+        const nonSharedCodes = (typeof programNonSharedCodes !== 'undefined' && programNonSharedCodes[key])
+            ? programNonSharedCodes[key] : new Set();
+
+        records.forEach(r => {
+            r.cs.forEach(c => {
+                const code = (c.cc || '').trim();
+                const progs = courseCodeToPrograms[code];
+                if (!progs) return;
+                const belongs = progs.some(pp => pp.program === p.name && pp.degree === p.degree);
+                if (!belongs) return;
+
+                totalSections++;
+                totalStudents += c.e || 0;
+                facultySet.add(r.fid);
+
+                if (nonSharedCodes.has(code)) {
+                    nonSharedSections++;
+                    nonSharedStudents += c.e || 0;
+                    nonSharedFacultySet.add(r.fid);
+                }
+            });
+        });
+
+        if (totalSections > 0) {
+            const avgNonShared = nonSharedSections > 0 ? Math.round(nonSharedStudents / nonSharedSections) : 0;
+            const nonSharedFacultyCount = nonSharedFacultySet.size;
+            const studentFacultyRatio = nonSharedFacultyCount > 0
+                ? (nonSharedStudents / nonSharedFacultyCount).toFixed(1)
+                : '-';
+            stats.push({
+                name: p.name,
+                degree: p.degree,
+                totalSections,
+                totalStudents,
+                faculty: facultySet.size,
+                nonSharedSections,
+                avgNonShared,
+                studentFacultyRatio,
+                nonSharedFacultyCount
+            });
+        }
+    });
+
+    // ترتيب: بكالوريوس أولاً ثم ماجستير ثم دكتوراه، وداخل كل مستوى بعدد الشعب
+    const degreeOrder = { 'بكالوريوس': 0, 'ماجستير': 1, 'دكتوراه': 2 };
+    stats.sort((a, b) => {
+        const da = degreeOrder[a.degree] ?? 3;
+        const db = degreeOrder[b.degree] ?? 3;
+        if (da !== db) return da - db;
+        return b.totalSections - a.totalSections;
+    });
+
+    const degreeClass = { 'بكالوريوس': 'bsc', 'ماجستير': 'msc', 'دكتوراه': 'phd' };
+
+    // تحديد لون النسبة (أخضر: جيد، أصفر: مقبول، أحمر: مرتفع)
+    function getRatioBadge(ratio) {
+        if (ratio === '-') return '<span class="ratio-badge ratio-na">-</span>';
+        const val = parseFloat(ratio);
+        if (val <= 25) return `<span class="ratio-badge ratio-good">${val.toLocaleString('ar-SA')} : 1</span>`;
+        if (val <= 40) return `<span class="ratio-badge ratio-warning">${val.toLocaleString('ar-SA')} : 1</span>`;
+        return `<span class="ratio-badge ratio-high">${val.toLocaleString('ar-SA')} : 1</span>`;
+    }
+
+    tbody.innerHTML = stats.map(s => `
+        <tr>
+            <td class="prog-name-cell">${s.name}</td>
+            <td><span class="degree-badge degree-${degreeClass[s.degree] || 'other'}">${s.degree}</span></td>
+            <td><strong>${s.totalSections.toLocaleString('ar-SA')}</strong></td>
+            <td>${s.totalStudents.toLocaleString('ar-SA')}</td>
+            <td>${s.faculty}</td>
+            <td>${s.nonSharedSections.toLocaleString('ar-SA')}</td>
+            <td><strong>${s.avgNonShared.toLocaleString('ar-SA')}</strong></td>
+            <td>${getRatioBadge(s.studentFacultyRatio)}</td>
+        </tr>
+    `).join('');
+
+    // تخزين الإحصائيات للاستخدام في تبويب الجودة
+    window._lastProgramStats = stats;
+}
+
+// ========================================
 // التصدير
 // ========================================
 function exportFacultyReport(facultyId) {
@@ -939,10 +1198,15 @@ function exportAllTeachingCSV() {
     if (!teachingData) return;
     const records = getTableFilteredRecords();
     const BOM = '\uFEFF';
-    let csv = BOM + 'الرقم الوظيفي,الاسم,القسم,المرتبة,السنة,الفصل,رمز المقرر,اسم المقرر,النوع,الدرجة,طريقة التدريس,المقر,الساعات الأسبوعية,طلاب الشعبة\n';
+    let csv = BOM + 'الرقم الوظيفي,الاسم,القسم,المرتبة,السنة,الفصل,رمز المقرر,اسم المقرر,النوع,الدرجة,طريقة التدريس,المقر,الساعات الأسبوعية,طلاب الشعبة,البرامج\n';
     records.forEach(r => {
         const fi = teachingData.faculty_index[r.fid] || {};
-        r.cs.forEach(c => { csv += `${r.fid},"${fi.n || ''}",${fi.d || ''},${fi.r || ''},${r.y},${r.sn},${c.cc},"${c.cn}",${c.a || ''},${c.dg || ''},${c.m},${c.l || ''},${c.h || 0},${c.e || 0}\n`; });
+        r.cs.forEach(c => {
+            const code = (c.cc || '').trim();
+            const progs = (typeof courseCodeToPrograms !== 'undefined' && courseCodeToPrograms[code]) || [];
+            const progStr = progs.map(p => p.key).join(' | ');
+            csv += `${r.fid},"${fi.n || ''}",${fi.d || ''},${fi.r || ''},${r.y},${r.sn},${c.cc},"${c.cn}",${c.a || ''},${c.dg || ''},${c.m},${c.l || ''},${c.h || 0},${c.e || 0},"${progStr}"\n`;
+        });
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

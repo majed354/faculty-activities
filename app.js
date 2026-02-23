@@ -9,6 +9,7 @@
 let config = {};
 let currentYear = null;
 let currentDepartment = 'all';
+let currentProgram = 'all';
 let currentThesis = null;
 let currentLeaderboard = [];
 let showAllLeaderboard = false;
@@ -28,6 +29,12 @@ let data = {
     publications: []  // ملف البحوث المنفصل
 };
 let charts = {};
+
+// بيانات الخطط الدراسية والبرامج
+let allPlansData = [];
+let courseCodeToPrograms = {};    // رمز المقرر → [{program, degree, key}]
+let programExclusiveCodes = {};  // "برنامج - درجة" → Set من رموز المقررات الفريدة
+let programNonSharedCodes = {};  // "برنامج - درجة" → Set من رموز المقررات غير المشتركة (غير متطلبات جامعية)
 
 // تحديد مسار البيانات (محلي دائماً - المستودع خاص)
 const DATA_BASE_URL = './data';
@@ -232,18 +239,63 @@ function filterByDepartment(items, department, idField) {
     });
 }
 
+// ========================================
+// بناء خريطة ربط المقررات بالبرامج
+// ========================================
+function buildCourseToPrograms() {
+    courseCodeToPrograms = {};
+    programExclusiveCodes = {};
+    programNonSharedCodes = {};
+
+    allPlansData.forEach(row => {
+        // دعم BOM في أول عمود
+        const code = (row['Code'] || '').trim();
+        const prog = (row['Program'] || row['\ufeffProgram'] || '').trim();
+        const deg = (row['Degree'] || '').trim();
+        const category = (row['Category'] || '').trim();
+        if (!code || !prog) return;
+        const key = prog + ' - ' + deg;
+
+        // خريطة المقرر → البرامج
+        if (!courseCodeToPrograms[code]) courseCodeToPrograms[code] = [];
+        if (!courseCodeToPrograms[code].some(p => p.key === key)) {
+            courseCodeToPrograms[code].push({ program: prog, degree: deg, key });
+        }
+
+        // المقررات غير المشتركة: ليست متطلبات جامعية (إجبارية القسم + اختيارية القسم)
+        if (category && !category.includes('متطلبات جامعية')) {
+            if (!programNonSharedCodes[key]) programNonSharedCodes[key] = new Set();
+            programNonSharedCodes[key].add(code);
+        }
+    });
+
+    // تحديد المقررات الفريدة: التي تظهر في برنامج واحد فقط
+    Object.entries(courseCodeToPrograms).forEach(([code, progs]) => {
+        if (progs.length === 1) {
+            const key = progs[0].key;
+            if (!programExclusiveCodes[key]) programExclusiveCodes[key] = new Set();
+            programExclusiveCodes[key].add(code);
+        }
+    });
+
+    console.log(`📋 خريطة البرامج: ${Object.keys(courseCodeToPrograms).length} مقرر → ${Object.keys(programNonSharedCodes).length} برنامج (مقررات فريدة)`);
+}
+
 async function loadAllData() {
     showLoading();
 
-    const [faculty, students, theses, participations, publications] = await Promise.all([
+    const [faculty, students, theses, participations, publications, plans] = await Promise.all([
         loadCSV(`${DATA_BASE_URL}/faculty.csv`),
         loadCSV(`${DATA_BASE_URL}/students_count.csv`),
         loadCSV(`${DATA_BASE_URL}/theses.csv`),
         loadCSV(`${DATA_BASE_URL}/participations.csv`),
-        loadCSV(`${DATA_BASE_URL}/publications.csv`)
+        loadCSV(`${DATA_BASE_URL}/publications.csv`),
+        loadCSV(`${DATA_BASE_URL}/all_plans.csv`)
     ]);
 
     allData = { faculty, students, theses, participations, publications };
+    allPlansData = plans;
+    buildCourseToPrograms();
 
     // محاولة تحميل البيانات الحية من Google Sheets ودمجها
     await loadFromGoogleSheets();
@@ -895,6 +947,51 @@ function setupDepartmentSelector() {
     });
 }
 
+// ========================================
+// فلتر البرنامج الأكاديمي
+// ========================================
+function populateProgramSelector() {
+    const select = document.getElementById('programSelect');
+    if (!select) return;
+    select.innerHTML = '';
+
+    const allOption = document.createElement('option');
+    allOption.value = 'all';
+    allOption.textContent = 'جميع البرامج';
+    if (currentProgram === 'all') allOption.selected = true;
+    select.appendChild(allOption);
+
+    const programs = config.programs || [];
+    const degrees = ['بكالوريوس', 'ماجستير', 'دكتوراه'];
+
+    degrees.forEach(deg => {
+        const degreePrograms = programs.filter(p => p.degree === deg);
+        if (degreePrograms.length === 0) return;
+        const group = document.createElement('optgroup');
+        group.label = deg;
+        degreePrograms.forEach(p => {
+            const option = document.createElement('option');
+            option.value = p.name + ' - ' + p.degree;
+            option.textContent = p.name;
+            if (option.value === currentProgram) option.selected = true;
+            group.appendChild(option);
+        });
+        select.appendChild(group);
+    });
+}
+
+function setupProgramSelector() {
+    const select = document.getElementById('programSelect');
+    if (!select) return;
+    select.addEventListener('change', (e) => {
+        currentProgram = e.target.value;
+        // فلتر البرنامج يؤثر على التدريس فقط - لا يعيد تحميل كل البيانات
+        if (typeof renderTeachingOverview === 'function' && teachingInitialized) {
+            renderTeachingOverview();
+        }
+    });
+}
+
 function renderDashboard() {
     const publications = getPublications();
     const events = getEvents();
@@ -1521,6 +1618,218 @@ function renderQualityRadarChart(kpis) {
             plugins: { legend: { display: false } }
         }
     });
+}
+
+// ========================================
+// مؤشرات البرامج الأكاديمية (تبويب الجودة)
+// ========================================
+let programQualityCharts = {};
+
+function renderProgramQualityIndicators() {
+    const grid = document.getElementById('programQualityGrid');
+    const yearFilter = document.getElementById('qualityYearFilter');
+    if (!grid) return;
+
+    // تعبئة فلتر السنوات مرة واحدة
+    if (yearFilter && yearFilter.options.length <= 1 && teachingData) {
+        teachingData.years.forEach(y => {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y + 'هـ';
+            yearFilter.appendChild(opt);
+        });
+        yearFilter.addEventListener('change', () => renderProgramQualityIndicators());
+    }
+
+    // الحصول على بيانات التدريس
+    if (!teachingData || typeof courseCodeToPrograms === 'undefined') {
+        grid.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">يرجى فتح تبويب النشاط التدريسي أولاً لتحميل البيانات</p>';
+        return;
+    }
+
+    // فلترة السجلات حسب السنة المختارة
+    const selectedYear = yearFilter ? yearFilter.value : 'all';
+    let records = teachingData.records;
+    if (selectedYear !== 'all') {
+        const year = parseInt(selectedYear);
+        records = records.filter(r => r.y === year);
+    }
+
+    // حساب إحصائيات كل برنامج
+    const programs = (typeof config !== 'undefined' && config.programs) || [];
+    const stats = [];
+
+    programs.forEach(p => {
+        const key = p.name + ' - ' + p.degree;
+        let nonSharedSections = 0, nonSharedStudents = 0;
+        const nonSharedFacultySet = new Set();
+
+        const nonSharedCodes = (typeof programNonSharedCodes !== 'undefined' && programNonSharedCodes[key])
+            ? programNonSharedCodes[key] : new Set();
+
+        records.forEach(r => {
+            r.cs.forEach(c => {
+                const code = (c.cc || '').trim();
+                const progs = courseCodeToPrograms[code];
+                if (!progs) return;
+                const belongs = progs.some(pp => pp.program === p.name && pp.degree === p.degree);
+                if (!belongs) return;
+
+                if (nonSharedCodes.has(code)) {
+                    nonSharedSections++;
+                    nonSharedStudents += c.e || 0;
+                    nonSharedFacultySet.add(r.fid);
+                }
+            });
+        });
+
+        if (nonSharedSections > 0) {
+            const avgStudents = Math.round(nonSharedStudents / nonSharedSections);
+            const facultyCount = nonSharedFacultySet.size;
+            const ratio = facultyCount > 0 ? parseFloat((nonSharedStudents / facultyCount).toFixed(1)) : 0;
+            stats.push({
+                name: p.name, degree: p.degree, id: p.id,
+                nonSharedSections, nonSharedStudents, avgStudents,
+                facultyCount, ratio
+            });
+        }
+    });
+
+    const degreeOrder = { 'بكالوريوس': 0, 'ماجستير': 1, 'دكتوراه': 2 };
+    stats.sort((a, b) => {
+        const da = degreeOrder[a.degree] ?? 3;
+        const db = degreeOrder[b.degree] ?? 3;
+        if (da !== db) return da - db;
+        return b.nonSharedSections - a.nonSharedSections;
+    });
+
+    const degreeIcons = { 'بكالوريوس': '📘', 'ماجستير': '📗', 'دكتوراه': '📕' };
+    const degreeClass = { 'بكالوريوس': 'bsc', 'ماجستير': 'msc', 'دكتوراه': 'phd' };
+    const yearLabel = selectedYear === 'all' ? 'جميع السنوات' : selectedYear + 'هـ';
+
+    function getRatioLevel(ratio) {
+        if (ratio <= 25) return 'good';
+        if (ratio <= 40) return 'warning';
+        return 'high';
+    }
+
+    grid.innerHTML = stats.map(s => `
+        <div class="program-quality-card">
+            <div class="pq-card-header">
+                <span class="pq-icon">${degreeIcons[s.degree] || '📄'}</span>
+                <div class="pq-title">
+                    <h4>${s.name}</h4>
+                    <span class="degree-badge degree-${degreeClass[s.degree] || 'other'}">${s.degree}</span>
+                </div>
+            </div>
+            <div class="pq-metrics">
+                <div class="pq-metric">
+                    <span class="pq-metric-value">${s.avgStudents.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">متوسط طلاب/شعبة</span>
+                </div>
+                <div class="pq-metric">
+                    <span class="pq-metric-value ratio-badge ratio-${getRatioLevel(s.ratio)}">${s.ratio.toLocaleString('ar-SA')} : 1</span>
+                    <span class="pq-metric-label">نسبة طلاب/هيئة تدريس</span>
+                </div>
+                <div class="pq-metric">
+                    <span class="pq-metric-value">${s.nonSharedSections.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">شعبة (مقررات فريدة)</span>
+                </div>
+                <div class="pq-metric">
+                    <span class="pq-metric-value">${s.facultyCount}</span>
+                    <span class="pq-metric-label">عضو هيئة تدريس</span>
+                </div>
+            </div>
+            <div class="pq-year-label">${yearLabel}</div>
+        </div>
+    `).join('');
+
+    // رسم المخططات البيانية
+    renderProgramQualityCharts(stats);
+}
+
+function renderProgramQualityCharts(stats) {
+    if (!stats || stats.length === 0) return;
+
+    const labels = stats.map(s => s.name + ' (' + s.degree.charAt(0) + ')');
+    const degreeColors = { 'بكالوريوس': '#4ecdc4', 'ماجستير': '#d4af37', 'دكتوراه': '#e74c3c' };
+
+    // مخطط متوسط الطلاب
+    const avgCanvas = document.getElementById('programAvgStudentsChart');
+    if (avgCanvas) {
+        if (programQualityCharts.avg) programQualityCharts.avg.destroy();
+        const bgColors = stats.map(s => (degreeColors[s.degree] || '#9ca3af') + '99');
+        const borderColorsList = stats.map(s => degreeColors[s.degree] || '#9ca3af');
+
+        programQualityCharts.avg = new Chart(avgCanvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'متوسط طلاب/شعبة',
+                    data: stats.map(s => s.avgStudents),
+                    backgroundColor: bgColors,
+                    borderColor: borderColorsList,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true, animation: { duration: 0 }, indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                }
+            }
+        });
+    }
+
+    // مخطط نسبة الطلاب/هيئة التدريس
+    const ratioCanvas = document.getElementById('programRatioChart');
+    if (ratioCanvas) {
+        if (programQualityCharts.ratio) programQualityCharts.ratio.destroy();
+        const ratioBgColors = stats.map(s => {
+            if (s.ratio <= 25) return 'rgba(16,185,129,0.7)';
+            if (s.ratio <= 40) return 'rgba(245,158,11,0.7)';
+            return 'rgba(239,68,68,0.7)';
+        });
+        const ratioBorderColors = stats.map(s => {
+            if (s.ratio <= 25) return '#10b981';
+            if (s.ratio <= 40) return '#f59e0b';
+            return '#ef4444';
+        });
+
+        programQualityCharts.ratio = new Chart(ratioCanvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'نسبة طلاب/هيئة تدريس',
+                    data: stats.map(s => s.ratio),
+                    backgroundColor: ratioBgColors,
+                    borderColor: ratioBorderColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true, animation: { duration: 0 }, indexAxis: 'y',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return `النسبة: ${ctx.raw} : 1`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                }
+            }
+        });
+    }
 }
 
 // ========================================
@@ -2156,6 +2465,9 @@ function renderAll() {
     renderTheses();
     renderEvents();
     renderQualityIndicators();
+    // مؤشرات البرامج تعتمد على بيانات التدريس (lazy load)
+    // يتم استدعاؤها عند فتح تبويب الجودة إذا كانت بيانات التدريس محمّلة
+    if (teachingData) renderProgramQualityIndicators();
 }
 
 // ========================================
@@ -2910,10 +3222,17 @@ function setupTabs() {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            
+
             const tabId = btn.dataset.tab;
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
+
+            // عند فتح تبويب الجودة: تحميل مؤشرات البرامج (تعتمد على بيانات التدريس)
+            if (tabId === 'quality') {
+                ensureTeachingLoaded().then(() => {
+                    renderProgramQualityIndicators();
+                });
+            }
         });
     });
 }
@@ -2952,10 +3271,12 @@ async function init() {
     await loadConfig();
     populateYearSelector();
     populateDepartmentSelector();
+    populateProgramSelector();
     setupTabs();
     setupFilters();
     setupYearSelector();
     setupDepartmentSelector();
+    setupProgramSelector();
     await loadAllData();
 
     // مؤشر حالة البيانات الحية
