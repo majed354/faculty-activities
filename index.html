@@ -96,6 +96,10 @@
                     <select id="deptSelect"></select>
                 </div>
                 <div class="year-selector">
+                    <label for="programSelect">البرنامج</label>
+                    <select id="programSelect"></select>
+                </div>
+                <div class="year-selector">
                     <label for="yearSelect">السنة الأكاديمية</label>
                     <select id="yearSelect"></select>
                 </div>
@@ -388,6 +392,36 @@
                     <h3>أكثر 10 أعضاء تدريساً</h3>
                     <canvas id="teachingTopChart"></canvas>
                 </div>
+                <div class="chart-card chart-card-wide">
+                    <h3>توزيع شعب المقررات حسب البرامج الأكاديمية</h3>
+                    <canvas id="teachingProgramChart"></canvas>
+                </div>
+            </div>
+
+            <!-- إحصائيات البرامج الأكاديمية -->
+            <div class="program-stats-section" id="programStatsSection">
+                <div class="program-stats-header">
+                    <h3>📊 إحصائيات البرامج الأكاديمية</h3>
+                    <span class="program-stats-hint">المتوسط والنسبة تُحسب على المقررات الفريدة للبرنامج (بدون المتطلبات الجامعية المشتركة)</span>
+                </div>
+                <div class="data-table-container">
+                    <table class="data-table program-stats-table" id="programStatsTable">
+                        <thead>
+                            <tr>
+                                <th>البرنامج</th>
+                                <th>الدرجة</th>
+                                <th>الشعب</th>
+                                <th>الطلاب</th>
+                                <th>الأعضاء</th>
+                                <th>شعب المقررات الفريدة</th>
+                                <th>متوسط طلاب/شعبة (فريد)</th>
+                                <th>نسبة الطلاب/هيئة التدريس</th>
+                            </tr>
+                        </thead>
+                        <tbody id="programStatsBody">
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- البحث بالمقرر -->
@@ -422,6 +456,9 @@
                         </select>
                         <select id="tblDeptFilter">
                             <option value="all">جميع الأقسام</option>
+                        </select>
+                        <select id="tblProgramFilter">
+                            <option value="all">جميع البرامج</option>
                         </select>
                         <select id="tblModeFilter">
                             <option value="all">جميع طرق التدريس</option>
@@ -600,6 +637,34 @@
                 <div class="chart-card large">
                     <h3>تحليل الأداء</h3>
                     <canvas id="qualityRadarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- مؤشرات البرامج الأكاديمية -->
+            <div class="program-quality-section" id="programQualitySection">
+                <div class="program-quality-header">
+                    <h3>🎓 مؤشرات البرامج الأكاديمية</h3>
+                    <div class="program-quality-filters">
+                        <select id="qualityYearFilter" class="quality-filter-select">
+                            <option value="all">جميع السنوات</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="program-quality-hint">المؤشرات محسوبة على المقررات الفريدة للبرنامج فقط (بدون المتطلبات الجامعية المشتركة)</p>
+
+                <div class="program-quality-grid" id="programQualityGrid">
+                    <!-- يتم ملؤه ديناميكياً -->
+                </div>
+
+                <div class="program-quality-chart-row">
+                    <div class="chart-card">
+                        <h3>متوسط عدد الطلاب في الشعبة لكل برنامج</h3>
+                        <canvas id="programAvgStudentsChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>نسبة الطلاب لأعضاء هيئة التدريس لكل برنامج</h3>
+                        <canvas id="programRatioChart"></canvas>
+                    </div>
                 </div>
             </div>
         </section>

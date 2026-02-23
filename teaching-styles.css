@@ -954,6 +954,301 @@
     }
 }
 
+/* ===== مخطط البرامج (عرض كامل) ===== */
+.chart-card-wide {
+    grid-column: 1 / -1;
+}
+
+/* ===== قسم إحصائيات البرامج ===== */
+.program-stats-section {
+    background: linear-gradient(135deg, var(--primary-800), var(--primary-700));
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 30px;
+}
+
+.program-stats-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.program-stats-header h3 {
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.program-stats-hint {
+    color: var(--gray-400);
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    background: rgba(212,175,55,0.08);
+    padding: 4px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(212,175,55,0.15);
+}
+
+/* جدول إحصائيات البرامج */
+.program-stats-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.program-stats-table thead th {
+    background: rgba(0,0,0,0.2);
+    color: var(--gold-400);
+    padding: 12px 10px;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+    border-bottom: 2px solid rgba(212,175,55,0.3);
+}
+
+.program-stats-table thead th:first-child { border-radius: 0 10px 0 0; }
+.program-stats-table thead th:last-child { border-radius: 10px 0 0 0; }
+
+.program-stats-table tbody td {
+    padding: 12px 10px;
+    color: #e0e0e0;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.program-stats-table tbody tr:nth-child(even) {
+    background: rgba(0,0,0,0.1);
+}
+
+.program-stats-table tbody tr:hover {
+    background: rgba(212,175,55,0.08);
+}
+
+.prog-name-cell {
+    text-align: right !important;
+    font-weight: 600;
+    color: #fff !important;
+}
+
+/* ===== شارات الدرجة العلمية ===== */
+.degree-badge {
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-block;
+}
+
+.degree-bsc { background: rgba(78,205,196,0.15); color: #4ecdc4; }
+.degree-msc { background: rgba(212,175,55,0.15); color: #d4af37; }
+.degree-phd { background: rgba(231,76,60,0.15); color: #e74c3c; }
+.degree-other { background: rgba(156,163,175,0.15); color: #9ca3af; }
+
+/* ===== شارات نسبة الطلاب/هيئة التدريس ===== */
+.ratio-badge {
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-block;
+    font-family: var(--font-body);
+}
+.ratio-good { background: rgba(16,185,129,0.15); color: #10b981; }
+.ratio-warning { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.ratio-high { background: rgba(239,68,68,0.15); color: #ef4444; }
+.ratio-na { background: rgba(156,163,175,0.1); color: #6b7280; }
+
+/* ===== قسم مؤشرات البرامج في تبويب الجودة ===== */
+.program-quality-section {
+    margin-top: 30px;
+    padding: 24px;
+    background: linear-gradient(135deg, var(--primary-800), var(--primary-700));
+    border-radius: 16px;
+    border: 1px solid rgba(212,175,55,0.15);
+}
+
+.program-quality-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.program-quality-header h3 {
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.program-quality-filters {
+    display: flex;
+    gap: 8px;
+}
+
+.quality-filter-select {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(212,175,55,0.25);
+    border-radius: 8px;
+    color: #e0e0e0;
+    padding: 6px 12px;
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+.quality-filter-select:focus {
+    outline: none;
+    border-color: var(--gold-400);
+}
+
+.program-quality-hint {
+    color: var(--gray-400);
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    margin-bottom: 20px;
+    display: block;
+}
+
+/* شبكة بطاقات البرامج */
+.program-quality-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.program-quality-card {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 18px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.program-quality-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    border-color: rgba(212,175,55,0.2);
+}
+
+.pq-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.pq-icon {
+    font-size: 1.4rem;
+}
+
+.pq-title h4 {
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+}
+
+.pq-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.pq-metric {
+    text-align: center;
+    padding: 8px 4px;
+    background: rgba(0,0,0,0.15);
+    border-radius: 8px;
+}
+
+.pq-metric-value {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    font-family: var(--font-body);
+    margin-bottom: 2px;
+}
+
+.pq-metric-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--gray-400);
+    font-family: var(--font-body);
+}
+
+.pq-year-label {
+    text-align: left;
+    margin-top: 10px;
+    font-size: 0.72rem;
+    color: var(--gray-500);
+    font-family: var(--font-body);
+}
+
+/* مخططات البرامج في الجودة */
+.program-quality-chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.program-quality-chart-row .chart-card {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 18px;
+}
+
+.program-quality-chart-row .chart-card h3 {
+    color: #e0e0e0;
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    margin: 0 0 12px 0;
+    text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .program-quality-grid {
+        grid-template-columns: 1fr;
+    }
+    .program-quality-chart-row {
+        grid-template-columns: 1fr;
+    }
+    .program-quality-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+/* ===== تنسيق optgroup في فلتر البرنامج ===== */
+#tblProgramFilter optgroup,
+#programSelect optgroup {
+    font-weight: 700;
+    font-family: 'Cairo', sans-serif;
+    color: #ccc;
+    background: #1a3a5c;
+}
+
+#tblProgramFilter option,
+#programSelect option {
+    font-weight: 400;
+    padding: 4px 8px;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
     .teaching-stats-grid {
