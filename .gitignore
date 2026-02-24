@@ -1,0 +1,9 @@
+node_modules/
+.claude/
+nul
+*.xlsx
+package.json
+package-lock.json
+build_excel.py
+parse_teaching.py
+update_faculty.py
