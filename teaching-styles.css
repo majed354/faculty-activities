@@ -1234,9 +1234,61 @@
     }
 }
 
-/* ===== تنسيق optgroup في فلتر البرنامج ===== */
+/* ===== شريط فلاتر تبويب إحصائيات الشعب ===== */
+.sections-filter-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    padding: 16px 20px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.sections-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+    flex: 1;
+    max-width: 300px;
+}
+
+.sections-filter-group label {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    font-family: 'Cairo', sans-serif;
+    font-weight: 500;
+}
+
+.sections-filter-group select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05);
+    color: #e5e7eb;
+    font-family: 'Cairo', sans-serif;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sections-filter-group select:hover {
+    border-color: rgba(212,175,55,0.4);
+    background: rgba(255,255,255,0.08);
+}
+
+.sections-filter-group select:focus {
+    outline: none;
+    border-color: #d4af37;
+    box-shadow: 0 0 0 2px rgba(212,175,55,0.2);
+}
+
+/* ===== تنسيق optgroup في فلاتر البرنامج ===== */
 #tblProgramFilter optgroup,
-#programSelect optgroup {
+#sectionsProgramFilter optgroup {
     font-weight: 700;
     font-family: 'Cairo', sans-serif;
     color: #ccc;
@@ -1244,9 +1296,19 @@
 }
 
 #tblProgramFilter option,
-#programSelect option {
+#sectionsProgramFilter option {
     font-weight: 400;
     padding: 4px 8px;
+}
+
+@media (max-width: 768px) {
+    .sections-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .sections-filter-group {
+        max-width: 100%;
+    }
 }
 
 /* ===== Responsive ===== */

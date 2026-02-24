@@ -125,14 +125,6 @@ function initTeachingFilters() {
         });
     }
 
-    // فلتر البرنامج العلوي (يؤثر على الإحصائيات والمخططات)
-    const headerProg = document.getElementById('programSelect');
-    if (headerProg) {
-        headerProg.addEventListener('change', () => {
-            renderTeachingOverview();
-        });
-    }
-
     // === فلاتر الجدول التفصيلي (مستقلة تماماً) ===
     // تعبئة السنوات
     const tblYear = document.getElementById('tblYearFilter');
@@ -415,12 +407,6 @@ function getOverviewFilteredRecords() {
         });
     }
 
-    // فلتر البرنامج من الفلتر العلوي الثابت
-    const headerProg = (typeof currentProgram !== 'undefined') ? currentProgram : 'all';
-    if (headerProg && headerProg !== 'all') {
-        records = filterRecordsByProgram(records, headerProg);
-    }
-
     return records;
 }
 
@@ -544,7 +530,7 @@ function animateNumber(elementId, targetValue) {
     if (!el) return;
 
     const current = parseInt(el.textContent.replace(/[^\d]/g, '')) || 0;
-    const duration = 800;
+    const duration = 400;
     const startTime = performance.now();
 
     function update(currentTime) {
@@ -589,7 +575,6 @@ function renderTeachingCharts(records) {
         renderTopChart(records);
         requestAnimationFrame(() => {
             renderProgramChart(records);
-            renderProgramStats(records);
         });
     });
 }
@@ -913,9 +898,14 @@ function openTeachingModal(facultyId) {
     });
 }
 
+let modalCharts = [];
+
 function closeTeachingModal() {
     document.getElementById('teachingModal').classList.remove('active');
     document.body.style.overflow = '';
+    // تنظيف مخططات الـ Modal لتوفير الذاكرة
+    modalCharts.forEach(c => { try { c.destroy(); } catch(e) {} });
+    modalCharts = [];
 }
 
 function renderMemberTrendChart(yearGroups) {
@@ -928,7 +918,7 @@ function renderMemberTrendChart(yearGroups) {
         yearGroups[y].forEach(r => { r.cs.forEach(course => { c++; s += course.e || 0; }); });
         coursesData.push(c); studentsData.push(s);
     });
-    new Chart(canvas, {
+    const chart1 = new Chart(canvas, {
         type: 'bar',
         data: {
             labels: years.map(y => y + 'هـ'),
@@ -950,6 +940,7 @@ function renderMemberTrendChart(yearGroups) {
             }
         }
     });
+    modalCharts.push(chart1);
 }
 
 function renderMemberModeChart(records) {
@@ -957,11 +948,12 @@ function renderMemberModeChart(records) {
     if (!canvas) return;
     let ip = 0, rm = 0, hy = 0;
     records.forEach(r => { r.cs.forEach(c => { if (c.m === 'حضوري' || c.m === 'غير محدد') ip++; else if (c.m === 'عن بعد') rm++; else if (c.m === 'مدمج') hy++; else ip++; }); });
-    new Chart(canvas, {
+    const chart2 = new Chart(canvas, {
         type: 'doughnut',
         data: { labels: ['حضوري', 'عن بعد', 'مدمج'], datasets: [{ data: [ip, rm, hy], backgroundColor: ['#4ecdc4', '#e74c3c', '#f39c12'], borderColor: '#1a3a5c', borderWidth: 2 }] },
         options: { responsive: true, resizeDelay: 300, animation: { duration: 0 }, plugins: { legend: { position: 'bottom', labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } } }, title: { display: true, text: 'طريقة التدريس', color: '#e0e0e0', font: { family: 'Cairo', size: 13 } } } }
     });
+    modalCharts.push(chart2);
 }
 
 // ========================================
@@ -1120,8 +1112,11 @@ function renderProgramStats(records) {
         if (totalSections > 0) {
             const avgNonShared = nonSharedSections > 0 ? Math.round(nonSharedStudents / nonSharedSections) : 0;
             const nonSharedFacultyCount = nonSharedFacultySet.size;
+            // تقدير عدد الطلاب الفعلي باستخدام متوسط حمل الطالب السنوي
+            const avgLoad = (typeof programAvgLoad !== 'undefined' && programAvgLoad[key]) || 1;
+            const estimatedStudents = Math.round(nonSharedStudents / avgLoad);
             const studentFacultyRatio = nonSharedFacultyCount > 0
-                ? (nonSharedStudents / nonSharedFacultyCount).toFixed(1)
+                ? (estimatedStudents / nonSharedFacultyCount).toFixed(1)
                 : '-';
             stats.push({
                 name: p.name,
@@ -1132,7 +1127,9 @@ function renderProgramStats(records) {
                 nonSharedSections,
                 avgNonShared,
                 studentFacultyRatio,
-                nonSharedFacultyCount
+                nonSharedFacultyCount,
+                estimatedStudents,
+                avgLoad
             });
         }
     });
@@ -1162,10 +1159,10 @@ function renderProgramStats(records) {
             <td class="prog-name-cell">${s.name}</td>
             <td><span class="degree-badge degree-${degreeClass[s.degree] || 'other'}">${s.degree}</span></td>
             <td><strong>${s.totalSections.toLocaleString('ar-SA')}</strong></td>
-            <td>${s.totalStudents.toLocaleString('ar-SA')}</td>
-            <td>${s.faculty}</td>
             <td>${s.nonSharedSections.toLocaleString('ar-SA')}</td>
             <td><strong>${s.avgNonShared.toLocaleString('ar-SA')}</strong></td>
+            <td>${(s.estimatedStudents || 0).toLocaleString('ar-SA')}</td>
+            <td>${s.faculty}</td>
             <td>${getRatioBadge(s.studentFacultyRatio)}</td>
         </tr>
     `).join('');

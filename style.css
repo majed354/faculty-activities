@@ -102,8 +102,9 @@ body {
 .floating-shape {
     position: absolute;
     border-radius: 50%;
-    opacity: 0.1;
-    animation: float 20s ease-in-out infinite;
+    opacity: 0.06;
+    animation: float 30s ease-in-out infinite;
+    will-change: transform;
 }
 
 .shape-1 {
@@ -764,7 +765,7 @@ body {
     height: 100%;
     background: linear-gradient(90deg, var(--emerald-500), var(--sky-500));
     border-radius: 4px;
-    transition: width 1s ease;
+    transition: width 0.4s ease;
 }
 
 .kpi-progress-bar.student-bar {
@@ -783,7 +784,7 @@ body {
     height: 100%;
     background: linear-gradient(90deg, var(--violet-500), var(--sky-500));
     border-radius: 4px;
-    transition: width 1s ease;
+    transition: width 0.4s ease;
 }
 
 .kpi-mini-chart {
@@ -831,7 +832,7 @@ body {
 .mini-bar-fill {
     height: 100%;
     border-radius: 3px;
-    transition: width 1s ease;
+    transition: width 0.4s ease;
 }
 
 .mini-bar-fill.phd {
