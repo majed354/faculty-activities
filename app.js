@@ -177,6 +177,9 @@ async function loadFromGoogleSheets() {
             return false;
         }
 
+        // تطبيع القيم القادمة من Google Sheets (خصوصًا التواريخ التي قد تصل بصيغة Date.toString)
+        normalizeGoogleSheetsPayload(sheetsData);
+
         // دمج البيانات من Google Sheets مع البيانات الحالية
         if (sheetsData.faculty && sheetsData.faculty.length > 0) {
             // إضافة أعضاء جدد غير موجودين
@@ -223,6 +226,26 @@ async function loadFromGoogleSheets() {
         console.warn('⚠️ تعذر الاتصال بـ Google Sheets:', error.message);
         return false;
     }
+}
+
+function normalizeGoogleSheetsPayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+
+    const normalizeRows = (rows, dateFields = []) => {
+        if (!Array.isArray(rows)) return;
+        rows.forEach(row => {
+            if (!row || typeof row !== 'object') return;
+            dateFields.forEach(field => {
+                if (row[field]) {
+                    row[field] = normalizeIncomingDateValue(row[field]);
+                }
+            });
+        });
+    };
+
+    normalizeRows(payload.publications, ['publish_date', 'date']);
+    normalizeRows(payload.participations, ['date']);
+    normalizeRows(payload.theses, ['defense_date']);
 }
 
 // ========================================
@@ -553,27 +576,9 @@ function formatDate(dateStr) {
     if (!dateStr) return '-';
     const hijriMonths = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
     
-    let day, month, year;
-    
-    if (dateStr.includes('/')) {
-        const parts = dateStr.split('/');
-        day = parseInt(parts[0]);
-        month = parseInt(parts[1]);
-        year = parseInt(parts[2]);
-    } else if (dateStr.includes('-')) {
-        const parts = dateStr.split('-');
-        if (parts[0].length === 4) {
-            year = parseInt(parts[0]);
-            month = parseInt(parts[1]);
-            day = parseInt(parts[2]);
-        } else {
-            day = parseInt(parts[0]);
-            month = parseInt(parts[1]);
-            year = parseInt(parts[2]);
-        }
-    } else {
-        return dateStr;
-    }
+    const parsed = parseDateParts(dateStr);
+    if (!parsed) return dateStr;
+    let { day, month, year } = parsed;
     
     if (year < 2000) {
         return `${day} ${hijriMonths[month - 1]} ${year}هـ`;
@@ -599,23 +604,9 @@ function formatDateShort(dateStr) {
     if (!dateStr) return { day: '-', month: '-' };
     
     const hijriMonths = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
-    
-    let day, month;
-    
-    if (dateStr.includes('-')) {
-        const parts = dateStr.split('-');
-        if (parts[0].length === 4) {
-            month = parseInt(parts[1]);
-            day = parseInt(parts[2]);
-        } else {
-            day = parseInt(parts[0]);
-            month = parseInt(parts[1]);
-        }
-    } else if (dateStr.includes('/')) {
-        const parts = dateStr.split('/');
-        day = parseInt(parts[0]);
-        month = parseInt(parts[1]);
-    }
+    const parsed = parseDateParts(dateStr);
+    if (!parsed) return { day: '-', month: '-' };
+    const { day, month } = parsed;
     
     return { day: day || '-', month: hijriMonths[month - 1] || '-' };
 }
@@ -631,10 +622,66 @@ function normalizeArabicDigits(value) {
     return String(value).replace(/[٠-٩۰-۹]/g, ch => map[ch] || ch);
 }
 
+function pad2(value) {
+    return String(value).padStart(2, '0');
+}
+
+function parseJsDateStringParts(dateStr) {
+    const raw = String(dateStr || '').trim();
+    if (!raw) return null;
+
+    // مثال: Tue Jul 02 1444 00:00:00 GMT+0306 (التوقيت العربي الرسمي)
+    const match = raw.match(/^[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})\b/);
+    if (!match) return null;
+
+    const monthMap = {
+        Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
+        Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12
+    };
+
+    const month = monthMap[match[1]];
+    const day = parseInt(match[2], 10);
+    const year = parseInt(match[3], 10);
+
+    if (!month || !Number.isFinite(day) || !Number.isFinite(year)) return null;
+    return { year, month, day };
+}
+
+function normalizeIncomingDateValue(value) {
+    if (value === null || value === undefined) return value;
+    const raw = String(value).trim();
+    if (!raw) return '';
+
+    // ISO datetime => نكتفي بالجزء التاريخي
+    const isoMatch = normalizeArabicDigits(raw).match(/^(\d{4})-(\d{2})-(\d{2})T/);
+    if (isoMatch) {
+        return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    }
+
+    const parts = parseDateParts(raw);
+    if (!parts) return raw;
+
+    return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+}
+
 function parseDateParts(dateStr) {
     if (!dateStr) return null;
     const normalized = normalizeArabicDigits(dateStr).trim();
     if (!normalized) return null;
+
+    // صيغة Date.toString القادمة أحيانًا من Google Sheets / Apps Script
+    const jsDateParts = parseJsDateStringParts(normalized);
+    if (jsDateParts) return jsDateParts;
+
+    // ISO datetime
+    const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+    if (isoMatch) {
+        return {
+            year: parseInt(isoMatch[1], 10),
+            month: parseInt(isoMatch[2], 10),
+            day: parseInt(isoMatch[3], 10)
+        };
+    }
 
     const separator = normalized.includes('-') ? '-' : (normalized.includes('/') ? '/' : null);
     if (!separator) return null;
