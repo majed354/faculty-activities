@@ -330,20 +330,22 @@ function buildCourseToPrograms() {
         }
     });
 
-    // تحديد المقررات الفريدة من الربط الفعلي (fallback + تدقيق)
-    Object.entries(courseCodeToPrograms).forEach(([code, progs]) => {
-        if (progs.length === 1) {
-            const key = progs[0].key;
+    if (hasPlanTypeColumn) {
+        // عند توفر ملف new_all_plans.csv بتصنيف (فريد/مشترك) نعتمد التصنيف الصريح فقط
+        Object.entries(explicitExclusiveByProgram).forEach(([key, codes]) => {
             if (!programExclusiveCodes[key]) programExclusiveCodes[key] = new Set();
-            programExclusiveCodes[key].add(code);
-        }
-    });
-
-    // دمج ما تم تصنيفه صراحةً كـ "فريد" في الملف الجديد
-    Object.entries(explicitExclusiveByProgram).forEach(([key, codes]) => {
-        if (!programExclusiveCodes[key]) programExclusiveCodes[key] = new Set();
-        codes.forEach(code => programExclusiveCodes[key].add(code));
-    });
+            codes.forEach(code => programExclusiveCodes[key].add(code));
+        });
+    } else {
+        // fallback للملف القديم: اعتبار المقرر فريدًا إذا ارتبط ببرنامج واحد فقط
+        Object.entries(courseCodeToPrograms).forEach(([code, progs]) => {
+            if (progs.length === 1) {
+                const key = progs[0].key;
+                if (!programExclusiveCodes[key]) programExclusiveCodes[key] = new Set();
+                programExclusiveCodes[key].add(code);
+            }
+        });
+    }
 
     // حساب متوسط حمل الطالب السنوي (فقط عند توفر بيانات الخطة القديمة)
     Object.entries(programLevelCounts).forEach(([key, info]) => {
@@ -357,7 +359,7 @@ function buildCourseToPrograms() {
 
     const totalCourseProgramLinks = Object.values(courseCodeToPrograms).reduce((sum, progs) => sum + progs.length, 0);
     console.log(`📋 خريطة البرامج: ${Object.keys(courseCodeToPrograms).length} مقرر → ${totalCourseProgramLinks} ربط برنامج`);
-    console.log(`📚 مصدر الخطط: ${hasPlanTypeColumn ? 'new_all_plans.csv (نوع المقرر)' : 'all_plans.csv (اشتقاق آلي)'}`);
+    console.log(`📚 مصدر الخطط: ${hasPlanTypeColumn ? 'new_all_plans.csv (تصنيف صريح فريد/مشترك)' : 'all_plans.csv (اشتقاق آلي)'}`);
     if (hasOldPlanColumns && Object.keys(programAvgLoad).length > 0) {
         console.log(`📊 حمل الطالب السنوي:`, Object.entries(programAvgLoad).map(([k, v]) => `${k}: ${v.toFixed(1)}`).join(', '));
     }
@@ -366,14 +368,19 @@ function buildCourseToPrograms() {
 async function loadAllData() {
     showLoading();
 
-    const [faculty, students, theses, participations, publications, plans] = await Promise.all([
+    const [faculty, students, theses, participations, publications] = await Promise.all([
         loadCSV(`${DATA_BASE_URL}/faculty.csv`),
         loadCSV(`${DATA_BASE_URL}/students_count.csv`),
         loadCSV(`${DATA_BASE_URL}/theses.csv`),
         loadCSV(`${DATA_BASE_URL}/participations.csv`),
-        loadCSV(`${DATA_BASE_URL}/publications.csv`),
-        loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`)
+        loadCSV(`${DATA_BASE_URL}/publications.csv`)
     ]);
+
+    let plans = await loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`);
+    if (!plans || plans.length === 0) {
+        console.warn('⚠️ تعذر تحميل new_all_plans.csv أو أنه فارغ، سيتم استخدام all_plans.csv كنسخة احتياطية');
+        plans = await loadCSV(`${DATA_BASE_URL}/all_plans.csv`);
+    }
 
     allData = { faculty, students, theses, participations, publications };
     allPlansData = plans;
