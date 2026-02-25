@@ -581,7 +581,7 @@ function formatDate(dateStr) {
     let { day, month, year } = parsed;
     
     if (year < 2000) {
-        return `${day} ${hijriMonths[month - 1]} ${year}هـ`;
+        return formatHijriDateDisplay(day, month, year, hijriMonths);
     }
     
     const gregorianDate = new Date(year, month - 1, day);
@@ -590,14 +590,14 @@ function formatDate(dateStr) {
         month: 'numeric', 
         year: 'numeric'
     });
-    const hijriParts = hijriDate.match(/(\d+)/g);
+    const hijriParts = normalizeArabicDigits(hijriDate).match(/(\d+)/g);
     if (hijriParts && hijriParts.length >= 3) {
         day = parseInt(hijriParts[0]);
         month = parseInt(hijriParts[1]);
         year = parseInt(hijriParts[2]);
     }
     
-    return `${day} ${hijriMonths[month - 1]} ${year}هـ`;
+    return formatHijriDateDisplay(day, month, year, hijriMonths);
 }
 
 function formatDateShort(dateStr) {
@@ -606,9 +606,23 @@ function formatDateShort(dateStr) {
     const hijriMonths = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
     const parsed = parseDateParts(dateStr);
     if (!parsed) return { day: '-', month: '-' };
-    const { day, month } = parsed;
+    let { day, month, year } = parsed;
+
+    if (year >= 2000) {
+        const gregorianDate = new Date(year, month - 1, day);
+        const hijriDate = gregorianDate.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', {
+            day: 'numeric',
+            month: 'numeric',
+            year: 'numeric'
+        });
+        const hijriParts = normalizeArabicDigits(hijriDate).match(/(\d+)/g);
+        if (hijriParts && hijriParts.length >= 3) {
+            day = parseInt(hijriParts[0], 10);
+            month = parseInt(hijriParts[1], 10);
+        }
+    }
     
-    return { day: day || '-', month: hijriMonths[month - 1] || '-' };
+    return { day: formatArabicDigits(pad2(day || '')), month: hijriMonths[month - 1] || '-' };
 }
 
 function normalizeArabicDigits(value) {
@@ -620,6 +634,21 @@ function normalizeArabicDigits(value) {
         '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
     };
     return String(value).replace(/[٠-٩۰-۹]/g, ch => map[ch] || ch);
+}
+
+function formatArabicDigits(value) {
+    const map = {
+        '0': '٠', '1': '١', '2': '٢', '3': '٣', '4': '٤',
+        '5': '٥', '6': '٦', '7': '٧', '8': '٨', '9': '٩'
+    };
+    return String(value ?? '').replace(/\d/g, ch => map[ch] || ch);
+}
+
+function formatHijriDateDisplay(day, month, year, hijriMonths) {
+    const monthName = hijriMonths?.[month - 1] || '-';
+    const dayText = formatArabicDigits(pad2(day));
+    const yearText = formatArabicDigits(year);
+    return `${dayText} ${monthName} ${yearText}هـ`;
 }
 
 function pad2(value) {
