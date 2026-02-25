@@ -23,6 +23,69 @@ let tableFilters = {
     sort: 'sections'
 };
 
+function rafTick() {
+    return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+async function fetchJSONOrThrow(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status} @ ${url}`);
+    return response.json();
+}
+
+function setTeachingLoaderMessage(message) {
+    const loaderText = document.querySelector('#teachingLoader span');
+    if (loaderText) loaderText.textContent = message;
+}
+
+function normalizeTeachingSplitPayload(meta, allRecords) {
+    const years = Array.isArray(meta.years) ? meta.years : [];
+    const departments = Array.isArray(meta.departments) ? meta.departments : [];
+    const facultyIndex = meta.faculty_index || {};
+
+    return {
+        years,
+        departments,
+        faculty_index: facultyIndex,
+        records: allRecords
+    };
+}
+
+async function loadTeachingDataFromSplitFiles() {
+    const splitMetaUrl = `${DATA_BASE_URL}/teaching/meta.json`;
+    const tMeta = performance.now();
+    const meta = await fetchJSONOrThrow(splitMetaUrl);
+    const years = Array.isArray(meta.years) ? meta.years : [];
+    const yearFiles = meta.year_files || {};
+
+    if (!years.length) throw new Error('Split teaching meta has no years');
+
+    console.log(`🏫 تحميل meta.json: ${Math.round(performance.now() - tMeta)}ms`);
+
+    const allRecords = [];
+
+    for (let i = 0; i < years.length; i++) {
+        const year = years[i];
+        const relPath = yearFiles[String(year)] || `teaching/years/${year}.json`;
+        const url = relPath.startsWith('./') || relPath.startsWith('/') ? relPath : `${DATA_BASE_URL}/${relPath}`;
+
+        setTeachingLoaderMessage(`جاري تحميل بيانات النشاط التدريسي... (${i + 1}/${years.length}) سنة ${year}هـ`);
+        const tYear = performance.now();
+        const yearPayload = await fetchJSONOrThrow(url);
+        const yearRecords = Array.isArray(yearPayload) ? yearPayload : (yearPayload.records || []);
+        allRecords.push(...yearRecords);
+        console.log(`🏫 سنة ${year}هـ: ${yearRecords.length} سجل (${Math.round(performance.now() - tYear)}ms)`);
+
+        // إتاحة فرصة للواجهة بين الملفات لتقليل التعليق
+        if (i < years.length - 1) {
+            await rafTick();
+        }
+    }
+
+    setTeachingLoaderMessage('جاري تجهيز بيانات النشاط التدريسي...');
+    return normalizeTeachingSplitPayload(meta, allRecords);
+}
+
 // ========================================
 // تحميل البيانات (lazy - تتأخر حتى يفتح المستخدم تبويب التدريس)
 // ========================================
@@ -32,14 +95,25 @@ async function loadTeachingData() {
     showTeachingLoader(true);
     try {
         const t0 = performance.now();
-        const response = await fetch(`${DATA_BASE_URL}/teaching_data.json`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        teachingData = await response.json();
+        setTeachingLoaderMessage('جاري تحميل بيانات النشاط التدريسي...');
+
+        try {
+            teachingData = await loadTeachingDataFromSplitFiles();
+            console.log('🏫 مصدر بيانات التدريس: ملفات سنوية مقسمة');
+        } catch (splitError) {
+            console.warn('⚠️ تعذر تحميل النسخة المقسمة، سيتم استخدام teaching_data.json:', splitError.message);
+            setTeachingLoaderMessage('جاري تحميل بيانات النشاط التدريسي (نسخة احتياطية)...');
+            const response = await fetch(`${DATA_BASE_URL}/teaching_data.json`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            teachingData = await response.json();
+            console.log('🏫 مصدر بيانات التدريس: teaching_data.json');
+        }
+
         tableFacultySummaryCache.clear();
         if (typeof resetTeachingProgramAggregatesCache === 'function') {
             resetTeachingProgramAggregatesCache();
         }
-        console.log(`🏫 تحميل JSON: ${Math.round(performance.now() - t0)}ms`);
+        console.log(`🏫 تحميل البيانات: ${Math.round(performance.now() - t0)}ms`);
 
         buildCoursesMap();
         initTeachingFilters();
@@ -73,7 +147,10 @@ function showTeachingLoader(show) {
         const teaching = document.getElementById('teaching');
         if (teaching) teaching.insertBefore(loader, teaching.children[1]);
     }
-    if (loader) loader.style.display = show ? 'flex' : 'none';
+    if (loader) {
+        loader.style.display = show ? 'flex' : 'none';
+        if (show) setTeachingLoaderMessage('جاري تحميل بيانات النشاط التدريسي...');
+    }
 }
 
 // تحميل بيانات التدريس عند الطلب فقط
