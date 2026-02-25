@@ -10,6 +10,7 @@ let teachingCharts = {};
 let allCoursesMap = null;
 let teachingInitialized = false;
 let teachingDataLoading = false;
+let tableFacultySummaryCache = new Map();
 
 // فلاتر الجدول التفصيلي (مستقلة تماماً)
 let tableFilters = {
@@ -34,6 +35,10 @@ async function loadTeachingData() {
         const response = await fetch(`${DATA_BASE_URL}/teaching_data.json`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         teachingData = await response.json();
+        tableFacultySummaryCache.clear();
+        if (typeof resetTeachingProgramAggregatesCache === 'function') {
+            resetTeachingProgramAggregatesCache();
+        }
         console.log(`🏫 تحميل JSON: ${Math.round(performance.now() - t0)}ms`);
 
         buildCoursesMap();
@@ -708,11 +713,29 @@ function renderTopChart(records) {
 // ========================================
 // جدول الأعضاء (يتأثر بفلاتر الجدول المستقلة فقط)
 // ========================================
+function getTableSummaryCacheKey() {
+    return [
+        tableFilters.year,
+        tableFilters.department,
+        tableFilters.program,
+        tableFilters.mode,
+        tableFilters.rank
+    ].join('|');
+}
+
+function getCachedFacultySummaryForTable() {
+    const key = getTableSummaryCacheKey();
+    if (!tableFacultySummaryCache.has(key)) {
+        const records = getTableFilteredRecords();
+        tableFacultySummaryCache.set(key, computeFacultySummary(records));
+    }
+    return tableFacultySummaryCache.get(key) || [];
+}
+
 function renderTeachingTable() {
     if (!teachingData) return;
 
-    const records = getTableFilteredRecords();
-    let facultySummary = computeFacultySummary(records);
+    let facultySummary = getCachedFacultySummaryForTable().slice();
 
     // فلتر البحث بالاسم
     if (tableFilters.search) {
@@ -961,16 +984,15 @@ function renderMemberModeChart(records) {
 // ========================================
 function filterRecordsByProgram(records, selectedProgram) {
     if (!selectedProgram || selectedProgram === 'all') return records;
-    const parts = selectedProgram.split(' - ');
-    const progName = parts[0];
-    const progDeg = parts[1] || '';
     return records.map(r => ({
         ...r,
         cs: r.cs.filter(c => {
+            if (typeof courseBelongsToProgramKey === 'function') {
+                return courseBelongsToProgramKey(c.cc, selectedProgram);
+            }
             const code = (c.cc || '').trim();
             const progs = (typeof courseCodeToPrograms !== 'undefined') ? courseCodeToPrograms[code] : null;
-            if (!progs) return false;
-            return progs.some(p => p.program === progName && p.degree === progDeg);
+            return !!(progs && progs.some(p => p.key === selectedProgram));
         })
     })).filter(r => r.cs.length > 0);
 }
@@ -1076,62 +1098,26 @@ function renderProgramStats(records) {
     if (!tbody || typeof courseCodeToPrograms === 'undefined') return;
 
     const programs = (typeof config !== 'undefined' && config.programs) || [];
+    const selectedProgram = (typeof currentProgram !== 'undefined' && currentProgram) ? currentProgram : 'all';
+    const programMap = (typeof getProgramAggregateMapForSelectedSectionsYear === 'function')
+        ? getProgramAggregateMapForSelectedSectionsYear()
+        : {};
     const stats = [];
 
     programs.forEach(p => {
         const key = p.name + ' - ' + p.degree;
-        let totalSections = 0, totalStudents = 0;
-        let nonSharedSections = 0, nonSharedStudents = 0;
-        const facultySet = new Set();
-        const nonSharedFacultySet = new Set();
+        if (selectedProgram !== 'all' && key !== selectedProgram) return;
+        const m = (typeof finalizeProgramBucket === 'function')
+            ? finalizeProgramBucket(programMap[key])
+            : null;
+        if (!m || m.totalSections <= 0) return;
 
-        // المقررات الفريدة للبرنامج (غير المتطلبات الجامعية المشتركة)
-        const nonSharedCodes = (typeof programNonSharedCodes !== 'undefined' && programNonSharedCodes[key])
-            ? programNonSharedCodes[key] : new Set();
-
-        records.forEach(r => {
-            r.cs.forEach(c => {
-                const code = (c.cc || '').trim();
-                const progs = courseCodeToPrograms[code];
-                if (!progs) return;
-                const belongs = progs.some(pp => pp.program === p.name && pp.degree === p.degree);
-                if (!belongs) return;
-
-                totalSections++;
-                totalStudents += c.e || 0;
-                facultySet.add(r.fid);
-
-                if (nonSharedCodes.has(code)) {
-                    nonSharedSections++;
-                    nonSharedStudents += c.e || 0;
-                    nonSharedFacultySet.add(r.fid);
-                }
-            });
+        stats.push({
+            key,
+            name: p.name,
+            degree: p.degree,
+            ...m
         });
-
-        if (totalSections > 0) {
-            const avgNonShared = nonSharedSections > 0 ? Math.round(nonSharedStudents / nonSharedSections) : 0;
-            const nonSharedFacultyCount = nonSharedFacultySet.size;
-            // تقدير عدد الطلاب الفعلي باستخدام متوسط حمل الطالب السنوي
-            const avgLoad = (typeof programAvgLoad !== 'undefined' && programAvgLoad[key]) || 1;
-            const estimatedStudents = Math.round(nonSharedStudents / avgLoad);
-            const studentFacultyRatio = nonSharedFacultyCount > 0
-                ? (estimatedStudents / nonSharedFacultyCount).toFixed(1)
-                : '-';
-            stats.push({
-                name: p.name,
-                degree: p.degree,
-                totalSections,
-                totalStudents,
-                faculty: facultySet.size,
-                nonSharedSections,
-                avgNonShared,
-                studentFacultyRatio,
-                nonSharedFacultyCount,
-                estimatedStudents,
-                avgLoad
-            });
-        }
     });
 
     // ترتيب: بكالوريوس أولاً ثم ماجستير ثم دكتوراه، وداخل كل مستوى بعدد الشعب
@@ -1140,30 +1126,23 @@ function renderProgramStats(records) {
         const da = degreeOrder[a.degree] ?? 3;
         const db = degreeOrder[b.degree] ?? 3;
         if (da !== db) return da - db;
-        return b.totalSections - a.totalSections;
+        return b.exclusiveSections - a.exclusiveSections;
     });
 
     const degreeClass = { 'بكالوريوس': 'bsc', 'ماجستير': 'msc', 'دكتوراه': 'phd' };
-
-    // تحديد لون النسبة (أخضر: جيد، أصفر: مقبول، أحمر: مرتفع)
-    function getRatioBadge(ratio) {
-        if (ratio === '-') return '<span class="ratio-badge ratio-na">-</span>';
-        const val = parseFloat(ratio);
-        if (val <= 25) return `<span class="ratio-badge ratio-good">${val.toLocaleString('ar-SA')} : 1</span>`;
-        if (val <= 40) return `<span class="ratio-badge ratio-warning">${val.toLocaleString('ar-SA')} : 1</span>`;
-        return `<span class="ratio-badge ratio-high">${val.toLocaleString('ar-SA')} : 1</span>`;
-    }
 
     tbody.innerHTML = stats.map(s => `
         <tr>
             <td class="prog-name-cell">${s.name}</td>
             <td><span class="degree-badge degree-${degreeClass[s.degree] || 'other'}">${s.degree}</span></td>
             <td><strong>${s.totalSections.toLocaleString('ar-SA')}</strong></td>
-            <td>${s.nonSharedSections.toLocaleString('ar-SA')}</td>
-            <td><strong>${s.avgNonShared.toLocaleString('ar-SA')}</strong></td>
-            <td>${(s.estimatedStudents || 0).toLocaleString('ar-SA')}</td>
-            <td>${s.faculty}</td>
-            <td>${getRatioBadge(s.studentFacultyRatio)}</td>
+            <td>${s.exclusiveSections.toLocaleString('ar-SA')}</td>
+            <td><strong>${s.avgExclusiveStudents.toLocaleString('ar-SA')}</strong></td>
+            <td>${s.maleSections.toLocaleString('ar-SA')}</td>
+            <td>${s.avgMaleStudents.toLocaleString('ar-SA')}</td>
+            <td>${s.femaleSections.toLocaleString('ar-SA')}</td>
+            <td>${s.avgFemaleStudents.toLocaleString('ar-SA')}</td>
+            <td>${s.exclusiveFacultyCount.toLocaleString('ar-SA')}</td>
         </tr>
     `).join('');
 
