@@ -172,6 +172,18 @@ body {
     align-items: center;
 }
 
+.header-controls {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.header-controls .year-selector {
+    min-width: 170px;
+}
+
 .logo-section {
     display: flex;
     align-items: center;
@@ -616,6 +628,10 @@ body {
     transform: translateX(-3px);
 }
 
+.activity-item.clickable {
+    cursor: pointer;
+}
+
 .activity-item.publication { border-color: var(--emerald-500); }
 .activity-item.thesis { border-color: var(--amber-500); }
 .activity-item.event { border-color: var(--violet-500); }
@@ -1013,6 +1029,10 @@ body {
     border-color: rgba(16, 185, 129, 0.3);
 }
 
+.publication-card.clickable {
+    cursor: pointer;
+}
+
 .publication-title {
     font-size: 1rem;
     font-weight: 600;
@@ -1083,6 +1103,10 @@ body {
 .event-card:hover {
     transform: translateY(-5px);
     box-shadow: var(--shadow-xl);
+}
+
+.event-card.clickable {
+    cursor: pointer;
 }
 
 .event-header {
@@ -1320,6 +1344,18 @@ body {
     .header-content {
         flex-direction: column;
         gap: 1rem;
+    }
+
+    .header-controls {
+        width: 100%;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-controls .year-selector {
+        flex: 1 1 150px;
+        min-width: 140px;
     }
     
     .main-nav {

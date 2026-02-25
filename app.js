@@ -11,9 +11,12 @@ let currentYear = null;
 let currentDepartment = 'all';
 let currentProgram = 'all';
 let currentThesis = null;
+let currentDetailContext = null;
+let currentEditContext = null;
 let currentLeaderboard = [];
 let showAllLeaderboard = false;
 let sheetsDataLoaded = false;
+let privilegeActionCallback = null;
 let allData = {
     faculty: [],
     students: [],
@@ -29,6 +32,10 @@ let data = {
     publications: []  // ملف البحوث المنفصل
 };
 let charts = {};
+const PRIVILEGE_PASSWORD = '2008';
+const KPI_EXCLUDED_RANKS = new Set(['معيد', 'محاضر', 'متعاون', 'مدرس']);
+const KPI_EXCLUDED_RANKS_FOR_PHD = new Set(['معيد', 'محاضر', 'متعاون', 'مدرس', 'أستاذ مساعد']);
+const localActivityAuditTrail = [];
 
 // بيانات الخطط الدراسية والبرامج
 let allPlansData = [];
@@ -613,8 +620,117 @@ function formatDateShort(dateStr) {
     return { day: day || '-', month: hijriMonths[month - 1] || '-' };
 }
 
+function normalizeArabicDigits(value) {
+    if (value === null || value === undefined) return '';
+    const map = {
+        '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+        '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+        '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
+        '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
+    };
+    return String(value).replace(/[٠-٩۰-۹]/g, ch => map[ch] || ch);
+}
+
+function parseDateParts(dateStr) {
+    if (!dateStr) return null;
+    const normalized = normalizeArabicDigits(dateStr).trim();
+    if (!normalized) return null;
+
+    const separator = normalized.includes('-') ? '-' : (normalized.includes('/') ? '/' : null);
+    if (!separator) return null;
+
+    const parts = normalized.split(separator).map(p => p.trim()).filter(Boolean);
+    if (parts.length < 3) return null;
+
+    let year;
+    let month;
+    let day;
+
+    if (parts[0].length === 4) {
+        year = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10);
+        day = parseInt(parts[2], 10);
+    } else if (parts[2].length === 4) {
+        day = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10);
+        year = parseInt(parts[2], 10);
+    } else {
+        // fallback: نفترض ترتيب يوم/شهر/سنة
+        day = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10);
+        year = parseInt(parts[2], 10);
+    }
+
+    if (![year, month, day].every(Number.isFinite)) return null;
+    return { year, month, day };
+}
+
+function getSortableDateValue(dateStr) {
+    const parts = parseDateParts(dateStr);
+    if (!parts) return -1;
+    return (parts.year * 10000) + (parts.month * 100) + parts.day;
+}
+
+function sortByDateDesc(items, dateAccessor) {
+    return [...items].sort((a, b) => {
+        const diff = getSortableDateValue(dateAccessor(b)) - getSortableDateValue(dateAccessor(a));
+        if (diff !== 0) return diff;
+        const aTitle = (a.title || a.student_name || '').toString();
+        const bTitle = (b.title || b.student_name || '').toString();
+        return aTitle.localeCompare(bTitle, 'ar');
+    });
+}
+
+function parseCitationValue(value) {
+    if (value === null || value === undefined) return 0;
+    const raw = String(value).trim();
+    if (!raw) return 0;
+
+    if (config.citations_ranges && Object.prototype.hasOwnProperty.call(config.citations_ranges, raw)) {
+        return Number(config.citations_ranges[raw]) || 0;
+    }
+
+    const normalized = normalizeArabicDigits(raw)
+        .replace(/[()（）]/g, '')
+        .replace(/[–—]/g, '-')
+        .trim();
+
+    const rangeMatch = normalized.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
+    if (rangeMatch) {
+        const a = parseFloat(rangeMatch[1]);
+        const b = parseFloat(rangeMatch[2]);
+        if (Number.isFinite(a) && Number.isFinite(b)) return (a + b) / 2;
+    }
+
+    const singleNumber = normalized.match(/^(\d+(?:\.\d+)?)$/);
+    if (singleNumber) {
+        return parseFloat(singleNumber[1]) || 0;
+    }
+
+    const allNumbers = normalized.match(/\d+(?:\.\d+)?/g);
+    if (allNumbers && allNumbers.length === 2) {
+        const a = parseFloat(allNumbers[0]);
+        const b = parseFloat(allNumbers[1]);
+        if (Number.isFinite(a) && Number.isFinite(b)) return (a + b) / 2;
+    }
+    if (allNumbers && allNumbers.length === 1) {
+        return parseFloat(allNumbers[0]) || 0;
+    }
+
+    return 0;
+}
+
 function getCitationsEstimate(range) {
-    return config.citations_ranges?.[range] || 5;
+    return parseCitationValue(range);
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 // ========================================
@@ -855,53 +971,80 @@ function getLeaderboard() {
 // ========================================
 // حساب مؤشرات الجودة
 // ========================================
+function getUniqueActiveFacultyMembers() {
+    const byId = new Map();
+    (data.faculty || []).forEach(member => {
+        if ((member.active || '').trim() !== 'نعم') return;
+        const id = String(member.id || '').trim();
+        if (!id) return;
+        byId.set(id, member);
+    });
+    return Array.from(byId.values());
+}
+
+function getEligibleFacultyMembersForKPI(options = {}) {
+    const excludedRanks = options.forPhd ? KPI_EXCLUDED_RANKS_FOR_PHD : KPI_EXCLUDED_RANKS;
+    return getUniqueActiveFacultyMembers().filter(member => !excludedRanks.has((member.rank || '').trim()));
+}
+
 function calculateKPIs() {
-    const activeMembers = data.faculty.filter(f => f.active === 'نعم');
-    const totalMembers = activeMembers.length;
-    
-    if (totalMembers === 0) return null;
-    
+    const eligibleMembers = getEligibleFacultyMembersForKPI();
+    const phdEligibleMembers = getEligibleFacultyMembersForKPI({ forPhd: true });
+    const eligibleIds = new Set(eligibleMembers.map(m => String(m.id).trim()));
+    const totalEligibleMembers = eligibleMembers.length;
+
+    if (totalEligibleMembers === 0) return null;
+
     const publications = getPublications();
     const awards = getAwards();
-    
+
     const publishingMembers = new Set();
     publications.forEach(p => {
-        const participants = (p.participant_ids || '').split('|');
-        participants.forEach(id => publishingMembers.add(id));
+        const participants = (p.authors_ids || p.participant_ids || '')
+            .split('|')
+            .map(id => String(id || '').trim())
+            .filter(Boolean);
+        participants.forEach(id => {
+            if (eligibleIds.has(id)) publishingMembers.add(id);
+        });
     });
-    const publishingRate = (publishingMembers.size / totalMembers) * 100;
-    
-    const pubPerMember = publications.length / totalMembers;
-    
+    const publishingRate = (publishingMembers.size / totalEligibleMembers) * 100;
+
+    const pubPerMember = publications.length / totalEligibleMembers;
+
     let totalCitations = 0;
     publications.forEach(p => {
         totalCitations += getCitationsEstimate(p.citations_range);
     });
-    const citationsPerMember = totalCitations / totalMembers;
-    
+    const citationsPerPublication = publications.length > 0 ? (totalCitations / publications.length) : 0;
+
     const studentPubs = publications.filter(p => p.student_author === 'نعم' || p.category === 'بحوث الطلاب').length;
     const totalStudents = data.students.reduce((sum, s) => sum + parseInt(s.count || 0), 0);
     const studentPubRate = totalStudents > 0 ? (studentPubs / totalStudents) * 100 : 0;
-    
-    const supervisionRate = data.theses.length / totalMembers;
+
     const phdCount = data.theses.filter(t => t.type === 'دكتوراه').length;
     const mastersCount = data.theses.filter(t => t.type === 'ماجستير').length;
-    
+    const mastersSupervisionRate = mastersCount / Math.max(eligibleMembers.length, 1);
+    const phdSupervisionRate = phdCount / Math.max(phdEligibleMembers.length, 1);
+    const supervisionRate = mastersSupervisionRate + phdSupervisionRate;
+
     const awardsCount = awards.filter(a => a.category === 'جائزة').length;
     const patentsCount = awards.filter(a => a.category === 'براءة اختراع').length;
     const innovation = awardsCount + patentsCount;
-    
+
     return {
         publishingRate: publishingRate.toFixed(1),
         pubPerMember: pubPerMember.toFixed(1),
-        citationsPerMember: citationsPerMember.toFixed(1),
+        citationsPerPublication: citationsPerPublication.toFixed(1),
         studentPubRate: studentPubRate.toFixed(1),
         supervisionRate: supervisionRate.toFixed(1),
         phdCount,
         mastersCount,
         innovation,
         awards: awardsCount,
-        patents: patentsCount
+        patents: patentsCount,
+        eligibleFacultyCount: eligibleMembers.length,
+        phdEligibleFacultyCount: phdEligibleMembers.length
     };
 }
 
@@ -914,13 +1057,17 @@ function getRecentActivities(limit = 10) {
     // البحوث العلمية من publications.csv
     if (data.publications && data.publications.length > 0) {
         data.publications.forEach(p => {
+            const dateValue = p.publish_date || p.date;
             activities.push({
                 type: 'بحث منشور',
                 icon: '📄',
                 title: p.title,
                 meta: p.journal || '',
-                date: p.publish_date || p.date,
-                dateObj: new Date((p.publish_date || p.date)?.replace(/-/g, '/') || Date.now())
+                date: dateValue,
+                sortableDate: getSortableDateValue(dateValue),
+                entity: 'publications',
+                record: p,
+                cssClass: 'publication'
             });
         });
     }
@@ -961,13 +1108,17 @@ function getRecentActivities(limit = 10) {
                 break;
         }
         
+        const activityClass = (p.category === 'جائزة' || p.category === 'براءة اختراع') ? 'award' : 'event';
         activities.push({
             type: p.category,
             icon,
             title,
             meta,
             date: p.date,
-            dateObj: new Date(p.date?.replace(/-/g, '/') || Date.now())
+            sortableDate: getSortableDateValue(p.date),
+            entity: 'participations',
+            record: p,
+            cssClass: activityClass
         });
     });
     
@@ -979,13 +1130,635 @@ function getRecentActivities(limit = 10) {
             title: `مناقشة رسالة ${t.type}: ${t.student_name}`,
             meta: getMemberName(t.supervisor_id),
             date: t.defense_date,
-            dateObj: new Date(t.defense_date?.replace(/-/g, '/') || Date.now())
+            sortableDate: getSortableDateValue(t.defense_date),
+            entity: 'theses',
+            record: t,
+            cssClass: 'thesis'
         });
     });
     
-    activities.sort((a, b) => b.dateObj - a.dateObj);
+    activities.sort((a, b) => {
+        const diff = (b.sortableDate || -1) - (a.sortableDate || -1);
+        if (diff !== 0) return diff;
+        return (a.title || '').localeCompare(b.title || '', 'ar');
+    });
     
     return activities.slice(0, limit);
+}
+
+function getLoggedInEmployeeId() {
+    return String(sessionStorage.getItem('employeeId') || '').trim();
+}
+
+function getLoggedInEmployeeName() {
+    return String(sessionStorage.getItem('employeeName') || '').trim();
+}
+
+function splitIds(value) {
+    return String(value || '')
+        .split('|')
+        .map(v => v.trim())
+        .filter(Boolean);
+}
+
+function getContextOwnerIds(context) {
+    if (!context || !context.record) return [];
+    const record = context.record;
+    if (context.entity === 'publications') {
+        return splitIds(record.authors_ids || record.participant_ids);
+    }
+    if (context.entity === 'participations') {
+        return splitIds(record.participant_ids);
+    }
+    if (context.entity === 'theses') {
+        return [
+            record.supervisor_id,
+            record.co_supervisor_id,
+            record.examiner1_id,
+            record.examiner2_id
+        ]
+            .map(id => String(id || '').trim())
+            .filter(id => id && /^\d+$/.test(id));
+    }
+    return [];
+}
+
+function canCurrentUserManageRecord(context = currentDetailContext) {
+    const empId = getLoggedInEmployeeId();
+    if (!empId) return false;
+    return getContextOwnerIds(context).includes(empId);
+}
+
+function getRecordTitle(context) {
+    const record = context?.record || {};
+    if (context?.entity === 'theses') return record.title || record.student_name || 'تفاصيل الرسالة';
+    return record.title || 'تفاصيل السجل';
+}
+
+function getRecordBadgeText(context) {
+    const record = context?.record || {};
+    if (context?.entity === 'publications') return 'نشر علمي';
+    if (context?.entity === 'participations') return record.category || 'فعالية علمية';
+    if (context?.entity === 'theses') return (record.type || 'رسالة') + (record.specialization ? ` - ${record.specialization}` : '');
+    return 'سجل';
+}
+
+function getRecordEntityLabel(entity) {
+    if (entity === 'publications') return 'بحث';
+    if (entity === 'participations') return 'فعالية';
+    if (entity === 'theses') return 'رسالة';
+    return 'سجل';
+}
+
+function getFieldLabel(field) {
+    const labels = {
+        id: 'المعرف',
+        year: 'السنة',
+        title: 'العنوان',
+        journal: 'المجلة',
+        publish_date: 'تاريخ النشر',
+        citations_range: 'الاقتباسات',
+        student_author: 'مشاركة طالب',
+        authors_ids: 'المؤلفون',
+        participant_ids: 'المشاركون',
+        category: 'الفئة',
+        participation_type: 'نوع المشاركة',
+        location: 'المكان',
+        date: 'التاريخ',
+        organized_by_department: 'تنظيم الكلية',
+        student_details: 'تفاصيل الطلاب',
+        notes: 'ملاحظات',
+        consulting_hours: 'ساعات الاستشارة',
+        type: 'نوع الرسالة',
+        specialization: 'التخصص',
+        student_name: 'الطالب',
+        supervisor_id: 'المشرف الرئيسي',
+        co_supervisor_id: 'المشرف المشارك',
+        examiner1_id: 'المناقش الأول',
+        examiner2_id: 'المناقش الثاني',
+        status: 'الحالة',
+        defense_date: 'تاريخ المناقشة'
+    };
+    return labels[field] || field;
+}
+
+function formatRecordFieldValue(field, value, context) {
+    if (value === null || value === undefined || value === '') return '-';
+
+    if (field === 'publish_date' || field === 'date' || field === 'defense_date') {
+        return formatDate(String(value));
+    }
+
+    if (field === 'authors_ids' || field === 'participant_ids') {
+        const names = splitIds(value).map(getMemberName).filter(Boolean);
+        return names.length ? names.join('، ') : '-';
+    }
+
+    if (['supervisor_id', 'co_supervisor_id', 'examiner1_id', 'examiner2_id'].includes(field)) {
+        return getMemberName(String(value));
+    }
+
+    if (field === 'citations_range') {
+        const estimate = getCitationsEstimate(value);
+        return `${value} (تقديريًا ${estimate})`;
+    }
+
+    if (field === 'year') {
+        return `${value}هـ`;
+    }
+
+    return String(value);
+}
+
+function getDisplayFieldsForContext(context) {
+    const record = context?.record || {};
+    if (context?.entity === 'publications') {
+        return ['year', 'publish_date', 'journal', 'citations_range', 'student_author', 'authors_ids'];
+    }
+    if (context?.entity === 'participations') {
+        const base = ['year', 'category', 'participation_type', 'date', 'location', 'participant_ids', 'organized_by_department'];
+        if (record.student_details) base.push('student_details');
+        if (record.consulting_hours) base.push('consulting_hours');
+        if (record.notes) base.push('notes');
+        return base;
+    }
+    if (context?.entity === 'theses') {
+        return ['year', 'type', 'specialization', 'student_name', 'status', 'defense_date', 'supervisor_id', 'co_supervisor_id', 'examiner1_id', 'examiner2_id'];
+    }
+    return Object.keys(record || {});
+}
+
+function ensureGenericDetailModalHost() {
+    let modal = document.getElementById('recordDetailModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'recordDetailModal';
+    modal.className = 'modal';
+    modal.innerHTML = '<div class="modal-content record-detail-modal-content"></div>';
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeRecordDetailModal() {
+    const modal = document.getElementById('recordDetailModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function buildGenericDetailModalHtml(context) {
+    const record = context.record || {};
+    const fieldsHtml = getDisplayFieldsForContext(context)
+        .filter(field => field !== 'title')
+        .map(field => `
+            <div class="info-item">
+                <span class="info-label">${escapeHtml(getFieldLabel(field))}</span>
+                <span class="info-value">${escapeHtml(formatRecordFieldValue(field, record[field], context))}</span>
+            </div>
+        `)
+        .join('');
+
+    const showActions = canCurrentUserManageRecord(context);
+    const ownerNames = getContextOwnerIds(context).map(getMemberName).filter(Boolean);
+
+    return `
+        <span class="modal-close" onclick="closeRecordDetailModal()">&times;</span>
+        <div class="thesis-details generic-record-details">
+            <div class="thesis-badge ${context.entity === 'publications' ? 'masters' : 'phd'}">${escapeHtml(getRecordBadgeText(context))}</div>
+            <h2>${escapeHtml(getRecordTitle(context))}</h2>
+            <div class="thesis-info">
+                ${fieldsHtml}
+            </div>
+            ${ownerNames.length ? `
+                <div class="record-owners-note">
+                    أصحاب السجل: ${escapeHtml(ownerNames.join('، '))}
+                </div>
+            ` : ''}
+            <div class="record-detail-actions" id="recordDetailActions" style="display:${showActions ? 'block' : 'none'}">
+                <div class="record-detail-actions-note">بعد التحقق بكلمة مرور الصلاحيات يمكنك تعديل هذا ${escapeHtml(getRecordEntityLabel(context.entity))} أو حذفه.</div>
+                <div class="modal-actions detail-actions-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="openCurrentRecordEditor()">✏️ تعديل</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmDeleteCurrentRecord()">🗑️ حذف</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function openGenericRecordDetails(context) {
+    if (!context || !context.record) return;
+    currentDetailContext = context;
+    const modal = ensureGenericDetailModalHost();
+    const content = modal.querySelector('.record-detail-modal-content');
+    content.innerHTML = buildGenericDetailModalHtml(context);
+    modal.classList.add('active');
+    updateDetailActionAvailability();
+}
+
+function showPublicationDetails(publication) {
+    openGenericRecordDetails({ entity: 'publications', record: publication, modalKind: 'generic' });
+}
+
+function showEventDetails(eventRecord) {
+    openGenericRecordDetails({ entity: 'participations', record: eventRecord, modalKind: 'generic' });
+}
+
+function showRecentActivityDetails(activity) {
+    if (!activity || !activity.record) return;
+    if (activity.entity === 'theses') {
+        showThesisDetails(activity.record);
+        return;
+    }
+    if (activity.entity === 'publications') {
+        showPublicationDetails(activity.record);
+        return;
+    }
+    if (activity.entity === 'participations') {
+        showEventDetails(activity.record);
+    }
+}
+
+function ensureThesisDetailActions() {
+    const modal = document.getElementById('thesisModal');
+    if (!modal) return;
+    const container = modal.querySelector('.thesis-details');
+    if (!container || container.querySelector('#thesisDetailActions')) return;
+
+    container.insertAdjacentHTML('beforeend', `
+        <div class="record-detail-actions" id="thesisDetailActions" style="display:none">
+            <div class="record-detail-actions-note">بعد التحقق بكلمة مرور الصلاحيات يمكنك تعديل هذه الرسالة أو حذفها إذا كانت مرتبطة بك.</div>
+            <div class="modal-actions detail-actions-buttons">
+                <button type="button" class="btn btn-secondary" onclick="openCurrentRecordEditor()">✏️ تعديل</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteCurrentRecord()">🗑️ حذف</button>
+            </div>
+        </div>
+    `);
+}
+
+function updateDetailActionAvailability() {
+    const canManage = canCurrentUserManageRecord(currentDetailContext);
+    const genericActions = document.getElementById('recordDetailActions');
+    if (genericActions) {
+        genericActions.style.display = (currentDetailContext?.modalKind === 'generic' && canManage) ? 'block' : 'none';
+    }
+    const thesisActions = document.getElementById('thesisDetailActions');
+    if (thesisActions) {
+        thesisActions.style.display = (currentDetailContext?.entity === 'theses' && canManage) ? 'block' : 'none';
+    }
+}
+
+function ensurePrivilegePasswordModal() {
+    let modal = document.getElementById('privilegePasswordModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'privilegePasswordModal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content record-editor-modal-content privilege-modal-content">
+            <span class="modal-close" onclick="closePrivilegePasswordModal()">&times;</span>
+            <div class="editor-modal-header">
+                <h3>كلمة مرور الصلاحيات</h3>
+                <p>أدخل كلمة المرور للمتابعة إلى التعديل أو الحذف.</p>
+            </div>
+            <div class="form-group">
+                <label for="privilegePasswordInput">كلمة المرور</label>
+                <input type="password" id="privilegePasswordInput" class="form-input" placeholder="••••">
+            </div>
+            <p id="privilegePasswordError" class="login-error" style="margin-top:-8px;"></p>
+            <div class="modal-actions detail-actions-buttons">
+                <button type="button" class="btn btn-secondary" onclick="closePrivilegePasswordModal()">إلغاء</button>
+                <button type="button" class="btn btn-primary" onclick="submitPrivilegePassword()">تحقق</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function requestPrivilegeAccess(callback) {
+    privilegeActionCallback = typeof callback === 'function' ? callback : null;
+    const modal = ensurePrivilegePasswordModal();
+    const input = modal.querySelector('#privilegePasswordInput');
+    const error = modal.querySelector('#privilegePasswordError');
+    if (error) error.textContent = '';
+    if (input) input.value = '';
+    if (input) {
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitPrivilegePassword();
+            }
+        };
+    }
+    modal.classList.add('active');
+    setTimeout(() => input?.focus(), 0);
+}
+
+function closePrivilegePasswordModal() {
+    const modal = document.getElementById('privilegePasswordModal');
+    if (modal) modal.classList.remove('active');
+    privilegeActionCallback = null;
+}
+
+function submitPrivilegePassword() {
+    const modal = document.getElementById('privilegePasswordModal');
+    if (!modal) return;
+    const input = modal.querySelector('#privilegePasswordInput');
+    const error = modal.querySelector('#privilegePasswordError');
+    const pass = input?.value || '';
+
+    if (normalizeArabicDigits(pass) !== PRIVILEGE_PASSWORD) {
+        if (error) error.textContent = 'كلمة مرور الصلاحيات غير صحيحة';
+        input?.focus();
+        return;
+    }
+
+    const callback = privilegeActionCallback;
+    closePrivilegePasswordModal();
+    if (typeof callback === 'function') callback();
+}
+
+function getEditorFieldsForContext(context) {
+    const record = context?.record || {};
+    const preferred = {
+        publications: ['year', 'title', 'journal', 'publish_date', 'citations_range', 'student_author', 'authors_ids'],
+        participations: ['year', 'category', 'participation_type', 'title', 'location', 'date', 'participant_ids', 'organized_by_department', 'student_details', 'consulting_hours', 'notes'],
+        theses: ['year', 'type', 'specialization', 'student_name', 'title', 'supervisor_id', 'co_supervisor_id', 'examiner1_id', 'examiner2_id', 'status', 'defense_date']
+    }[context?.entity] || [];
+
+    const existingKeys = Object.keys(record).filter(key => key && key !== 'id');
+    const ordered = [
+        ...preferred.filter(key => existingKeys.includes(key)),
+        ...existingKeys.filter(key => !preferred.includes(key))
+    ];
+    return ordered;
+}
+
+function getEditorInputType(field) {
+    if (['publish_date', 'date', 'defense_date'].includes(field)) return 'date';
+    if (field === 'notes' || field === 'title') return 'textarea';
+    return 'text';
+}
+
+function ensureRecordEditorModal() {
+    let modal = document.getElementById('recordEditorModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'recordEditorModal';
+    modal.className = 'modal';
+    modal.innerHTML = '<div class="modal-content record-editor-modal-content"></div>';
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeRecordEditModal() {
+    const modal = document.getElementById('recordEditorModal');
+    if (modal) modal.classList.remove('active');
+    currentEditContext = null;
+}
+
+function buildRecordEditorModalHtml(context) {
+    const record = context.record || {};
+    const fields = getEditorFieldsForContext(context);
+    const fieldsHtml = fields.map(field => {
+        const type = getEditorInputType(field);
+        const value = String(record[field] ?? '');
+        if (type === 'textarea') {
+            return `
+                <div class="form-group editor-form-group full">
+                    <label>${escapeHtml(getFieldLabel(field))}</label>
+                    <textarea class="form-textarea" data-edit-field="${escapeHtml(field)}">${escapeHtml(value)}</textarea>
+                </div>
+            `;
+        }
+        return `
+            <div class="form-group editor-form-group">
+                <label>${escapeHtml(getFieldLabel(field))}</label>
+                <input type="${type}" class="form-input" data-edit-field="${escapeHtml(field)}" value="${escapeHtml(value)}">
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <span class="modal-close" onclick="closeRecordEditModal()">&times;</span>
+        <div class="editor-modal-header">
+            <h3>تعديل ${escapeHtml(getRecordEntityLabel(context.entity))}</h3>
+            <p>المعرف: ${escapeHtml(String(record.id || '-'))}</p>
+        </div>
+        <div class="record-editor-grid">
+            ${fieldsHtml}
+        </div>
+        <div class="modal-actions detail-actions-buttons">
+            <button type="button" class="btn btn-secondary" onclick="closeRecordEditModal()">إلغاء</button>
+            <button type="button" class="btn btn-success" onclick="submitRecordEdit()">حفظ التعديلات</button>
+        </div>
+    `;
+}
+
+function openCurrentRecordEditor() {
+    if (!currentDetailContext || !currentDetailContext.record) return;
+    if (!canCurrentUserManageRecord(currentDetailContext)) {
+        alert('لا يمكنك تعديل هذا السجل لأنه لا يخص حسابك.');
+        return;
+    }
+
+    requestPrivilegeAccess(() => {
+        currentEditContext = {
+            entity: currentDetailContext.entity,
+            record: { ...currentDetailContext.record },
+            modalKind: currentDetailContext.modalKind
+        };
+        const modal = ensureRecordEditorModal();
+        const content = modal.querySelector('.record-editor-modal-content');
+        content.innerHTML = buildRecordEditorModalHtml(currentEditContext);
+        modal.classList.add('active');
+    });
+}
+
+function matchRecordByContext(row, context) {
+    if (!row || !context?.record) return false;
+    const rowId = String(row.id || '').trim();
+    const targetId = String(context.record.id || '').trim();
+    if (rowId && targetId) {
+        if (rowId !== targetId) return false;
+        const rowYear = String(row.year || '').trim();
+        const targetYear = String(context.record.year || '').trim();
+        if (rowYear && targetYear && rowYear !== targetYear) return false;
+        return true;
+    }
+
+    // fallback احتياطي عند غياب id
+    return String(row.title || '').trim() === String(context.record.title || '').trim()
+        && String(row.year || '').trim() === String(context.record.year || '').trim();
+}
+
+function replaceRecordInArray(arr, context, updatedRecord) {
+    if (!Array.isArray(arr)) return { replaced: false, removed: false };
+    const index = arr.findIndex(row => matchRecordByContext(row, context));
+    if (index === -1) return { replaced: false, removed: false };
+    arr[index] = updatedRecord;
+    return { replaced: true, removed: false };
+}
+
+function removeRecordFromArray(arr, context) {
+    if (!Array.isArray(arr)) return false;
+    const index = arr.findIndex(row => matchRecordByContext(row, context));
+    if (index === -1) return false;
+    arr.splice(index, 1);
+    return true;
+}
+
+async function syncRecordMutationToSheets(payload) {
+    const apiUrl = config.google_sheets_api;
+    if (!apiUrl) {
+        return { ok: false, skipped: true, message: 'لا يوجد رابط Google Apps Script في الإعدادات' };
+    }
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            return { ok: false, message: `HTTP ${response.status}` };
+        }
+
+        const rawText = await response.text();
+        let result = null;
+        try {
+            result = rawText ? JSON.parse(rawText) : {};
+        } catch (e) {
+            result = { raw: rawText };
+        }
+        return { ok: true, result };
+    } catch (error) {
+        return { ok: false, message: error.message || 'Network error' };
+    }
+}
+
+async function logAndSyncRecordChange(action, context, oldRecord, newRecord) {
+    const auditEntry = {
+        timestamp: new Date().toISOString(),
+        actor_id: getLoggedInEmployeeId(),
+        actor_name: getLoggedInEmployeeName(),
+        action,
+        entity: context.entity,
+        record_id: String(oldRecord?.id || newRecord?.id || ''),
+        year: String(newRecord?.year || oldRecord?.year || ''),
+        title: String(newRecord?.title || oldRecord?.title || ''),
+        old_values: oldRecord || null,
+        new_values: newRecord || null
+    };
+
+    localActivityAuditTrail.push(auditEntry);
+
+    return syncRecordMutationToSheets({
+        action: 'record_mutation',
+        mutation: action,
+        entity: context.entity,
+        actor: {
+            id: auditEntry.actor_id,
+            name: auditEntry.actor_name
+        },
+        record_id: auditEntry.record_id,
+        old_record: oldRecord,
+        new_record: newRecord,
+        audit_log: auditEntry
+    });
+}
+
+function rerenderAfterRecordMutation(updatedContext = null) {
+    renderAll();
+
+    if (!updatedContext) {
+        currentDetailContext = null;
+        const thesisModal = document.getElementById('thesisModal');
+        thesisModal?.classList.remove('active');
+        closeRecordDetailModal();
+        closeRecordEditModal();
+        return;
+    }
+
+    if (updatedContext.entity === 'theses') {
+        showThesisDetails(updatedContext.record);
+    } else {
+        openGenericRecordDetails(updatedContext);
+    }
+}
+
+async function submitRecordEdit() {
+    if (!currentEditContext) return;
+    const modal = document.getElementById('recordEditorModal');
+    if (!modal) return;
+
+    const updatedRecord = { ...currentEditContext.record };
+    modal.querySelectorAll('[data-edit-field]').forEach(el => {
+        const field = el.getAttribute('data-edit-field');
+        updatedRecord[field] = (el.value ?? '').trim();
+    });
+
+    const entityKey = currentEditContext.entity;
+    replaceRecordInArray(allData[entityKey], currentEditContext, { ...updatedRecord });
+    replaceRecordInArray(data[entityKey], currentEditContext, { ...updatedRecord });
+
+    if (entityKey === 'theses' && currentThesis && matchRecordByContext(currentThesis, currentEditContext)) {
+        currentThesis = { ...updatedRecord };
+    }
+
+    const newContext = { ...currentEditContext, record: { ...updatedRecord } };
+    currentDetailContext = newContext;
+    closeRecordEditModal();
+
+    const syncResult = await logAndSyncRecordChange('update', currentEditContext, currentEditContext.record, updatedRecord);
+    rerenderAfterRecordMutation(newContext);
+
+    if (!syncResult.ok) {
+        alert(`تم حفظ التعديل محليًا وتحديث الواجهة، لكن لم يتم تأكيد المزامنة/سجل التعديلات في Google Sheets: ${syncResult.message || 'غير معروف'}`);
+    }
+}
+
+function confirmDeleteCurrentRecord() {
+    if (!currentDetailContext || !currentDetailContext.record) return;
+    if (!canCurrentUserManageRecord(currentDetailContext)) {
+        alert('لا يمكنك حذف هذا السجل لأنه لا يخص حسابك.');
+        return;
+    }
+
+    requestPrivilegeAccess(async () => {
+        const title = getRecordTitle(currentDetailContext);
+        const ok = window.confirm(`تأكيد الحذف:\nهل أنت متأكد من حذف السجل التالي؟\n${title}`);
+        if (!ok) return;
+
+        const deleteContext = {
+            entity: currentDetailContext.entity,
+            record: { ...currentDetailContext.record },
+            modalKind: currentDetailContext.modalKind
+        };
+
+        removeRecordFromArray(allData[deleteContext.entity], deleteContext);
+        removeRecordFromArray(data[deleteContext.entity], deleteContext);
+
+        if (deleteContext.entity === 'theses' && currentThesis && matchRecordByContext(currentThesis, deleteContext)) {
+            currentThesis = null;
+        }
+
+        const thesisModal = document.getElementById('thesisModal');
+        thesisModal?.classList.remove('active');
+        closeRecordDetailModal();
+        closeRecordEditModal();
+        currentDetailContext = null;
+
+        const syncResult = await logAndSyncRecordChange('delete', deleteContext, deleteContext.record, null);
+        rerenderAfterRecordMutation(null);
+
+        if (!syncResult.ok) {
+            alert(`تم حذف السجل محليًا وتحديث الواجهة، لكن لم يتم تأكيد المزامنة/سجل التعديلات في Google Sheets: ${syncResult.message || 'غير معروف'}`);
+        }
+    });
 }
 
 // ========================================
@@ -1570,7 +2343,9 @@ function renderActivities() {
     
     activities.forEach(activity => {
         const item = document.createElement('div');
-        item.className = `activity-item`;
+        item.className = `activity-item clickable ${activity.cssClass || 'event'}`;
+        item.setAttribute('role', 'button');
+        item.tabIndex = 0;
         item.innerHTML = `
             <span class="activity-icon">${activity.icon}</span>
             <div class="activity-content">
@@ -1579,6 +2354,13 @@ function renderActivities() {
                 <div class="activity-date">${formatDate(activity.date)}</div>
             </div>
         `;
+        item.onclick = () => showRecentActivityDetails(activity);
+        item.onkeydown = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                showRecentActivityDetails(activity);
+            }
+        };
         container.appendChild(item);
     });
 }
@@ -1681,7 +2463,7 @@ function renderQualityIndicators() {
     const gaugeWidth = Math.min(parseFloat(kpis.pubPerMember) * 33, 100);
     document.getElementById('kpiPubPerMemberGauge').style.width = gaugeWidth + '%';
     
-    document.getElementById('kpiCitations').textContent = kpis.citationsPerMember;
+    document.getElementById('kpiCitations').textContent = kpis.citationsPerPublication;
     
     const miniChart = document.getElementById('kpiCitationsMini');
     miniChart.innerHTML = '';
@@ -1740,7 +2522,7 @@ function renderQualityRadarChart(kpis) {
                 data: [
                     Math.min(parseFloat(kpis.publishingRate), 100),
                     Math.min(parseFloat(kpis.pubPerMember) * 20, 100),
-                    Math.min(parseFloat(kpis.citationsPerMember), 100),
+                    Math.min(parseFloat(kpis.citationsPerPublication), 100),
                     Math.min(parseFloat(kpis.studentPubRate) * 10, 100),
                     Math.min(parseFloat(kpis.supervisionRate) * 20, 100),
                     Math.min(kpis.innovation * 10, 100)
@@ -2265,6 +3047,7 @@ function renderTheses() {
     }
     
     if (statusFilter) filtered = filtered.filter(t => (t.status || '').trim() === statusFilter);
+    filtered = sortByDateDesc(filtered, t => t.defense_date);
     
     filtered.forEach(thesis => {
         const tr = document.createElement('tr');
@@ -2284,6 +3067,7 @@ function renderTheses() {
 
 function showThesisDetails(thesis) {
     currentThesis = thesis;
+    currentDetailContext = { entity: 'theses', record: thesis, modalKind: 'thesis' };
     const modal = document.getElementById('thesisModal');
     const thesisType = (thesis.type || '').trim();
     const thesisSpec = (thesis.specialization || '').trim();
@@ -2329,6 +3113,8 @@ function showThesisDetails(thesis) {
         examiner2Section.style.display = 'none';
     }
     
+    ensureThesisDetailActions();
+    updateDetailActionAvailability();
     modal.classList.add('active');
 }
 
@@ -2640,9 +3426,16 @@ function printThesis() {
 // إغلاق Modal
 document.addEventListener('click', (e) => {
     const modal = document.getElementById('thesisModal');
-    if (e.target === modal || e.target.classList.contains('modal-close')) {
+    if (!modal) return;
+    if (e.target === modal || (e.target.classList?.contains('modal-close') && modal.contains(e.target))) {
         modal.classList.remove('active');
     }
+});
+
+document.addEventListener('click', (e) => {
+    if (e.target?.id === 'recordDetailModal') closeRecordDetailModal();
+    if (e.target?.id === 'recordEditorModal') closeRecordEditModal();
+    if (e.target?.id === 'privilegePasswordModal') closePrivilegePasswordModal();
 });
 
 // ========================================
@@ -2659,6 +3452,7 @@ function renderPublications() {
     let filtered = getPublications();
     if (searchTerm) filtered = filtered.filter(p => p.title && p.title.toLowerCase().includes(searchTerm));
     if (citationsFilter) filtered = filtered.filter(p => p.citations_range === citationsFilter);
+    filtered = sortByDateDesc(filtered, p => p.publish_date || p.date);
     
     if (filtered.length === 0) {
         container.innerHTML = '<div class="empty-state">لا توجد بحوث علمية مسجلة لهذا العام</div>';
@@ -2671,7 +3465,7 @@ function renderPublications() {
         const authors = authorIds.split('|').map(id => getMemberName(id.trim())).filter(n => n);
         
         const card = document.createElement('div');
-        card.className = 'publication-card';
+        card.className = 'publication-card clickable';
         card.innerHTML = `
             <div class="publication-title">${pub.title || ''}</div>
             <div class="publication-journal">${pub.journal || ''}</div>
@@ -2684,6 +3478,7 @@ function renderPublications() {
             </div>
             ${pub.student_author === 'نعم' ? '<span class="student-badge">مشاركة طالب</span>' : ''}
         `;
+        card.onclick = () => showPublicationDetails(pub);
         container.appendChild(card);
     });
 }
@@ -2737,6 +3532,7 @@ function renderEvents() {
     let filtered = getEvents();
     if (typeFilter) filtered = filtered.filter(e => e.category === typeFilter);
     if (participationFilter) filtered = filtered.filter(e => e.participation_type === participationFilter);
+    filtered = sortByDateDesc(filtered, e => e.date);
     
     if (filtered.length === 0) {
         container.innerHTML = '<div class="empty-state">لا توجد فعاليات مسجلة لهذا العام</div>';
@@ -2764,7 +3560,7 @@ function renderEvents() {
             .filter(n => n);
         
         const card = document.createElement('div');
-        card.className = `event-card ${typeClass}`;
+        card.className = `event-card clickable ${typeClass}`;
         card.innerHTML = `
             <div class="event-header">
                 <span class="event-type">${event.category}</span>
@@ -2783,6 +3579,7 @@ function renderEvents() {
                 ${event.notes ? `<div class="event-notes">${event.notes}</div>` : ''}
             </div>
         `;
+        card.onclick = () => showEventDetails(event);
         container.appendChild(card);
     });
 }
