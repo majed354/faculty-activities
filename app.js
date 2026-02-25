@@ -33,9 +33,11 @@ let charts = {};
 // بيانات الخطط الدراسية والبرامج
 let allPlansData = [];
 let courseCodeToPrograms = {};    // رمز المقرر → [{program, degree, key}]
+let courseCodeToProgramKeys = {};  // رمز المقرر → Set مفاتيح البرامج (لتحسين الأداء)
 let programExclusiveCodes = {};  // "برنامج - درجة" → Set من رموز المقررات الفريدة
 let programNonSharedCodes = {};  // "برنامج - درجة" → Set من رموز المقررات غير المشتركة (غير متطلبات جامعية)
 let programAvgLoad = {};         // "برنامج - درجة" → متوسط عدد المقررات غير المشتركة التي يأخذها الطالب في السنة
+let teachingProgramAggregatesCache = null; // cache لتجميع إحصائيات البرامج من بيانات التدريس
 
 // تحديد مسار البيانات (محلي دائماً - المستودع خاص)
 const DATA_BASE_URL = './data';
@@ -243,34 +245,92 @@ function filterByDepartment(items, department, idField) {
 // ========================================
 // بناء خريطة ربط المقررات بالبرامج
 // ========================================
+function getPlanCell(row, keys) {
+    for (const key of keys) {
+        if (Object.prototype.hasOwnProperty.call(row, key) && row[key] != null) {
+            return String(row[key]).trim();
+        }
+    }
+    return '';
+}
+
+function normalizeCourseCode(code) {
+    return String(code || '').trim();
+}
+
 function buildCourseToPrograms() {
     courseCodeToPrograms = {};
+    courseCodeToProgramKeys = {};
     programExclusiveCodes = {};
     programNonSharedCodes = {};
+    programAvgLoad = {};
+    teachingProgramAggregatesCache = null;
+
+    const explicitExclusiveByProgram = {};   // من new_all_plans.csv (نوع المقرر = فريد)
+    const programLevelCounts = {};           // key → { maxLevel, nonSharedPerLevel: {level: Set} }
+    let hasPlanTypeColumn = false;
+    let hasOldPlanColumns = false;
 
     allPlansData.forEach(row => {
-        // دعم BOM في أول عمود
-        const code = (row['Code'] || '').trim();
-        const prog = (row['Program'] || row['\ufeffProgram'] || '').trim();
-        const deg = (row['Degree'] || '').trim();
-        const category = (row['Category'] || '').trim();
+        // دعم الصيغة القديمة والجديدة + BOM
+        const code = normalizeCourseCode(getPlanCell(row, ['Code', '\ufeffCode', 'رمز المقرر']));
+        const prog = getPlanCell(row, ['Program', '\ufeffProgram', 'البرنامج']);
+        const deg = getPlanCell(row, ['Degree', 'الدرجة']);
+        const category = getPlanCell(row, ['Category', 'التصنيف']);
+        const courseType = getPlanCell(row, ['نوع المقرر']);
+        const levelRaw = getPlanCell(row, ['Level', 'المستوى']);
+
         if (!code || !prog) return;
         const key = prog + ' - ' + deg;
 
         // خريطة المقرر → البرامج
         if (!courseCodeToPrograms[code]) courseCodeToPrograms[code] = [];
+        if (!courseCodeToProgramKeys[code]) courseCodeToProgramKeys[code] = new Set();
         if (!courseCodeToPrograms[code].some(p => p.key === key)) {
             courseCodeToPrograms[code].push({ program: prog, degree: deg, key });
+            courseCodeToProgramKeys[code].add(key);
         }
 
-        // المقررات غير المشتركة: ليست متطلبات جامعية (إجبارية القسم + اختيارية القسم)
+        // صيغة الخطة الجديدة: نوع المقرر (فريد / مشترك)
+        if (courseType) {
+            hasPlanTypeColumn = true;
+            if (courseType.includes('فريد')) {
+                if (!explicitExclusiveByProgram[key]) explicitExclusiveByProgram[key] = new Set();
+                explicitExclusiveByProgram[key].add(code);
+            }
+            if (!courseType.includes('مشترك')) {
+                if (!programNonSharedCodes[key]) programNonSharedCodes[key] = new Set();
+                programNonSharedCodes[key].add(code);
+            }
+        }
+
+        // الصيغة القديمة: Category/Level
+        if (category || levelRaw) {
+            hasOldPlanColumns = true;
+        }
+
+        // المقررات غير المشتركة في الصيغة القديمة: ليست متطلبات جامعية
         if (category && !category.includes('متطلبات جامعية')) {
             if (!programNonSharedCodes[key]) programNonSharedCodes[key] = new Set();
             programNonSharedCodes[key].add(code);
+
+            const level = parseInt(levelRaw || '0', 10);
+            if (level) {
+                if (!programLevelCounts[key]) {
+                    programLevelCounts[key] = { maxLevel: 0, nonSharedPerLevel: {} };
+                }
+                if (level > programLevelCounts[key].maxLevel) {
+                    programLevelCounts[key].maxLevel = level;
+                }
+                if (!programLevelCounts[key].nonSharedPerLevel[level]) {
+                    programLevelCounts[key].nonSharedPerLevel[level] = new Set();
+                }
+                programLevelCounts[key].nonSharedPerLevel[level].add(code);
+            }
         }
     });
 
-    // تحديد المقررات الفريدة: التي تظهر في برنامج واحد فقط
+    // تحديد المقررات الفريدة من الربط الفعلي (fallback + تدقيق)
     Object.entries(courseCodeToPrograms).forEach(([code, progs]) => {
         if (progs.length === 1) {
             const key = progs[0].key;
@@ -279,33 +339,13 @@ function buildCourseToPrograms() {
         }
     });
 
-    // حساب متوسط حمل الطالب السنوي من المقررات غير المشتركة لكل برنامج
-    // يُستخدم لتقدير عدد الطلاب الفعلي من إجمالي التسجيلات
-    programAvgLoad = {};
-    const programLevelCounts = {}; // key → { maxLevel, nonSharedPerLevel: {level: count} }
-    allPlansData.forEach(row => {
-        const code = (row['Code'] || '').trim();
-        const prog = (row['Program'] || row['\ufeffProgram'] || '').trim();
-        const deg = (row['Degree'] || '').trim();
-        const category = (row['Category'] || '').trim();
-        const level = parseInt(row['Level'] || '0');
-        if (!code || !prog || !level) return;
-        const key = prog + ' - ' + deg;
-
-        if (!programLevelCounts[key]) {
-            programLevelCounts[key] = { maxLevel: 0, nonSharedPerLevel: {} };
-        }
-        if (level > programLevelCounts[key].maxLevel) {
-            programLevelCounts[key].maxLevel = level;
-        }
-        if (category && !category.includes('متطلبات جامعية')) {
-            if (!programLevelCounts[key].nonSharedPerLevel[level]) {
-                programLevelCounts[key].nonSharedPerLevel[level] = new Set();
-            }
-            programLevelCounts[key].nonSharedPerLevel[level].add(code);
-        }
+    // دمج ما تم تصنيفه صراحةً كـ "فريد" في الملف الجديد
+    Object.entries(explicitExclusiveByProgram).forEach(([key, codes]) => {
+        if (!programExclusiveCodes[key]) programExclusiveCodes[key] = new Set();
+        codes.forEach(code => programExclusiveCodes[key].add(code));
     });
 
+    // حساب متوسط حمل الطالب السنوي (فقط عند توفر بيانات الخطة القديمة)
     Object.entries(programLevelCounts).forEach(([key, info]) => {
         const years = Math.max(1, Math.ceil(info.maxLevel / 2));
         let totalNonShared = 0;
@@ -315,8 +355,12 @@ function buildCourseToPrograms() {
         programAvgLoad[key] = totalNonShared > 0 ? totalNonShared / years : 1;
     });
 
-    console.log(`📋 خريطة البرامج: ${Object.keys(courseCodeToPrograms).length} مقرر → ${Object.keys(programNonSharedCodes).length} برنامج`);
-    console.log(`📊 حمل الطالب السنوي:`, Object.entries(programAvgLoad).map(([k,v]) => `${k}: ${v.toFixed(1)}`).join(', '));
+    const totalCourseProgramLinks = Object.values(courseCodeToPrograms).reduce((sum, progs) => sum + progs.length, 0);
+    console.log(`📋 خريطة البرامج: ${Object.keys(courseCodeToPrograms).length} مقرر → ${totalCourseProgramLinks} ربط برنامج`);
+    console.log(`📚 مصدر الخطط: ${hasPlanTypeColumn ? 'new_all_plans.csv (نوع المقرر)' : 'all_plans.csv (اشتقاق آلي)'}`);
+    if (hasOldPlanColumns && Object.keys(programAvgLoad).length > 0) {
+        console.log(`📊 حمل الطالب السنوي:`, Object.entries(programAvgLoad).map(([k, v]) => `${k}: ${v.toFixed(1)}`).join(', '));
+    }
 }
 
 async function loadAllData() {
@@ -328,7 +372,7 @@ async function loadAllData() {
         loadCSV(`${DATA_BASE_URL}/theses.csv`),
         loadCSV(`${DATA_BASE_URL}/participations.csv`),
         loadCSV(`${DATA_BASE_URL}/publications.csv`),
-        loadCSV(`${DATA_BASE_URL}/all_plans.csv`)
+        loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`)
     ]);
 
     allData = { faculty, students, theses, participations, publications };
@@ -1041,9 +1085,8 @@ let sectionsTabInitialized = false;
 
 function renderSectionsTab() {
     if (!teachingData) return;
-    const records = getFilteredRecordsForSections();
     if (typeof renderProgramStats === 'function') {
-        renderProgramStats(records);
+        renderProgramStats();
     }
     renderProgramQualityIndicators();
 }
@@ -1709,6 +1752,167 @@ function renderQualityRadarChart(kpis) {
 }
 
 // ========================================
+// أدوات مساعدة لإحصائيات البرامج (تبويب إحصائيات الشعب)
+// ========================================
+function resetTeachingProgramAggregatesCache() {
+    teachingProgramAggregatesCache = null;
+}
+
+function getCourseProgramsForCode(code) {
+    return courseCodeToPrograms[normalizeCourseCode(code)] || [];
+}
+
+function courseBelongsToProgramKey(code, programKey) {
+    const set = courseCodeToProgramKeys[normalizeCourseCode(code)];
+    return !!(set && set.has(programKey));
+}
+
+function detectSectionGender(course) {
+    const location = String(course?.l || '').trim();
+
+    // القاعدة المعتمدة: ما يحتوي "طالبات" أو "الطالبات" = إناث، وما عدا ذلك = ذكور
+    if (location.includes('طالبات') || location.includes('الطالبات')) return 'female';
+    return 'male';
+}
+
+function createProgramSectionBucket() {
+    return {
+        totalSections: 0,
+        totalStudents: 0,
+        facultySet: new Set(),
+
+        exclusiveSections: 0,
+        exclusiveStudents: 0,
+        exclusiveFacultySet: new Set(),
+
+        maleSections: 0,
+        maleStudents: 0,
+        femaleSections: 0,
+        femaleStudents: 0,
+        unknownSections: 0,
+        unknownStudents: 0
+    };
+}
+
+function getOrCreateProgramBucket(map, key) {
+    if (!map[key]) map[key] = createProgramSectionBucket();
+    return map[key];
+}
+
+function addSectionToProgramBucket(bucket, fid, students, gender, isExclusive) {
+    bucket.totalSections++;
+    bucket.totalStudents += students;
+    bucket.facultySet.add(fid);
+
+    if (!isExclusive) return;
+
+    bucket.exclusiveSections++;
+    bucket.exclusiveStudents += students;
+    bucket.exclusiveFacultySet.add(fid);
+
+    if (gender === 'female') {
+        bucket.femaleSections++;
+        bucket.femaleStudents += students;
+    } else if (gender === 'male') {
+        bucket.maleSections++;
+        bucket.maleStudents += students;
+    } else {
+        bucket.unknownSections++;
+        bucket.unknownStudents += students;
+    }
+}
+
+function buildTeachingProgramAggregates() {
+    if (teachingProgramAggregatesCache) return teachingProgramAggregatesCache;
+
+    const aggregate = {
+        all: {},
+        byYear: {}
+    };
+
+    if (!teachingData || !Array.isArray(teachingData.records)) {
+        teachingProgramAggregatesCache = aggregate;
+        return aggregate;
+    }
+
+    teachingData.records.forEach(r => {
+        const yearKey = String(r.y);
+        if (!aggregate.byYear[yearKey]) aggregate.byYear[yearKey] = {};
+        const yearMap = aggregate.byYear[yearKey];
+
+        r.cs.forEach(c => {
+            const code = normalizeCourseCode(c.cc);
+            if (!code) return;
+
+            const programEntries = getCourseProgramsForCode(code);
+            if (!programEntries.length) return;
+
+            const students = Number(c.e) || 0;
+            const gender = detectSectionGender(c);
+
+            programEntries.forEach(p => {
+                const allBucket = getOrCreateProgramBucket(aggregate.all, p.key);
+                const yearBucket = getOrCreateProgramBucket(yearMap, p.key);
+                const exclusiveSet = programExclusiveCodes[p.key];
+                const isExclusive = !!(exclusiveSet && exclusiveSet.has(code));
+
+                addSectionToProgramBucket(allBucket, r.fid, students, gender, isExclusive);
+                addSectionToProgramBucket(yearBucket, r.fid, students, gender, isExclusive);
+            });
+        });
+    });
+
+    teachingProgramAggregatesCache = aggregate;
+    return aggregate;
+}
+
+function getSectionsSelectedYear() {
+    const yearFilter = document.getElementById('sectionsYearFilter');
+    return (yearFilter && yearFilter.value) ? yearFilter.value : 'all';
+}
+
+function getProgramAggregateMapForSelectedSectionsYear() {
+    const aggregate = buildTeachingProgramAggregates();
+    const selectedYear = getSectionsSelectedYear();
+    if (selectedYear === 'all') return aggregate.all;
+    return aggregate.byYear[String(selectedYear)] || {};
+}
+
+function getProgramAggregateMapForYear(year) {
+    const aggregate = buildTeachingProgramAggregates();
+    if (year === 'all') return aggregate.all;
+    return aggregate.byYear[String(year)] || {};
+}
+
+function finalizeProgramBucket(bucket) {
+    const safe = bucket || createProgramSectionBucket();
+    const exclusiveSections = safe.exclusiveSections || 0;
+    const exclusiveStudents = safe.exclusiveStudents || 0;
+    const maleSections = safe.maleSections || 0;
+    const femaleSections = safe.femaleSections || 0;
+    const unknownSections = safe.unknownSections || 0;
+
+    return {
+        totalSections: safe.totalSections || 0,
+        totalStudents: safe.totalStudents || 0,
+        facultyCount: safe.facultySet ? safe.facultySet.size : 0,
+        exclusiveSections,
+        exclusiveStudents,
+        exclusiveFacultyCount: safe.exclusiveFacultySet ? safe.exclusiveFacultySet.size : 0,
+        avgExclusiveStudents: exclusiveSections > 0 ? Math.round(exclusiveStudents / exclusiveSections) : 0,
+        maleSections,
+        maleStudents: safe.maleStudents || 0,
+        avgMaleStudents: maleSections > 0 ? Math.round((safe.maleStudents || 0) / maleSections) : 0,
+        femaleSections,
+        femaleStudents: safe.femaleStudents || 0,
+        avgFemaleStudents: femaleSections > 0 ? Math.round((safe.femaleStudents || 0) / femaleSections) : 0,
+        unknownSections,
+        unknownStudents: safe.unknownStudents || 0,
+        avgUnknownStudents: unknownSections > 0 ? Math.round((safe.unknownStudents || 0) / unknownSections) : 0
+    };
+}
+
+// ========================================
 // مؤشرات البرامج الأكاديمية (تبويب إحصائيات الشعب)
 // ========================================
 let programQualityCharts = {};
@@ -1717,80 +1921,68 @@ function renderProgramQualityIndicators() {
     const grid = document.getElementById('programQualityGrid');
     if (!grid) return;
 
-    // الحصول على بيانات التدريس
     if (!teachingData || typeof courseCodeToPrograms === 'undefined') {
         grid.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">جاري تحميل بيانات التدريس...</p>';
         return;
     }
 
-    // استخدام فلتر السنة من تبويب إحصائيات الشعب
-    const yearFilter = document.getElementById('sectionsYearFilter');
-    const selectedYear = yearFilter ? yearFilter.value : 'all';
-    let records = teachingData.records;
-    if (selectedYear !== 'all') {
-        const year = parseInt(selectedYear);
-        records = records.filter(r => r.y === year);
-    }
-
-    // حساب إحصائيات كل برنامج
+    const selectedYear = getSectionsSelectedYear();
+    const selectedProgram = currentProgram || 'all';
     const programs = (typeof config !== 'undefined' && config.programs) || [];
     const stats = [];
+    const degreeOrder = { 'بكالوريوس': 0, 'ماجستير': 1, 'دكتوراه': 2 };
 
-    programs.forEach(p => {
-        const key = p.name + ' - ' + p.degree;
-        let nonSharedSections = 0, nonSharedStudents = 0;
-        const nonSharedFacultySet = new Set();
+    if (selectedProgram !== 'all') {
+        const aggregate = buildTeachingProgramAggregates();
+        const selectedMeta = programs.find(p => (p.name + ' - ' + p.degree) === selectedProgram);
+        const selectedYears = selectedYear === 'all'
+            ? [...(teachingData.years || [])].sort((a, b) => a - b)
+            : [parseInt(selectedYear, 10)];
 
-        const nonSharedCodes = (typeof programNonSharedCodes !== 'undefined' && programNonSharedCodes[key])
-            ? programNonSharedCodes[key] : new Set();
-
-        records.forEach(r => {
-            r.cs.forEach(c => {
-                const code = (c.cc || '').trim();
-                const progs = courseCodeToPrograms[code];
-                if (!progs) return;
-                const belongs = progs.some(pp => pp.program === p.name && pp.degree === p.degree);
-                if (!belongs) return;
-
-                if (nonSharedCodes.has(code)) {
-                    nonSharedSections++;
-                    nonSharedStudents += c.e || 0;
-                    nonSharedFacultySet.add(r.fid);
-                }
+        selectedYears.forEach(year => {
+            const bucket = aggregate.byYear[String(year)]?.[selectedProgram];
+            const m = finalizeProgramBucket(bucket);
+            if (m.exclusiveSections <= 0) return;
+            stats.push({
+                viewMode: 'year',
+                key: selectedProgram,
+                year,
+                name: selectedMeta ? selectedMeta.name : selectedProgram.split(' - ')[0],
+                degree: selectedMeta ? selectedMeta.degree : (selectedProgram.split(' - ')[1] || ''),
+                ...m
             });
         });
-
-        if (nonSharedSections > 0) {
-            const avgStudents = Math.round(nonSharedStudents / nonSharedSections);
-            const facultyCount = nonSharedFacultySet.size;
-            // تقدير عدد الطلاب الفعلي: قسمة إجمالي التسجيلات على متوسط حمل الطالب السنوي
-            const avgLoad = (typeof programAvgLoad !== 'undefined' && programAvgLoad[key]) || 1;
-            const estimatedStudents = Math.round(nonSharedStudents / avgLoad);
-            const ratio = facultyCount > 0 ? parseFloat((estimatedStudents / facultyCount).toFixed(1)) : 0;
+        stats.sort((a, b) => a.year - b.year);
+    } else {
+        const programMap = getProgramAggregateMapForSelectedSectionsYear();
+        programs.forEach(p => {
+            const key = p.name + ' - ' + p.degree;
+            const m = finalizeProgramBucket(programMap[key]);
+            if (m.totalSections <= 0) return;
             stats.push({
-                name: p.name, degree: p.degree, id: p.id,
-                nonSharedSections, nonSharedStudents, avgStudents,
-                facultyCount, ratio, estimatedStudents, avgLoad
+                viewMode: 'program',
+                key,
+                name: p.name,
+                degree: p.degree,
+                id: p.id,
+                ...m
             });
-        }
-    });
-
-    const degreeOrder = { 'بكالوريوس': 0, 'ماجستير': 1, 'دكتوراه': 2 };
-    stats.sort((a, b) => {
-        const da = degreeOrder[a.degree] ?? 3;
-        const db = degreeOrder[b.degree] ?? 3;
-        if (da !== db) return da - db;
-        return b.nonSharedSections - a.nonSharedSections;
-    });
+        });
+        stats.sort((a, b) => {
+            const da = degreeOrder[a.degree] ?? 3;
+            const db = degreeOrder[b.degree] ?? 3;
+            if (da !== db) return da - db;
+            return b.exclusiveSections - a.exclusiveSections;
+        });
+    }
 
     const degreeIcons = { 'بكالوريوس': '📘', 'ماجستير': '📗', 'دكتوراه': '📕' };
     const degreeClass = { 'بكالوريوس': 'bsc', 'ماجستير': 'msc', 'دكتوراه': 'phd' };
-    const yearLabel = selectedYear === 'all' ? 'جميع السنوات' : selectedYear + 'هـ';
 
-    function getRatioLevel(ratio) {
-        if (ratio <= 25) return 'good';
-        if (ratio <= 40) return 'warning';
-        return 'high';
+    if (stats.length === 0) {
+        grid.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">لا توجد بيانات مطابقة للفلتر الحالي.</p>';
+        renderProgramQualityCharts([], { selectedProgram, selectedYear });
+        return;
     }
 
     grid.innerHTML = stats.map(s => `
@@ -1804,117 +1996,224 @@ function renderProgramQualityIndicators() {
             </div>
             <div class="pq-metrics">
                 <div class="pq-metric">
-                    <span class="pq-metric-value ratio-badge ratio-${getRatioLevel(s.ratio)}">${s.ratio.toLocaleString('ar-SA')} : 1</span>
-                    <span class="pq-metric-label">نسبة طلاب/هيئة تدريس</span>
+                    <span class="pq-metric-value">${s.avgExclusiveStudents.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">متوسط طلاب/شعبة (فريد)</span>
                 </div>
                 <div class="pq-metric">
-                    <span class="pq-metric-value">${s.estimatedStudents.toLocaleString('ar-SA')}</span>
-                    <span class="pq-metric-label">عدد الطلاب (تقديري)</span>
-                </div>
-                <div class="pq-metric">
-                    <span class="pq-metric-value">${s.avgStudents.toLocaleString('ar-SA')}</span>
-                    <span class="pq-metric-label">متوسط طلاب/شعبة</span>
-                </div>
-                <div class="pq-metric">
-                    <span class="pq-metric-value">${s.nonSharedSections.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-value">${s.exclusiveSections.toLocaleString('ar-SA')}</span>
                     <span class="pq-metric-label">شعبة (مقررات فريدة)</span>
                 </div>
                 <div class="pq-metric">
-                    <span class="pq-metric-value">${s.facultyCount}</span>
-                    <span class="pq-metric-label">عضو هيئة تدريس</span>
+                    <span class="pq-metric-value">${s.maleSections.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">شعب الذكور</span>
                 </div>
+                <div class="pq-metric">
+                    <span class="pq-metric-value">${s.avgMaleStudents.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">متوسط الذكور/شعبة</span>
+                </div>
+                <div class="pq-metric">
+                    <span class="pq-metric-value">${s.femaleSections.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">شعب الإناث</span>
+                </div>
+                <div class="pq-metric">
+                    <span class="pq-metric-value">${s.avgFemaleStudents.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">متوسط الإناث/شعبة</span>
+                </div>
+                <div class="pq-metric">
+                    <span class="pq-metric-value">${s.exclusiveFacultyCount.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">أعضاء (مقررات فريدة)</span>
+                </div>
+                ${s.unknownSections > 0 ? `
+                <div class="pq-metric">
+                    <span class="pq-metric-value">${s.unknownSections.toLocaleString('ar-SA')}</span>
+                    <span class="pq-metric-label">شعب غير مصنفة</span>
+                </div>` : ''}
             </div>
-            <div class="pq-year-label">${yearLabel}</div>
+            <div class="pq-year-label">${s.viewMode === 'year' ? `${s.year}هـ` : (selectedYear === 'all' ? 'جميع السنوات' : `${selectedYear}هـ`)}</div>
         </div>
     `).join('');
 
-    // رسم المخططات البيانية
-    renderProgramQualityCharts(stats);
+    renderProgramQualityCharts(stats, { selectedProgram, selectedYear });
 }
 
-function renderProgramQualityCharts(stats) {
-    if (!stats || stats.length === 0) return;
+function setProgramQualityChartTitle(canvasId, title) {
+    const canvas = document.getElementById(canvasId);
+    const card = canvas?.closest('.chart-card');
+    const heading = card?.querySelector('h3');
+    if (heading) heading.textContent = title;
+}
 
-    const labels = stats.map(s => s.name + ' (' + s.degree.charAt(0) + ')');
+function renderProgramQualityCharts(stats, context = {}) {
+    const { selectedProgram = 'all', selectedYear = 'all' } = context;
     const degreeColors = { 'بكالوريوس': '#4ecdc4', 'ماجستير': '#d4af37', 'دكتوراه': '#e74c3c' };
 
-    // مخطط متوسط الطلاب
     const avgCanvas = document.getElementById('programAvgStudentsChart');
-    if (avgCanvas) {
-        if (programQualityCharts.avg) programQualityCharts.avg.destroy();
-        const bgColors = stats.map(s => (degreeColors[s.degree] || '#9ca3af') + '99');
-        const borderColorsList = stats.map(s => degreeColors[s.degree] || '#9ca3af');
+    const genderCanvas = document.getElementById('programRatioChart');
 
-        programQualityCharts.avg = new Chart(avgCanvas, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'متوسط طلاب/شعبة',
-                    data: stats.map(s => s.avgStudents),
-                    backgroundColor: bgColors,
-                    borderColor: borderColorsList,
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true, animation: { duration: 0 }, indexAxis: 'y',
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
-                }
-            }
-        });
+    if ((!stats || stats.length === 0)) {
+        if (programQualityCharts.avg) { programQualityCharts.avg.destroy(); programQualityCharts.avg = null; }
+        if (programQualityCharts.ratio) { programQualityCharts.ratio.destroy(); programQualityCharts.ratio = null; }
+        setProgramQualityChartTitle('programAvgStudentsChart', 'لا توجد بيانات للعرض');
+        setProgramQualityChartTitle('programRatioChart', 'لا توجد بيانات للعرض');
+        return;
     }
 
-    // مخطط نسبة الطلاب/هيئة التدريس
-    const ratioCanvas = document.getElementById('programRatioChart');
-    if (ratioCanvas) {
-        if (programQualityCharts.ratio) programQualityCharts.ratio.destroy();
-        const ratioBgColors = stats.map(s => {
-            if (s.ratio <= 25) return 'rgba(16,185,129,0.7)';
-            if (s.ratio <= 40) return 'rgba(245,158,11,0.7)';
-            return 'rgba(239,68,68,0.7)';
-        });
-        const ratioBorderColors = stats.map(s => {
-            if (s.ratio <= 25) return '#10b981';
-            if (s.ratio <= 40) return '#f59e0b';
-            return '#ef4444';
-        });
+    if (selectedProgram !== 'all') {
+        setProgramQualityChartTitle('programAvgStudentsChart', 'متوسط الطلاب في شعب الذكور والإناث (المقررات الفريدة) عبر السنوات');
+        setProgramQualityChartTitle('programRatioChart', 'عدد شعب الذكور والإناث (المقررات الفريدة) عبر السنوات');
+    } else {
+        setProgramQualityChartTitle('programAvgStudentsChart', 'متوسط عدد الطلاب في الشعبة (المقررات الفريدة) لكل برنامج');
+        setProgramQualityChartTitle('programRatioChart', `شعب الذكور والإناث (المقررات الفريدة) لكل برنامج${selectedYear === 'all' ? '' : ` - ${selectedYear}هـ`}`);
+    }
 
-        programQualityCharts.ratio = new Chart(ratioCanvas, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'نسبة طلاب/هيئة تدريس',
-                    data: stats.map(s => s.ratio),
-                    backgroundColor: ratioBgColors,
-                    borderColor: ratioBorderColors,
-                    borderWidth: 1
-                }]
+    // مخطط المتوسطات
+    if (avgCanvas) {
+        if (programQualityCharts.avg) programQualityCharts.avg.destroy();
+        if (selectedProgram !== 'all') {
+            const labels = stats.map(s => `${s.year}هـ`);
+            programQualityCharts.avg = new Chart(avgCanvas, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'متوسط الذكور/شعبة',
+                            data: stats.map(s => s.avgMaleStudents),
+                            backgroundColor: 'rgba(78,205,196,0.7)',
+                            borderColor: '#4ecdc4',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'متوسط الإناث/شعبة',
+                            data: stats.map(s => s.avgFemaleStudents),
+                            backgroundColor: 'rgba(212,175,55,0.7)',
+                            borderColor: '#d4af37',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'متوسط عام (فريد)',
+                            data: stats.map(s => s.avgExclusiveStudents),
+                            type: 'line',
+                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(231,76,60,0.15)',
+                            yAxisID: 'y',
+                            tension: 0.25
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, animation: { duration: 0 },
+                    plugins: { legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } } } },
+                    scales: {
+                        x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { beginAtZero: true, ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+        } else {
+            const labels = stats.map(s => s.name + ' (' + s.degree.charAt(0) + ')');
+            const bgColors = stats.map(s => (degreeColors[s.degree] || '#9ca3af') + '99');
+            const borderColorsList = stats.map(s => degreeColors[s.degree] || '#9ca3af');
+
+            programQualityCharts.avg = new Chart(avgCanvas, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'متوسط طلاب/شعبة (فريد)',
+                        data: stats.map(s => s.avgExclusiveStudents),
+                        backgroundColor: bgColors,
+                        borderColor: borderColorsList,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true, animation: { duration: 0 }, indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const s = stats[ctx.dataIndex];
+                                    return [
+                                        `متوسط عام: ${s.avgExclusiveStudents.toLocaleString('ar-SA')}`,
+                                        `متوسط الذكور: ${s.avgMaleStudents.toLocaleString('ar-SA')}`,
+                                        `متوسط الإناث: ${s.avgFemaleStudents.toLocaleString('ar-SA')}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+        }
+    }
+
+    // مخطط شعب الذكور/الإناث
+    if (genderCanvas) {
+        if (programQualityCharts.ratio) programQualityCharts.ratio.destroy();
+
+        const labels = selectedProgram !== 'all'
+            ? stats.map(s => `${s.year}هـ`)
+            : stats.map(s => s.name + ' (' + s.degree.charAt(0) + ')');
+
+        const datasets = [
+            {
+                label: 'شعب الذكور',
+                data: stats.map(s => s.maleSections),
+                backgroundColor: 'rgba(78,205,196,0.7)',
+                borderColor: '#4ecdc4',
+                borderWidth: 1
             },
+            {
+                label: 'شعب الإناث',
+                data: stats.map(s => s.femaleSections),
+                backgroundColor: 'rgba(212,175,55,0.7)',
+                borderColor: '#d4af37',
+                borderWidth: 1
+            }
+        ];
+
+        if (stats.some(s => s.unknownSections > 0)) {
+            datasets.push({
+                label: 'غير مصنفة',
+                data: stats.map(s => s.unknownSections),
+                backgroundColor: 'rgba(156,163,175,0.6)',
+                borderColor: '#9ca3af',
+                borderWidth: 1
+            });
+        }
+
+        programQualityCharts.ratio = new Chart(genderCanvas, {
+            type: 'bar',
+            data: { labels, datasets },
             options: {
-                responsive: true, animation: { duration: 0 }, indexAxis: 'y',
+                responsive: true,
+                animation: { duration: 0 },
+                indexAxis: selectedProgram === 'all' ? 'y' : 'x',
                 plugins: {
-                    legend: { display: false },
+                    legend: { labels: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } } },
                     tooltip: {
                         callbacks: {
-                            label: function(ctx) {
-                                const s = stats[ctx.dataIndex];
+                            afterBody: function(items) {
+                                const idx = items?.[0]?.dataIndex ?? 0;
+                                const s = stats[idx];
                                 return [
-                                    `النسبة: ${ctx.raw} : 1`,
-                                    `طلاب (تقديري): ${s.estimatedStudents}`,
-                                    `أعضاء: ${s.facultyCount}`
+                                    `متوسط الذكور/شعبة: ${s.avgMaleStudents.toLocaleString('ar-SA')}`,
+                                    `متوسط الإناث/شعبة: ${s.avgFemaleStudents.toLocaleString('ar-SA')}`,
+                                    `متوسط عام (فريد): ${s.avgExclusiveStudents.toLocaleString('ar-SA')}`
                                 ];
                             }
                         }
                     }
                 },
                 scales: {
-                    x: { ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    x: { beginAtZero: true, ticks: { color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { beginAtZero: true, ticks: { color: '#e0e0e0', font: { family: 'Cairo', size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
                 }
             }
         });
