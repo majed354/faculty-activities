@@ -270,6 +270,8 @@ function buildCourseToPrograms() {
     const programLevelCounts = {};           // key → { maxLevel, nonSharedPerLevel: {level: Set} }
     let hasPlanTypeColumn = false;
     let hasOldPlanColumns = false;
+    const missingTypeRowsByDegree = {};
+    let missingTypeRowsTotal = 0;
 
     allPlansData.forEach(row => {
         // دعم الصيغة القديمة والجديدة + BOM
@@ -302,6 +304,11 @@ function buildCourseToPrograms() {
                 if (!programNonSharedCodes[key]) programNonSharedCodes[key] = new Set();
                 programNonSharedCodes[key].add(code);
             }
+        } else if (Object.prototype.hasOwnProperty.call(row, 'نوع المقرر')) {
+            // يوجد عمود التصنيف لكن الصف غير معبأ
+            missingTypeRowsTotal++;
+            const degLabel = deg || 'غير محدد';
+            missingTypeRowsByDegree[degLabel] = (missingTypeRowsByDegree[degLabel] || 0) + 1;
         }
 
         // الصيغة القديمة: Category/Level
@@ -360,6 +367,9 @@ function buildCourseToPrograms() {
     const totalCourseProgramLinks = Object.values(courseCodeToPrograms).reduce((sum, progs) => sum + progs.length, 0);
     console.log(`📋 خريطة البرامج: ${Object.keys(courseCodeToPrograms).length} مقرر → ${totalCourseProgramLinks} ربط برنامج`);
     console.log(`📚 مصدر الخطط: ${hasPlanTypeColumn ? 'new_all_plans.csv (تصنيف صريح فريد/مشترك)' : 'all_plans.csv (اشتقاق آلي)'}`);
+    if (missingTypeRowsTotal > 0) {
+        console.warn(`⚠️ توجد ${missingTypeRowsTotal} صفوف في new_all_plans.csv بدون تصنيف "نوع المقرر"؛ لن تظهر في مؤشرات المقررات الفريدة حتى تعبئتها.`, missingTypeRowsByDegree);
+    }
     if (hasOldPlanColumns && Object.keys(programAvgLoad).length > 0) {
         console.log(`📊 حمل الطالب السنوي:`, Object.entries(programAvgLoad).map(([k, v]) => `${k}: ${v.toFixed(1)}`).join(', '));
     }
@@ -376,10 +386,9 @@ async function loadAllData() {
         loadCSV(`${DATA_BASE_URL}/publications.csv`)
     ]);
 
-    let plans = await loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`);
+    const plans = await loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`);
     if (!plans || plans.length === 0) {
-        console.warn('⚠️ تعذر تحميل new_all_plans.csv أو أنه فارغ، سيتم استخدام all_plans.csv كنسخة احتياطية');
-        plans = await loadCSV(`${DATA_BASE_URL}/all_plans.csv`);
+        throw new Error('تعذر تحميل data/new_all_plans.csv أو الملف فارغ. هذا الملف أصبح المصدر المعتمد الوحيد لربط المقررات بالبرامج.');
     }
 
     allData = { faculty, students, theses, participations, publications };
