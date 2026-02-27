@@ -2021,6 +2021,16 @@
     font-size: 0.78rem;
 }
 
+.publication-vessels-section {
+    margin-top: 22px;
+}
+
+.publication-vessels-title {
+    color: var(--gold-400);
+    font-size: 1rem;
+    margin: 0 0 12px;
+}
+
 .publication-vessel-stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2119,6 +2129,12 @@
     font-size: 0.95rem;
 }
 
+.journal-context-label {
+    color: var(--gray-400);
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
 .journal-panel-close {
     border: 1px solid rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.08);
@@ -2174,6 +2190,12 @@
     justify-content: space-between;
     color: var(--gray-500);
     font-size: 0.72rem;
+}
+
+.scope-journals-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .member-teaching-summary .member-teaching-empty {

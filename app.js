@@ -2436,6 +2436,48 @@ function showMemberDetails(memberId) {
                             `).join('')}
                         </div>
                     </div>` : ''}
+
+                    ${memberActivities.books.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>📖 التأليف والنشر (${memberActivities.books.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.books.map(b => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge event">تأليف كتب</span>
+                                    <span class="activity-title">${b.title}</span>
+                                    <span class="activity-meta">${b.location || ''} - ${formatDate(b.date)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+
+                    ${memberActivities.consultings.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>💼 الاستشارات العلمية (${memberActivities.consultings.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.consultings.map(c => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge event">استشارة</span>
+                                    <span class="activity-title">${c.title}</span>
+                                    <span class="activity-meta">${c.location || ''}${c.consulting_hours ? ` - ${c.consulting_hours} ساعة` : ''}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
+
+                    ${memberActivities.media.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>📺 المشاركات الإعلامية (${memberActivities.media.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.media.map(m => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge event">إعلام</span>
+                                    <span class="activity-title">${m.title}</span>
+                                    <span class="activity-meta">${m.location || ''} - ${formatDate(m.date)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
                     
                     ${memberActivities.studentResearch.length > 0 ? `
                     <div class="activity-group">
@@ -2530,6 +2572,27 @@ function getMemberActivities(memberId) {
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
+
+    // التأليف والنشر (الكتب)
+    const books = data.participations.filter(p => {
+        if (p.category !== 'تأليف كتب') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
+
+    // الاستشارات العلمية
+    const consultings = data.participations.filter(p => {
+        if (p.category !== 'استشارة علمية') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
+
+    // المشاركات الإعلامية
+    const media = data.participations.filter(p => {
+        if (p.category !== 'مشاركة إعلامية') return false;
+        const participants = (p.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
     
     // الجوائز وبراءات الاختراع
     const awards = data.participations.filter(p => {
@@ -2538,7 +2601,7 @@ function getMemberActivities(memberId) {
         return participants.includes(memberIdStr);
     });
     
-    return { theses, publications, studentResearch, events, externalDiscussions, reviewing, awards };
+    return { theses, publications, studentResearch, events, externalDiscussions, reviewing, books, consultings, media, awards };
 }
 
 // دالة إغلاق modal العضو
@@ -3672,6 +3735,11 @@ function normalizeJournalStatKey(value) {
         .toLowerCase();
 }
 
+function isUnknownPublicationMetaValue(value) {
+    const normalized = normalizeJournalStatKey(value);
+    return !normalized || normalized === 'غير محدد' || normalized === 'unknown' || normalized === '-';
+}
+
 function parsePublicationJournalMeta(journalText) {
     const raw = String(journalText || '').trim().replace(/\s+/g, ' ');
     if (!raw) {
@@ -3750,9 +3818,20 @@ function closeJournalPublicationsPanel(skipRerender = false) {
     }
 }
 
-function showJournalPublications(journalKey) {
+function getScopedPublicationRecords(records, scopeType, scopeKey) {
+    if (!Array.isArray(records)) return [];
+    return records.filter(pub => {
+        const meta = parsePublicationJournalMeta(pub.journal);
+        if (scopeType === 'city') return normalizeJournalStatKey(meta.city) === scopeKey;
+        if (scopeType === 'country') return normalizeJournalStatKey(meta.country) === scopeKey;
+        if (scopeType === 'institution') return normalizeJournalStatKey(meta.institution) === scopeKey;
+        return false;
+    });
+}
+
+function showJournalPublications(journalKey, sourceRecords = publicationStatsState.records, contextLabel = '') {
     const panel = document.getElementById('journalPublicationsPanel');
-    const records = Array.isArray(publicationStatsState.records) ? publicationStatsState.records : [];
+    const records = Array.isArray(sourceRecords) ? sourceRecords : [];
     if (!panel || !journalKey || !records.length) return;
 
     const selected = records.filter(pub => parsePublicationJournalMeta(pub.journal).journalKey === journalKey);
@@ -3766,11 +3845,12 @@ function showJournalPublications(journalKey) {
     publicationStatsState.selectedJournal = journalKey;
     publicationStatsState.selectedRecords = sorted;
     const journalLabel = parsePublicationJournalMeta(sorted[0].journal).journalName;
+    const contextSuffix = contextLabel ? ` <span class="journal-context-label">(${escapeHtml(contextLabel)})</span>` : '';
 
     panel.style.display = 'block';
     panel.innerHTML = `
         <div class="journal-panel-header">
-            <h3>📚 بحوث منشورة في: ${escapeHtml(journalLabel)}</h3>
+            <h3>📚 بحوث منشورة في: ${escapeHtml(journalLabel)}${contextSuffix}</h3>
             <button type="button" class="journal-panel-close" onclick="closeJournalPublicationsPanel()">إخفاء</button>
         </div>
         <div class="journal-publications-list">
@@ -3799,22 +3879,76 @@ function showJournalPublications(journalKey) {
             if (pub) showPublicationDetails(pub);
         });
     });
+}
 
-    renderPublicationVesselStats(records);
+function showScopeJournals(scopeType, scopeKey, scopeLabel) {
+    const panel = document.getElementById('journalPublicationsPanel');
+    const records = Array.isArray(publicationStatsState.records) ? publicationStatsState.records : [];
+    if (!panel || !scopeType || !scopeKey || !records.length) return;
+
+    const scopedRecords = getScopedPublicationRecords(records, scopeType, scopeKey);
+    const journalCounter = new Map();
+
+    scopedRecords.forEach(pub => {
+        const meta = parsePublicationJournalMeta(pub.journal);
+        if (!isUnknownPublicationMetaValue(meta.journalName) && meta.journalKey !== 'unknown') {
+            incrementLabeledCounter(journalCounter, meta.journalKey, meta.journalName);
+        }
+    });
+
+    const journals = toTopCounterEntries(journalCounter, 50);
+    const scopeTitleMap = {
+        city: 'مجلات النشر في المدينة',
+        country: 'مجلات النشر في الدولة',
+        institution: 'مجلات الجهة'
+    };
+    const scopeTitle = scopeTitleMap[scopeType] || 'المجلات';
+
+    panel.style.display = 'block';
+    panel.innerHTML = `
+        <div class="journal-panel-header">
+            <h3>📍 ${escapeHtml(scopeTitle)}: ${escapeHtml(scopeLabel)}</h3>
+            <button type="button" class="journal-panel-close" onclick="closeJournalPublicationsPanel()">إخفاء</button>
+        </div>
+        ${journals.length ? `
+            <div class="scope-journals-list">
+                ${journals.map(entry => `
+                    <button type="button" class="vessel-stat-btn scope-journal-btn" data-scope-journal-key="${encodeURIComponent(entry.key)}">
+                        <span class="vessel-label">${escapeHtml(entry.label)}</span>
+                        <span class="vessel-count">${entry.count.toLocaleString('ar-SA')}</span>
+                    </button>
+                `).join('')}
+            </div>
+            <div class="vessel-stat-hint">انقر على اسم المجلة لعرض البحوث المنشورة فيها</div>
+        ` : `
+            <div class="vessel-empty">لا توجد مجلات محددة لهذه القيمة.</div>
+        `}
+    `;
+
+    panel.querySelectorAll('[data-scope-journal-key]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const encodedKey = btn.getAttribute('data-scope-journal-key') || '';
+            const journalKey = decodeURIComponent(encodedKey);
+            showJournalPublications(journalKey, scopedRecords, `${scopeLabel}`);
+        });
+    });
 }
 
 function renderPublicationVesselStats(records) {
     const container = document.getElementById('publicationVesselStats');
+    const section = document.getElementById('publicationVesselsSection');
     if (!container) return;
 
     if (!Array.isArray(records) || records.length === 0) {
         publicationStatsState.records = [];
         publicationStatsState.selectedRecords = [];
         container.innerHTML = '';
+        if (section) section.style.display = 'none';
         closeJournalPublicationsPanel(true);
         return;
     }
 
+    if (section) section.style.display = 'block';
     publicationStatsState.records = records;
 
     const journalCounter = new Map();
@@ -3824,25 +3958,39 @@ function renderPublicationVesselStats(records) {
 
     records.forEach(pub => {
         const meta = parsePublicationJournalMeta(pub.journal);
-        incrementLabeledCounter(journalCounter, meta.journalKey, meta.journalName);
-        incrementLabeledCounter(institutionCounter, meta.institution, meta.institution);
-        incrementLabeledCounter(cityCounter, meta.city, meta.city);
-        incrementLabeledCounter(countryCounter, meta.country, meta.country);
+        if (!isUnknownPublicationMetaValue(meta.journalName) && meta.journalKey !== 'unknown') {
+            incrementLabeledCounter(journalCounter, meta.journalKey, meta.journalName);
+        }
+        if (!isUnknownPublicationMetaValue(meta.institution)) {
+            incrementLabeledCounter(institutionCounter, meta.institution, meta.institution);
+        }
+        if (!isUnknownPublicationMetaValue(meta.city)) {
+            incrementLabeledCounter(cityCounter, meta.city, meta.city);
+        }
+        if (!isUnknownPublicationMetaValue(meta.country)) {
+            incrementLabeledCounter(countryCounter, meta.country, meta.country);
+        }
     });
 
-    const selectedJournal = publicationStatsState.selectedJournal || '';
     const topJournals = toTopCounterEntries(journalCounter, 8);
     const topInstitutions = toTopCounterEntries(institutionCounter, 6);
     const topCities = toTopCounterEntries(cityCounter, 6);
     const topCountries = toTopCounterEntries(countryCounter, 6);
 
-    const listHtml = (entries, type) => {
+    const listHtml = (entries, mode, scopeType = '') => {
         if (!entries.length) return '<div class="vessel-empty">لا توجد بيانات</div>';
         return entries.map(entry => {
-            if (type === 'journal') {
-                const activeClass = selectedJournal && selectedJournal === entry.key ? 'active' : '';
+            if (mode === 'journal') {
                 return `
-                    <button type="button" class="vessel-stat-btn ${activeClass}" data-journal-key="${encodeURIComponent(entry.key)}">
+                    <button type="button" class="vessel-stat-btn" data-journal-key="${encodeURIComponent(entry.key)}">
+                        <span class="vessel-label">${escapeHtml(entry.label)}</span>
+                        <span class="vessel-count">${entry.count.toLocaleString('ar-SA')}</span>
+                    </button>
+                `;
+            }
+            if (mode === 'scope') {
+                return `
+                    <button type="button" class="vessel-stat-btn" data-scope-type="${scopeType}" data-scope-key="${encodeURIComponent(entry.key)}" data-scope-label="${escapeHtml(entry.label)}">
                         <span class="vessel-label">${escapeHtml(entry.label)}</span>
                         <span class="vessel-count">${entry.count.toLocaleString('ar-SA')}</span>
                     </button>
@@ -3865,15 +4013,17 @@ function renderPublicationVesselStats(records) {
         </div>
         <div class="vessel-stat-card">
             <h3>🏛️ الجهات/الجامعات الناشرة</h3>
-            <div class="vessel-stat-list">${listHtml(topInstitutions)}</div>
+            <div class="vessel-stat-list">${listHtml(topInstitutions, 'row')}</div>
         </div>
         <div class="vessel-stat-card">
             <h3>🌍 أكثر المدن نشرًا</h3>
-            <div class="vessel-stat-list">${listHtml(topCities)}</div>
+            <div class="vessel-stat-list">${listHtml(topCities, 'scope', 'city')}</div>
+            <div class="vessel-stat-hint">انقر على المدينة لعرض المجلات فيها</div>
         </div>
         <div class="vessel-stat-card">
             <h3>🗺️ أكثر الدول نشرًا</h3>
-            <div class="vessel-stat-list">${listHtml(topCountries)}</div>
+            <div class="vessel-stat-list">${listHtml(topCountries, 'scope', 'country')}</div>
+            <div class="vessel-stat-hint">انقر على الدولة لعرض المجلات فيها</div>
         </div>
     `;
 
@@ -3882,6 +4032,16 @@ function renderPublicationVesselStats(records) {
             const encodedKey = btn.getAttribute('data-journal-key') || '';
             const journalKey = decodeURIComponent(encodedKey);
             showJournalPublications(journalKey);
+        });
+    });
+
+    container.querySelectorAll('[data-scope-key]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const scopeType = btn.getAttribute('data-scope-type') || '';
+            const encodedKey = btn.getAttribute('data-scope-key') || '';
+            const scopeKey = decodeURIComponent(encodedKey);
+            const scopeLabel = btn.getAttribute('data-scope-label') || scopeKey;
+            showScopeJournals(scopeType, scopeKey, scopeLabel);
         });
     });
 }
