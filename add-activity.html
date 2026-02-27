@@ -49,6 +49,28 @@
             border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; border-radius: 10px;
             font-family: 'Cairo', sans-serif; transition: all 0.3s;
         }
+
+        .faculty-search-input {
+            width: 100%;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: #fff;
+            font-family: 'Cairo', sans-serif;
+            transition: all 0.3s;
+        }
+
+        .faculty-search-input:focus {
+            outline: none;
+            border-color: var(--gold-400);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .faculty-search-input::placeholder {
+            color: var(--gray-400);
+        }
         
         /* تنسيق خاص لحقل التاريخ ليظهر بشكل جيد في الوضع الليلي */
         input[type="date"] {
@@ -277,6 +299,7 @@
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
                     <label>👤 اختر اسمك (وأسماء الباحثين معك إن وُجدوا) <span style="color: var(--rose-500);">*</span></label>
+                    <input type="text" id="pub_author_search" class="faculty-search-input" data-target-select="pub_author_select" placeholder="🔍 اكتب اسم العضو أو رقمه الوظيفي للبحث">
                     <div class="multi-select-wrapper">
                         <select id="pub_author_select" class="faculty-select" onchange="autoAddMember('pub_author_select', 'pub_authors_list', 'pub_authors_hidden')">
                             <option value="">-- اختر اسمك من القائمة --</option>
@@ -349,6 +372,7 @@
 
                 <div class="form-group">
                     <label>المشرف الرئيسي <span style="color: var(--rose-500);">*</span></label>
+                    <input type="text" id="thesis_supervisor_search" class="faculty-search-input" data-target-select="thesis_supervisor" placeholder="🔍 اكتب اسم العضو أو رقمه الوظيفي للبحث">
                     <select id="thesis_supervisor" class="faculty-select" onchange="toggleExternalInput(this)">
                         <option value="">جاري التحميل...</option>
                     </select>
@@ -357,6 +381,7 @@
 
                 <div class="form-group">
                     <label>المشرف المشارك</label>
+                    <input type="text" id="thesis_co_supervisor_search" class="faculty-search-input" data-target-select="thesis_co_supervisor" placeholder="🔍 اكتب اسم العضو أو رقمه الوظيفي للبحث">
                     <select id="thesis_co_supervisor" class="faculty-select" onchange="toggleExternalInput(this)">
                         <option value="">-- اختياري --</option>
                     </select>
@@ -365,6 +390,7 @@
 
                 <div class="form-group">
                     <label>المناقش الأول <span style="color: var(--amber-400); font-size: 0.8rem;">(للمنجزة)</span></label>
+                    <input type="text" id="thesis_exam1_search" class="faculty-search-input" data-target-select="thesis_exam1" placeholder="🔍 اكتب اسم العضو أو رقمه الوظيفي للبحث">
                     <select id="thesis_exam1" class="faculty-select" onchange="toggleExternalInput(this)">
                         <option value="">جاري التحميل...</option>
                     </select>
@@ -373,6 +399,7 @@
 
                 <div class="form-group">
                     <label>المناقش الثاني <span style="color: var(--amber-400); font-size: 0.8rem;">(للمنجزة)</span></label>
+                    <input type="text" id="thesis_exam2_search" class="faculty-search-input" data-target-select="thesis_exam2" placeholder="🔍 اكتب اسم العضو أو رقمه الوظيفي للبحث">
                     <select id="thesis_exam2" class="faculty-select" onchange="toggleExternalInput(this)">
                         <option value="">جاري التحميل...</option>
                     </select>
@@ -427,6 +454,7 @@
 
                 <div class="form-group" style="grid-column: span 2;">
                     <label id="part_ids_label">👤 اختر اسمك (وأسماء المشاركين معك إن وُجدوا) <span style="color: var(--rose-500);">*</span></label>
+                    <input type="text" id="part_ids_search" class="faculty-search-input" data-target-select="part_ids_select" placeholder="🔍 اكتب اسم العضو أو رقمه الوظيفي للبحث">
                     <div class="multi-select-wrapper">
                         <select id="part_ids_select" class="faculty-select" onchange="autoAddMember('part_ids_select', 'part_ids_list', 'part_ids_hidden')">
                             <option value="">-- اختر اسمك من القائمة --</option>
@@ -484,10 +512,17 @@
         let currentTargetSheet = '';
         let selectedMembersData = {};
         let journalSuggestions = [];
+        let facultyMembersCache = [];
         let journalSuggestionHideTimer = null;
         const JOURNAL_SUGGESTIONS_LIMIT = 300;
+        const JOURNAL_CACHE_KEY = 'faculty_activities_journals_cache_v2';
+        const FACULTY_DEPARTMENT_ORDER = ['القراءات', 'الشريعة', 'الأنظمة', 'الثقافة الإسلامية'];
 
         function normalizeJournalText(value) {
+            return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+        }
+
+        function normalizeSearchText(value) {
             return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
         }
 
@@ -497,6 +532,205 @@
                 .replace(/"/g, '&quot;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
+        }
+
+        function getDepartmentSortIndex(departmentName) {
+            const normalized = String(departmentName || '').trim();
+            const index = FACULTY_DEPARTMENT_ORDER.indexOf(normalized);
+            return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+        }
+
+        function compareDepartmentNames(a, b) {
+            const aIndex = getDepartmentSortIndex(a);
+            const bIndex = getDepartmentSortIndex(b);
+            if (aIndex !== bIndex) return aIndex - bIndex;
+            return String(a || '').localeCompare(String(b || ''), 'ar');
+        }
+
+        function getFacultySearchInputBySelect(select) {
+            if (!select || !select.id) return null;
+            return document.querySelector(`.faculty-search-input[data-target-select="${select.id}"]`);
+        }
+
+        function renderFacultyOptionsForSelect(select, members, query = '') {
+            if (!select) return;
+
+            if (!select.dataset.basePlaceholder) {
+                const firstOption = select.options[0];
+                select.dataset.basePlaceholder = firstOption ? firstOption.text : '-- اختر عضو هيئة التدريس --';
+            }
+
+            let placeholderText = select.dataset.basePlaceholder || '-- اختر عضو هيئة التدريس --';
+            if (placeholderText === 'جاري التحميل...') placeholderText = '-- اختر عضو هيئة التدريس --';
+
+            const previousValue = select.value;
+            select.innerHTML = '';
+
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.text = placeholderText;
+            select.appendChild(placeholderOption);
+
+            const supportsExternalMember = select.id.startsWith('thesis_');
+            if (supportsExternalMember) {
+                const extOption = document.createElement('option');
+                extOption.value = 'external';
+                extOption.text = '👤 مناقش/مشرف خارجي (إدخال يدوي)';
+                extOption.style.color = '#0ea5e9';
+                extOption.style.fontWeight = 'bold';
+                select.appendChild(extOption);
+
+                const separator = document.createElement('option');
+                separator.disabled = true;
+                separator.text = '------------------';
+                select.appendChild(separator);
+            }
+
+            const normalizedQuery = normalizeSearchText(query);
+            const filteredMembers = normalizedQuery
+                ? members.filter(member => member.searchBlob.includes(normalizedQuery))
+                : members;
+
+            if (!filteredMembers.length) {
+                const emptyOption = document.createElement('option');
+                emptyOption.disabled = true;
+                emptyOption.text = 'لا توجد نتائج مطابقة';
+                select.appendChild(emptyOption);
+                return;
+            }
+
+            const membersByDepartment = new Map();
+            filteredMembers.forEach(member => {
+                const departmentName = member.department || 'غير محدد';
+                if (!membersByDepartment.has(departmentName)) membersByDepartment.set(departmentName, []);
+                membersByDepartment.get(departmentName).push(member);
+            });
+
+            const departments = Array.from(membersByDepartment.keys()).sort(compareDepartmentNames);
+            departments.forEach(departmentName => {
+                const group = document.createElement('optgroup');
+                group.label = departmentName;
+
+                membersByDepartment.get(departmentName).forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.id;
+                    option.text = member.name;
+                    group.appendChild(option);
+                });
+
+                select.appendChild(group);
+            });
+
+            if (previousValue) {
+                const matchedOption = Array.from(select.options).find(option => option.value === previousValue);
+                if (matchedOption) select.value = previousValue;
+            }
+        }
+
+        function setupFacultySearchInputs() {
+            document.querySelectorAll('.faculty-search-input[data-target-select]').forEach(input => {
+                if (input.dataset.bound === 'true') return;
+                input.dataset.bound = 'true';
+
+                const targetId = input.dataset.targetSelect;
+                input.addEventListener('input', () => {
+                    const targetSelect = document.getElementById(targetId);
+                    if (!targetSelect) return;
+                    renderFacultyOptionsForSelect(targetSelect, facultyMembersCache, input.value || '');
+                });
+
+                input.addEventListener('keydown', event => {
+                    if (event.key !== 'ArrowDown') return;
+                    const targetSelect = document.getElementById(targetId);
+                    if (!targetSelect || targetSelect.options.length <= 1) return;
+                    event.preventDefault();
+                    targetSelect.focus();
+                    targetSelect.selectedIndex = 1;
+                });
+            });
+        }
+
+        function getCachedJournalSuggestions() {
+            try {
+                const raw = localStorage.getItem(JOURNAL_CACHE_KEY);
+                if (!raw) return [];
+                const parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) return [];
+                return parsed.map(item => String(item || '').trim()).filter(Boolean);
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function saveJournalSuggestionsCache(entries) {
+            try {
+                localStorage.setItem(JOURNAL_CACHE_KEY, JSON.stringify(entries));
+            } catch (error) {
+                // تجاهل أخطاء التخزين المؤقت
+            }
+        }
+
+        function syncJournalSuggestionsFromSet(uniqueJournals, rerender = false) {
+            journalSuggestions = Array.from(uniqueJournals).sort((a, b) => a.localeCompare(b, 'ar'));
+            if (!rerender) return;
+            const input = document.getElementById('pub_journal');
+            const box = document.getElementById('pub_journal_suggestions');
+            const isDropdownVisible = box && box.style.display === 'block';
+            if (input && (document.activeElement === input || isDropdownVisible)) {
+                renderJournalSuggestionsDropdown(input.value || '');
+            }
+        }
+
+        async function loadLocalJournalSuggestions(uniqueJournals) {
+            try {
+                const response = await fetch('./data/publications.csv');
+                if (!response.ok) return false;
+                const csvText = await response.text();
+                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                let changed = false;
+                (parsed.data || []).forEach(row => {
+                    const journalName = String(row?.journal || '').trim();
+                    if (journalName && !uniqueJournals.has(journalName)) {
+                        uniqueJournals.add(journalName);
+                        changed = true;
+                    }
+                });
+                return changed;
+            } catch (error) {
+                console.warn('تعذر تحميل قائمة المجلات المحلية:', error.message);
+                return false;
+            }
+        }
+
+        async function loadLiveJournalSuggestions(uniqueJournals) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            try {
+                const liveResponse = await fetch(`${SCRIPT_URL}?action=read`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    signal: controller.signal
+                });
+                if (!liveResponse.ok) return false;
+
+                const payload = await liveResponse.json();
+                const publicationRows = Array.isArray(payload) ? payload : (payload?.publications || []);
+                let changed = false;
+                publicationRows.forEach(row => {
+                    const journalName = String(row?.journal || '').trim();
+                    if (journalName && !uniqueJournals.has(journalName)) {
+                        uniqueJournals.add(journalName);
+                        changed = true;
+                    }
+                });
+                return changed;
+            } catch (error) {
+                console.warn('تعذر تحميل قائمة المجلات من Google Sheets:', error.message);
+                return false;
+            } finally {
+                clearTimeout(timeoutId);
+            }
         }
 
         function renderJournalSuggestionsDropdown(query = '') {
@@ -556,36 +790,20 @@
         }
 
         async function loadJournalSuggestions() {
-            const uniqueJournals = new Set();
+            const uniqueJournals = new Set(getCachedJournalSuggestions());
+            syncJournalSuggestionsFromSet(uniqueJournals, true);
 
-            try {
-                const liveResponse = await fetch(`${SCRIPT_URL}?action=read`);
-                if (liveResponse.ok) {
-                    const payload = await liveResponse.json();
-                    (payload?.publications || []).forEach(row => {
-                        const journalName = String(row?.journal || '').trim();
-                        if (journalName) uniqueJournals.add(journalName);
-                    });
-                }
-            } catch (error) {
-                console.warn('تعذر تحميل قائمة المجلات من Google Sheets:', error.message);
+            const localChanged = await loadLocalJournalSuggestions(uniqueJournals);
+            if (localChanged || uniqueJournals.size > 0) {
+                syncJournalSuggestionsFromSet(uniqueJournals, true);
+                saveJournalSuggestionsCache(Array.from(uniqueJournals));
             }
 
-            try {
-                const response = await fetch('./data/publications.csv');
-                if (response.ok) {
-                    const csvText = await response.text();
-                    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-                    (parsed.data || []).forEach(row => {
-                        const journalName = String(row?.journal || '').trim();
-                        if (journalName) uniqueJournals.add(journalName);
-                    });
-                }
-            } catch (error) {
-                console.warn('تعذر تحميل قائمة المجلات المحلية:', error.message);
-            }
-
-            journalSuggestions = Array.from(uniqueJournals).sort((a, b) => a.localeCompare(b, 'ar'));
+            loadLiveJournalSuggestions(uniqueJournals).then(liveChanged => {
+                if (!liveChanged) return;
+                syncJournalSuggestionsFromSet(uniqueJournals, true);
+                saveJournalSuggestionsCache(Array.from(uniqueJournals));
+            });
         }
 
         // ضبط تاريخ اليوم كقيمة افتراضية لجميع حقول التاريخ عند التحميل
@@ -594,6 +812,7 @@
             document.querySelectorAll('input[type="date"]').forEach(input => {
                 input.value = today;
             });
+            setupFacultySearchInputs();
             setupJournalAutocomplete();
             loadJournalSuggestions();
             
@@ -685,55 +904,37 @@
             const uniqueFaculty = [];
             const map = new Map();
             for (const item of facultyList) {
-                if(!map.has(item.id)){
-                    map.set(item.id, true);
-                    uniqueFaculty.push({ id: item.id, name: item.name });
-                }
+                const memberId = String(item.id || '').trim();
+                const memberName = String(item.name || '').trim();
+                if (!memberId || !memberName || map.has(memberId)) continue;
+                map.set(memberId, true);
+                uniqueFaculty.push({
+                    id: memberId,
+                    name: memberName,
+                    department: String(item.department || '').trim() || 'غير محدد',
+                    searchBlob: normalizeSearchText(`${memberName} ${memberId} ${String(item.department || '')}`)
+                });
             }
-            uniqueFaculty.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+            uniqueFaculty.sort((a, b) => {
+                const deptCompare = compareDepartmentNames(a.department, b.department);
+                if (deptCompare !== 0) return deptCompare;
+                return a.name.localeCompare(b.name, 'ar');
+            });
+            facultyMembersCache = uniqueFaculty;
 
             const selects = document.querySelectorAll('.faculty-select');
             selects.forEach(select => {
-                const firstOption = select.options[0];
-                select.innerHTML = '';
-                select.appendChild(firstOption);
-                if (firstOption.text === "جاري التحميل...") firstOption.text = "-- اختر عضو هيئة التدريس --";
-
-                if (select.id.startsWith('thesis_')) {
-                    const extOption = document.createElement('option');
-                    extOption.value = "external";
-                    extOption.text = "👤 مناقش/مشرف خارجي (إدخال يدوي)";
-                    extOption.style.color = "#0ea5e9";
-                    extOption.style.fontWeight = "bold";
-                    select.appendChild(extOption);
-                    const separator = document.createElement('option');
-                    separator.disabled = true; separator.text = "------------------";
-                    select.appendChild(separator);
-                }
-
-                uniqueFaculty.forEach(member => {
-                    const option = document.createElement('option');
-                    option.value = member.id; option.text = member.name;
-                    select.appendChild(option);
-                });
+                const searchInput = getFacultySearchInputBySelect(select);
+                const query = searchInput ? searchInput.value : '';
+                renderFacultyOptionsForSelect(select, facultyMembersCache, query);
             });
         }
 
-        function toggleExternalInput(selectElement) {
-            const inputField = selectElement.nextElementSibling;
-            if (selectElement.value === 'external') {
-                inputField.style.display = 'block';
-                inputField.focus();
-            } else {
-                inputField.style.display = 'none';
-                inputField.value = '';
-            }
-        }
-
-        function getMemberValue(selectId) {
+        function clearSearchForSelect(selectId) {
+            const searchInput = document.querySelector(`.faculty-search-input[data-target-select="${selectId}"]`);
+            if (searchInput) searchInput.value = '';
             const select = document.getElementById(selectId);
-            const input = document.getElementById(selectId + '_ext');
-            return (select.value === 'external') ? input.value.trim() : select.value;
+            if (select) renderFacultyOptionsForSelect(select, facultyMembersCache, '');
         }
 
         function addMemberToList(selectId, listId, hiddenInputId) {
@@ -750,6 +951,7 @@
             selectedMembersData[hiddenInputId].push({ id: memberId, name: memberName });
             renderMembersList(hiddenInputId, listId);
             select.value = "";
+            clearSearchForSelect(selectId);
             
             // إزالة تنسيق الخطأ عند إضافة عضو
             document.getElementById(listId)?.classList.remove('error-field');
@@ -767,15 +969,34 @@
             const exists = selectedMembersData[hiddenInputId].find(m => m.id === memberId);
             if (exists) { 
                 select.value = "";
+                clearSearchForSelect(selectId);
                 return; 
             }
 
             selectedMembersData[hiddenInputId].push({ id: memberId, name: memberName });
             renderMembersList(hiddenInputId, listId);
             select.value = "";
+            clearSearchForSelect(selectId);
             
             // إزالة تنسيق الخطأ عند إضافة عضو
             document.getElementById(listId)?.classList.remove('error-field');
+        }
+
+        function toggleExternalInput(selectElement) {
+            const inputField = selectElement.nextElementSibling;
+            if (selectElement.value === 'external') {
+                inputField.style.display = 'block';
+                inputField.focus();
+            } else {
+                inputField.style.display = 'none';
+                inputField.value = '';
+            }
+        }
+
+        function getMemberValue(selectId) {
+            const select = document.getElementById(selectId);
+            const input = document.getElementById(selectId + '_ext');
+            return (select.value === 'external') ? input.value.trim() : select.value;
         }
 
         function removeMemberFromList(memberId, listId, hiddenInputId) {
