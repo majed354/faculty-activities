@@ -82,6 +82,20 @@ function detectDelimiter(text) {
     return ',';
 }
 
+function getCurrentHijriYearNumber() {
+    const rawYear = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { year: 'numeric' });
+    const normalizedYear = normalizeArabicDigits(rawYear).replace(/[^\d]/g, '');
+    const parsedYear = parseInt(normalizedYear, 10);
+    return Number.isFinite(parsedYear) ? parsedYear : 1447;
+}
+
+function normalizeConfiguredYear(value) {
+    const normalized = normalizeArabicDigits(String(value ?? '')).trim();
+    if (!normalized || normalized.toLowerCase() === 'all') return 'all';
+    const parsed = parseInt(normalized, 10);
+    return Number.isFinite(parsed) ? parsed : 'all';
+}
+
 async function loadCSV(url) {
     try {
         const response = await fetch(url);
@@ -106,16 +120,26 @@ async function loadCSV(url) {
 }
 
 async function loadConfig() {
+    const defaultHijriYear = getCurrentHijriYearNumber();
     try {
         const response = await fetch(`${DATA_BASE_URL}/config.json`);
         config = await response.json();
-        // دعم قيمة 'all' أو رقم السنة
-        currentYear = config.current_year === 'all' ? 'all' : (config.current_year || 1446);
+        const configuredYear = normalizeConfiguredYear(config.current_year);
+        currentYear = configuredYear === 'all' ? defaultHijriYear : configuredYear;
         currentDepartment = config.current_department || 'all';
+
+        const availableYears = Array.isArray(config.available_years) ? [...config.available_years] : [];
+        if (!availableYears.includes(defaultHijriYear)) {
+            availableYears.push(defaultHijriYear);
+        }
+        config.available_years = availableYears
+            .map(y => parseInt(normalizeArabicDigits(String(y)), 10))
+            .filter(Number.isFinite)
+            .sort((a, b) => a - b);
     } catch (error) {
         console.warn('Using default config');
         config = {
-            current_year: 'all',
+            current_year: defaultHijriYear,
             current_department: 'all',
             available_years: [1440, 1441, 1442, 1443, 1444, 1445, 1446, 1447],
             departments: ["القراءات", "الشريعة", "الأنظمة", "الثقافة الإسلامية"],
@@ -150,7 +174,10 @@ async function loadConfig() {
                 "أكثر من 500": 600
             }
         };
-        currentYear = 'all';
+        if (!config.available_years.includes(defaultHijriYear)) {
+            config.available_years.push(defaultHijriYear);
+        }
+        currentYear = defaultHijriYear;
         currentDepartment = 'all';
     }
 }
@@ -1530,7 +1557,7 @@ function ensurePrivilegePasswordModal() {
             </div>
             <div class="form-group">
                 <label for="privilegePasswordInput">كلمة المرور</label>
-                <input type="password" id="privilegePasswordInput" class="form-input" placeholder="••••">
+                <input type="password" id="privilegePasswordInput" class="form-input">
             </div>
             <p id="privilegePasswordError" class="login-error" style="margin-top:-8px;"></p>
             <div class="modal-actions detail-actions-buttons">
@@ -4046,6 +4073,25 @@ function renderPublicationVesselStats(records) {
     });
 }
 
+function getPublicationVesselSourceRecords() {
+    let records = Array.isArray(allData.publications) ? [...allData.publications] : [];
+
+    // أوعية النشر لا تتأثر بفلتر السنة، لكنها تظل مرتبطة بفلتر القسم الحالي
+    if (currentDepartment !== 'all') {
+        const deptIds = getDepartmentFacultyIds(currentDepartment);
+        if (deptIds && deptIds.size > 0) {
+            records = records.filter(pub => {
+                const authorIds = splitIds(pub.authors_ids || pub.participant_ids);
+                return authorIds.some(id => deptIds.has(id));
+            });
+        } else {
+            records = [];
+        }
+    }
+
+    return records;
+}
+
 function renderPublications() {
     const container = document.getElementById('publicationsGrid');
     container.innerHTML = '';
@@ -4059,7 +4105,7 @@ function renderPublications() {
     if (citationsFilter) filtered = filtered.filter(p => p.citations_range === citationsFilter);
     filtered = sortByDateDesc(filtered, p => p.publish_date || p.date);
 
-    renderPublicationVesselStats(filtered);
+    renderPublicationVesselStats(getPublicationVesselSourceRecords());
     
     if (filtered.length === 0) {
         container.innerHTML = '<div class="empty-state">لا توجد بحوث علمية مسجلة لهذا العام</div>';
@@ -5107,8 +5153,8 @@ function setupYearSelector() {
 // التهيئة
 // ========================================
 async function init() {
-    const hijriYear = new Date().toLocaleDateString('ar-SA-u-ca-islamic', { year: 'numeric' }).replace(/[^0-9]/g, '');
-    document.getElementById('currentYear').textContent = hijriYear;
+    const hijriYear = getCurrentHijriYearNumber();
+    document.getElementById('currentYear').textContent = formatArabicDigits(hijriYear);
 
     await loadConfig();
     populateYearSelector();
