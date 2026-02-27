@@ -36,6 +36,7 @@ const PRIVILEGE_PASSWORD = '2008';
 const KPI_EXCLUDED_RANKS = new Set(['معيد', 'محاضر', 'متعاون', 'مدرس']);
 const KPI_EXCLUDED_RANKS_FOR_PHD = new Set(['معيد', 'محاضر', 'متعاون', 'مدرس', 'أستاذ مساعد']);
 const localActivityAuditTrail = [];
+let publicationStatsState = { records: [], selectedJournal: '', selectedRecords: [] };
 
 // بيانات الخطط الدراسية والبرامج
 let allPlansData = [];
@@ -809,6 +810,35 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function getRecordModifierName(record) {
+    if (!record || typeof record !== 'object') return '';
+
+    const explicitName = String(
+        record.last_modified_by_name ||
+        record.modified_by_name ||
+        record.edited_by_name ||
+        ''
+    ).trim();
+    if (explicitName) return explicitName;
+
+    const actorId = String(
+        record.last_modified_by_id ||
+        record.modified_by_id ||
+        record.edited_by_id ||
+        ''
+    ).trim();
+    if (!actorId) return '';
+
+    const memberName = getMemberName(actorId);
+    return memberName && memberName !== '-' ? memberName : '';
+}
+
+function getRecordModifiedByHtml(record) {
+    const actorName = getRecordModifierName(record);
+    if (!actorName) return '';
+    return `<div class="record-modified-by">تم التعديل بواسطة: ${escapeHtml(actorName)}</div>`;
+}
+
 // ========================================
 // دوال استخراج البيانات من participations و publications
 // ========================================
@@ -1395,6 +1425,7 @@ function buildGenericDetailModalHtml(context) {
 
     const showActions = canCurrentUserManageRecord(context);
     const ownerNames = getContextOwnerIds(context).map(getMemberName).filter(Boolean);
+    const modifiedByHtml = getRecordModifiedByHtml(record);
 
     return `
         <span class="modal-close" onclick="closeRecordDetailModal()">&times;</span>
@@ -1409,6 +1440,7 @@ function buildGenericDetailModalHtml(context) {
                     أصحاب السجل: ${escapeHtml(ownerNames.join('، '))}
                 </div>
             ` : ''}
+            ${modifiedByHtml}
             <div class="record-detail-actions" id="recordDetailActions" style="display:${showActions ? 'block' : 'none'}">
                 <div class="record-detail-actions-note">بعد التحقق بكلمة مرور الصلاحيات يمكنك تعديل هذا ${escapeHtml(getRecordEntityLabel(context.entity))} أو حذفه.</div>
                 <div class="modal-actions detail-actions-buttons">
@@ -1777,6 +1809,14 @@ async function submitRecordEdit() {
         updatedRecord[field] = (el.value ?? '').trim();
     });
 
+    const actorId = getLoggedInEmployeeId();
+    const actorName = getLoggedInEmployeeName();
+    if (actorId || actorName) {
+        updatedRecord.last_modified_by_id = actorId;
+        updatedRecord.last_modified_by_name = actorName || getMemberName(actorId);
+        updatedRecord.last_modified_at = new Date().toISOString();
+    }
+
     const entityKey = currentEditContext.entity;
     replaceRecordInArray(allData[entityKey], currentEditContext, { ...updatedRecord });
     replaceRecordInArray(data[entityKey], currentEditContext, { ...updatedRecord });
@@ -2072,6 +2112,100 @@ function renderLeaderboard() {
 // ========================================
 // عرض تفاصيل العضو
 // ========================================
+function computeMemberTeachingSummary(memberId) {
+    if (typeof teachingData === 'undefined' || !teachingData || !Array.isArray(teachingData.records)) {
+        return null;
+    }
+
+    const memberIdStr = String(memberId || '').trim();
+    const memberRecords = teachingData.records.filter(r => String(r.fid || '').trim() === memberIdStr);
+
+    let totalSections = 0;
+    let totalStudents = 0;
+    let totalHours = 0;
+    const uniqueCourses = new Set();
+    const uniqueYears = new Set();
+
+    memberRecords.forEach(record => {
+        uniqueYears.add(record.y);
+        (record.cs || []).forEach(course => {
+            totalSections += 1;
+            uniqueCourses.add((course.cc || course.cn || '').trim());
+            totalStudents += Number(course.e) || 0;
+            totalHours += Number(course.h) || 0;
+        });
+    });
+
+    return {
+        totalSections,
+        totalCourses: uniqueCourses.size,
+        totalStudents,
+        totalHours,
+        totalYears: uniqueYears.size,
+        avgStudents: totalSections > 0 ? Math.round(totalStudents / totalSections) : 0
+    };
+}
+
+function buildMemberTeachingSummaryHtml(summary, { loading = false } = {}) {
+    if (loading) {
+        return `
+            <div class="activity-group member-teaching-summary">
+                <h4>🏫 ملخص النشاط التدريسي</h4>
+                <div class="member-teaching-empty">جاري تحميل بيانات النشاط التدريسي للعضو...</div>
+            </div>
+        `;
+    }
+
+    if (!summary) {
+        return `
+            <div class="activity-group member-teaching-summary">
+                <h4>🏫 ملخص النشاط التدريسي</h4>
+                <div class="member-teaching-empty">لا تتوفر بيانات النشاط التدريسي حالياً.</div>
+            </div>
+        `;
+    }
+
+    if (!summary.totalSections) {
+        return `
+            <div class="activity-group member-teaching-summary">
+                <h4>🏫 ملخص النشاط التدريسي</h4>
+                <div class="member-teaching-empty">لا توجد سجلات تدريس لهذا العضو.</div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="activity-group member-teaching-summary">
+            <h4>🏫 ملخص النشاط التدريسي</h4>
+            <div class="member-teaching-stats">
+                <div class="member-teaching-stat"><span class="label">المقررات</span><span class="value">${summary.totalCourses.toLocaleString('ar-SA')}</span></div>
+                <div class="member-teaching-stat"><span class="label">الشعب</span><span class="value">${summary.totalSections.toLocaleString('ar-SA')}</span></div>
+                <div class="member-teaching-stat"><span class="label">الطلاب</span><span class="value">${summary.totalStudents.toLocaleString('ar-SA')}</span></div>
+                <div class="member-teaching-stat"><span class="label">ساعات التدريس</span><span class="value">${summary.totalHours.toLocaleString('ar-SA')}</span></div>
+                <div class="member-teaching-stat"><span class="label">متوسط الطلاب/شعبة</span><span class="value">${summary.avgStudents.toLocaleString('ar-SA')}</span></div>
+                <div class="member-teaching-stat"><span class="label">سنوات التغطية</span><span class="value">${summary.totalYears.toLocaleString('ar-SA')}</span></div>
+            </div>
+        </div>
+    `;
+}
+
+function loadMemberTeachingSummaryIntoModal(memberId) {
+    if (typeof ensureTeachingLoaded !== 'function') return;
+
+    ensureTeachingLoaded()
+        .then(() => {
+            const container = document.getElementById('memberTeachingSummaryContainer');
+            if (!container) return;
+            const summary = computeMemberTeachingSummary(memberId);
+            container.innerHTML = buildMemberTeachingSummaryHtml(summary);
+        })
+        .catch(() => {
+            const container = document.getElementById('memberTeachingSummaryContainer');
+            if (!container) return;
+            container.innerHTML = buildMemberTeachingSummaryHtml(null);
+        });
+}
+
 function showMemberDetails(memberId) {
     const member = getMemberData(memberId);
     if (!member) return;
@@ -2080,6 +2214,8 @@ function showMemberDetails(memberId) {
     
     // جمع أنشطة العضو
     const memberActivities = getMemberActivities(memberId);
+    const teachingSummary = computeMemberTeachingSummary(memberId);
+    const shouldLoadTeachingSummary = !teachingSummary && typeof ensureTeachingLoaded === 'function';
     
     // إنشاء HTML للـ Modal
     const modalHtml = `
@@ -2228,6 +2364,9 @@ function showMemberDetails(memberId) {
                 
                 <div class="member-activities-section">
                     <h3>📝 تفاصيل الأنشطة</h3>
+                    <div id="memberTeachingSummaryContainer">
+                        ${buildMemberTeachingSummaryHtml(teachingSummary, { loading: shouldLoadTeachingSummary })}
+                    </div>
                     
                     ${memberActivities.theses.length > 0 ? `
                     <div class="activity-group">
@@ -2336,6 +2475,10 @@ function showMemberDetails(memberId) {
     
     // إضافة الـ modal
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    if (shouldLoadTeachingSummary) {
+        loadMemberTeachingSummaryIntoModal(memberId);
+    }
 }
 
 // دالة لجمع أنشطة العضو
@@ -3188,6 +3331,11 @@ function showThesisDetails(thesis) {
     } else {
         examiner2Section.style.display = 'none';
     }
+
+    const thesisModifiedByEl = document.getElementById('thesisModifiedBy');
+    if (thesisModifiedByEl) {
+        thesisModifiedByEl.innerHTML = getRecordModifiedByHtml(thesis);
+    }
     
     ensureThesisDetailActions();
     updateDetailActionAvailability();
@@ -3517,6 +3665,227 @@ document.addEventListener('click', (e) => {
 // ========================================
 // عرض البحوث المنشورة
 // ========================================
+function normalizeJournalStatKey(value) {
+    return String(value || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+}
+
+function parsePublicationJournalMeta(journalText) {
+    const raw = String(journalText || '').trim().replace(/\s+/g, ' ');
+    if (!raw) {
+        return {
+            journalName: 'غير محدد',
+            institution: 'غير محدد',
+            city: 'غير محدد',
+            country: 'غير محدد',
+            journalKey: 'unknown'
+        };
+    }
+
+    const dashParts = raw.split(/\s*-\s*/);
+    const beforeDash = (dashParts.shift() || raw).trim();
+    const locationPart = dashParts.join(' - ').trim();
+
+    const institutionMatch = beforeDash.match(/\(([^)]+)\)/);
+    let institution = institutionMatch ? institutionMatch[1].trim() : '';
+
+    let journalName = beforeDash.replace(/\([^)]*\)/g, '').trim();
+    if (!journalName) journalName = beforeDash;
+    if (!institution && /جامعة/.test(journalName)) institution = journalName;
+
+    let city = 'غير محدد';
+    let country = 'غير محدد';
+    if (locationPart) {
+        const locationTokens = locationPart
+            .split(/[،,]/)
+            .map(token => token.trim())
+            .filter(Boolean);
+
+        if (locationTokens.length === 1) {
+            country = locationTokens[0];
+        } else if (locationTokens.length >= 2) {
+            city = locationTokens[0];
+            country = locationTokens[locationTokens.length - 1];
+        }
+    }
+
+    return {
+        journalName,
+        institution: institution || 'غير محدد',
+        city,
+        country,
+        journalKey: normalizeJournalStatKey(journalName) || 'unknown'
+    };
+}
+
+function incrementLabeledCounter(counterMap, rawKey, rawLabel) {
+    const key = normalizeJournalStatKey(rawKey || rawLabel) || 'unknown';
+    const label = String(rawLabel || rawKey || 'غير محدد').trim() || 'غير محدد';
+    const current = counterMap.get(key);
+    if (current) {
+        current.count += 1;
+    } else {
+        counterMap.set(key, { key, label, count: 1 });
+    }
+}
+
+function toTopCounterEntries(counterMap, limit = 6) {
+    return Array.from(counterMap.values())
+        .sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label, 'ar'))
+        .slice(0, limit);
+}
+
+function closeJournalPublicationsPanel(skipRerender = false) {
+    publicationStatsState.selectedJournal = '';
+    publicationStatsState.selectedRecords = [];
+    const panel = document.getElementById('journalPublicationsPanel');
+    if (panel) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+    }
+    if (!skipRerender) {
+        renderPublicationVesselStats(publicationStatsState.records || []);
+    }
+}
+
+function showJournalPublications(journalKey) {
+    const panel = document.getElementById('journalPublicationsPanel');
+    const records = Array.isArray(publicationStatsState.records) ? publicationStatsState.records : [];
+    if (!panel || !journalKey || !records.length) return;
+
+    const selected = records.filter(pub => parsePublicationJournalMeta(pub.journal).journalKey === journalKey);
+    if (!selected.length) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        return;
+    }
+
+    const sorted = sortByDateDesc(selected, p => p.publish_date || p.date);
+    publicationStatsState.selectedJournal = journalKey;
+    publicationStatsState.selectedRecords = sorted;
+    const journalLabel = parsePublicationJournalMeta(sorted[0].journal).journalName;
+
+    panel.style.display = 'block';
+    panel.innerHTML = `
+        <div class="journal-panel-header">
+            <h3>📚 بحوث منشورة في: ${escapeHtml(journalLabel)}</h3>
+            <button type="button" class="journal-panel-close" onclick="closeJournalPublicationsPanel()">إخفاء</button>
+        </div>
+        <div class="journal-publications-list">
+            ${sorted.map((pub, index) => {
+                const authorIds = pub.authors_ids || pub.participant_ids || '';
+                const authors = authorIds.split('|').map(id => getMemberName(id.trim())).filter(Boolean);
+                return `
+                    <div class="journal-publication-item" data-journal-record-index="${index}">
+                        <div class="jp-title">${escapeHtml(pub.title || '-')}</div>
+                        <div class="jp-meta">${escapeHtml((pub.journal || '').trim())}</div>
+                        <div class="jp-authors">${authors.map(a => `<span class="author-tag">${escapeHtml(a)}</span>`).join('')}</div>
+                        <div class="jp-footer">
+                            <span>${escapeHtml(formatDate(pub.publish_date || pub.date))}</span>
+                            <span>${escapeHtml(pub.citations_range || '-')}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    panel.querySelectorAll('[data-journal-record-index]').forEach(item => {
+        item.addEventListener('click', () => {
+            const idx = parseInt(item.getAttribute('data-journal-record-index'), 10);
+            const pub = publicationStatsState.selectedRecords?.[idx];
+            if (pub) showPublicationDetails(pub);
+        });
+    });
+
+    renderPublicationVesselStats(records);
+}
+
+function renderPublicationVesselStats(records) {
+    const container = document.getElementById('publicationVesselStats');
+    if (!container) return;
+
+    if (!Array.isArray(records) || records.length === 0) {
+        publicationStatsState.records = [];
+        publicationStatsState.selectedRecords = [];
+        container.innerHTML = '';
+        closeJournalPublicationsPanel(true);
+        return;
+    }
+
+    publicationStatsState.records = records;
+
+    const journalCounter = new Map();
+    const institutionCounter = new Map();
+    const cityCounter = new Map();
+    const countryCounter = new Map();
+
+    records.forEach(pub => {
+        const meta = parsePublicationJournalMeta(pub.journal);
+        incrementLabeledCounter(journalCounter, meta.journalKey, meta.journalName);
+        incrementLabeledCounter(institutionCounter, meta.institution, meta.institution);
+        incrementLabeledCounter(cityCounter, meta.city, meta.city);
+        incrementLabeledCounter(countryCounter, meta.country, meta.country);
+    });
+
+    const selectedJournal = publicationStatsState.selectedJournal || '';
+    const topJournals = toTopCounterEntries(journalCounter, 8);
+    const topInstitutions = toTopCounterEntries(institutionCounter, 6);
+    const topCities = toTopCounterEntries(cityCounter, 6);
+    const topCountries = toTopCounterEntries(countryCounter, 6);
+
+    const listHtml = (entries, type) => {
+        if (!entries.length) return '<div class="vessel-empty">لا توجد بيانات</div>';
+        return entries.map(entry => {
+            if (type === 'journal') {
+                const activeClass = selectedJournal && selectedJournal === entry.key ? 'active' : '';
+                return `
+                    <button type="button" class="vessel-stat-btn ${activeClass}" data-journal-key="${encodeURIComponent(entry.key)}">
+                        <span class="vessel-label">${escapeHtml(entry.label)}</span>
+                        <span class="vessel-count">${entry.count.toLocaleString('ar-SA')}</span>
+                    </button>
+                `;
+            }
+            return `
+                <div class="vessel-stat-row">
+                    <span class="vessel-label">${escapeHtml(entry.label)}</span>
+                    <span class="vessel-count">${entry.count.toLocaleString('ar-SA')}</span>
+                </div>
+            `;
+        }).join('');
+    };
+
+    container.innerHTML = `
+        <div class="vessel-stat-card">
+            <h3>🏷️ أكثر المجلات</h3>
+            <div class="vessel-stat-list">${listHtml(topJournals, 'journal')}</div>
+            <div class="vessel-stat-hint">انقر على اسم المجلة لعرض البحوث المنشورة فيها</div>
+        </div>
+        <div class="vessel-stat-card">
+            <h3>🏛️ الجهات/الجامعات الناشرة</h3>
+            <div class="vessel-stat-list">${listHtml(topInstitutions)}</div>
+        </div>
+        <div class="vessel-stat-card">
+            <h3>🌍 أكثر المدن نشرًا</h3>
+            <div class="vessel-stat-list">${listHtml(topCities)}</div>
+        </div>
+        <div class="vessel-stat-card">
+            <h3>🗺️ أكثر الدول نشرًا</h3>
+            <div class="vessel-stat-list">${listHtml(topCountries)}</div>
+        </div>
+    `;
+
+    container.querySelectorAll('[data-journal-key]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const encodedKey = btn.getAttribute('data-journal-key') || '';
+            const journalKey = decodeURIComponent(encodedKey);
+            showJournalPublications(journalKey);
+        });
+    });
+}
+
 function renderPublications() {
     const container = document.getElementById('publicationsGrid');
     container.innerHTML = '';
@@ -3529,6 +3898,8 @@ function renderPublications() {
     if (searchTerm) filtered = filtered.filter(p => p.title && p.title.toLowerCase().includes(searchTerm));
     if (citationsFilter) filtered = filtered.filter(p => p.citations_range === citationsFilter);
     filtered = sortByDateDesc(filtered, p => p.publish_date || p.date);
+
+    renderPublicationVesselStats(filtered);
     
     if (filtered.length === 0) {
         container.innerHTML = '<div class="empty-state">لا توجد بحوث علمية مسجلة لهذا العام</div>';
@@ -3553,6 +3924,7 @@ function renderPublications() {
                 <span class="publication-citations">${pub.citations_range || '-'}</span>
             </div>
             ${pub.student_author === 'نعم' ? '<span class="student-badge">مشاركة طالب</span>' : ''}
+            ${getRecordModifiedByHtml(pub)}
         `;
         card.onclick = () => showPublicationDetails(pub);
         container.appendChild(card);
@@ -3653,6 +4025,7 @@ function renderEvents() {
                 ${event.organized_by_department === 'نعم' ? '<span class="organized-badge">من تنظيم الكلية</span>' : ''}
                 ${event.student_details && !isNaN(event.student_details) ? `<span class="attendance-badge">👥 ${event.student_details} حاضر</span>` : ''}
                 ${event.notes ? `<div class="event-notes">${event.notes}</div>` : ''}
+                ${getRecordModifiedByHtml(event)}
             </div>
         `;
         card.onclick = () => showEventDetails(event);
@@ -3696,6 +4069,7 @@ function renderExternalDiscussions() {
                 <div class="event-location">🏛️ ${event.location || ''}</div>
                 ${participants.length > 0 ? `<div class="event-participants"><span class="participant-label">المناقش:</span> ${participants.map(p => `<span class="participant-tag">${p}</span>`).join('')}</div>` : ''}
                 ${event.notes ? `<div class="event-notes">${event.notes}</div>` : ''}
+                ${getRecordModifiedByHtml(event)}
             </div>
         `;
         container.appendChild(card);
@@ -3731,6 +4105,7 @@ function renderAwards() {
             <div class="award-recipient">${recipients.join('، ')}</div>
             <div class="award-granter">${award.location || ''}</div>
             <div class="award-date">${formatDate(award.date)}</div>
+            ${getRecordModifiedByHtml(award)}
         `;
         container.appendChild(card);
     });
@@ -3768,6 +4143,26 @@ let selectedMemberForAdd = null;
 let selectedActivityType = null;
 let currentAddStep = 1;
 let pendingActivities = []; // الأنشطة المعلقة للإضافة
+
+function getJournalSuggestions() {
+    const source = (Array.isArray(allData.publications) && allData.publications.length)
+        ? allData.publications
+        : (data.publications || []);
+
+    const unique = new Set();
+    source.forEach(pub => {
+        const journalName = String(pub?.journal || '').trim();
+        if (journalName) unique.add(journalName);
+    });
+
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
+}
+
+function buildJournalSuggestionsDatalist() {
+    return getJournalSuggestions()
+        .map(journalName => `<option value="${escapeHtml(journalName)}"></option>`)
+        .join('');
+}
 
 // إنشاء الزر العائم و Modal الإضافة
 function createAddActivityUI() {
@@ -4084,13 +4479,16 @@ function generateActivityForm() {
                 <div class="form-row">
                     <div class="form-group">
                         <label><span class="required">*</span> اسم المجلة</label>
-                        <input type="text" class="form-input" id="actJournal" placeholder="اسم المجلة">
+                        <input type="text" class="form-input" id="actJournal" list="actJournalSuggestions" placeholder="اسم المجلة">
                     </div>
                     <div class="form-group">
                         <label><span class="required">*</span> تاريخ النشر</label>
                         <input type="date" class="form-input" id="actDate">
                     </div>
                 </div>
+                <datalist id="actJournalSuggestions">
+                    ${buildJournalSuggestionsDatalist()}
+                </datalist>
                 <div class="form-row">
                     <div class="form-group">
                         <label>نطاق الاقتباسات</label>

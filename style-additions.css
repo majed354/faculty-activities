@@ -2012,3 +2012,198 @@
         justify-content: center;
     }
 }
+
+.record-modified-by {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+    color: var(--gray-400);
+    font-size: 0.78rem;
+}
+
+.publication-vessel-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.vessel-stat-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.vessel-stat-card h3 {
+    margin: 0 0 10px;
+    color: var(--gold-400);
+    font-size: 0.9rem;
+}
+
+.vessel-stat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.vessel-empty {
+    color: var(--gray-500);
+    font-size: 0.8rem;
+    padding: 8px;
+}
+
+.vessel-stat-row,
+.vessel-stat-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-radius: 8px;
+    padding: 7px 9px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.vessel-stat-btn {
+    width: 100%;
+    color: inherit;
+    cursor: pointer;
+    text-align: right;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+.vessel-stat-btn:hover,
+.vessel-stat-btn.active {
+    border-color: rgba(198, 169, 98, 0.35);
+    background: rgba(198, 169, 98, 0.12);
+}
+
+.vessel-label {
+    color: var(--gray-200);
+    font-size: 0.82rem;
+}
+
+.vessel-count {
+    color: var(--emerald-400);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.vessel-stat-hint {
+    margin-top: 8px;
+    color: var(--gray-500);
+    font-size: 0.73rem;
+}
+
+.journal-publications-panel {
+    margin-bottom: 16px;
+    border: 1px solid rgba(198, 169, 98, 0.25);
+    border-radius: 14px;
+    background: rgba(10, 22, 40, 0.72);
+    padding: 14px;
+}
+
+.journal-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.journal-panel-header h3 {
+    margin: 0;
+    color: var(--gold-400);
+    font-size: 0.95rem;
+}
+
+.journal-panel-close {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--gray-200);
+    border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.journal-publications-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.journal-publication-item {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.journal-publication-item:hover {
+    border-color: rgba(198, 169, 98, 0.4);
+    transform: translateY(-2px);
+}
+
+.jp-title {
+    color: #fff;
+    font-size: 0.88rem;
+    margin-bottom: 6px;
+    line-height: 1.6;
+}
+
+.jp-meta {
+    color: var(--gray-400);
+    font-size: 0.74rem;
+    margin-bottom: 8px;
+}
+
+.jp-authors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 8px;
+}
+
+.jp-footer {
+    display: flex;
+    justify-content: space-between;
+    color: var(--gray-500);
+    font-size: 0.72rem;
+}
+
+.member-teaching-summary .member-teaching-empty {
+    color: var(--gray-400);
+    font-size: 0.85rem;
+}
+
+.member-teaching-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+}
+
+.member-teaching-stat {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.member-teaching-stat .label {
+    color: var(--gray-400);
+    font-size: 0.73rem;
+}
+
+.member-teaching-stat .value {
+    color: var(--emerald-400);
+    font-size: 0.95rem;
+    font-weight: 700;
+}

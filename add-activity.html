@@ -250,7 +250,8 @@
                 </div>
                 <div class="form-group">
                     <label>اسم المجلة <span style="color: var(--rose-500);">*</span></label>
-                    <input type="text" id="pub_journal">
+                    <input type="text" id="pub_journal" list="pub_journal_list" placeholder="اختر من القائمة أو اكتب مجلة جديدة">
+                    <datalist id="pub_journal_list"></datalist>
                 </div>
                 
                 <div class="form-group">
@@ -444,6 +445,36 @@
         let facultyList = [];
         let currentTargetSheet = '';
         let selectedMembersData = {};
+        let journalSuggestions = [];
+
+        function renderJournalSuggestions() {
+            const datalist = document.getElementById('pub_journal_list');
+            if (!datalist) return;
+            datalist.innerHTML = '';
+            journalSuggestions.forEach(journalName => {
+                const option = document.createElement('option');
+                option.value = journalName;
+                datalist.appendChild(option);
+            });
+        }
+
+        async function loadJournalSuggestions() {
+            try {
+                const response = await fetch('./data/publications.csv');
+                if (!response.ok) throw new Error('publications.csv not found');
+                const csvText = await response.text();
+                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                const uniqueJournals = new Set();
+                (parsed.data || []).forEach(row => {
+                    const journalName = String(row?.journal || '').trim();
+                    if (journalName) uniqueJournals.add(journalName);
+                });
+                journalSuggestions = Array.from(uniqueJournals).sort((a, b) => a.localeCompare(b, 'ar'));
+                renderJournalSuggestions();
+            } catch (error) {
+                console.warn('تعذر تحميل قائمة المجلات المقترحة:', error.message);
+            }
+        }
 
         // ضبط تاريخ اليوم كقيمة افتراضية لجميع حقول التاريخ عند التحميل
         window.addEventListener('load', function() {
@@ -451,6 +482,7 @@
             document.querySelectorAll('input[type="date"]').forEach(input => {
                 input.value = today;
             });
+            loadJournalSuggestions();
             
             // إزالة تنسيق الخطأ عند الكتابة في أي حقل
             document.querySelectorAll('input, select, textarea').forEach(el => {
