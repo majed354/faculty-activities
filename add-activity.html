@@ -131,6 +131,44 @@
             font-size: 0.8rem;
             margin-top: 5px;
         }
+
+        .journal-suggestions {
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            left: 0;
+            z-index: 50;
+            max-height: 280px;
+            overflow-y: auto;
+            border-radius: 10px;
+            border: 1px solid rgba(198, 169, 98, 0.35);
+            background: rgba(10, 22, 40, 0.98);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+            display: none;
+        }
+
+        .journal-suggestion-item {
+            padding: 10px 12px;
+            color: #fff;
+            font-size: 0.88rem;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .journal-suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .journal-suggestion-item:hover,
+        .journal-suggestion-item.active {
+            background: rgba(198, 169, 98, 0.18);
+        }
+
+        .journal-suggestions-empty {
+            padding: 10px 12px;
+            color: var(--gray-400);
+            font-size: 0.82rem;
+        }
     </style>
 </head>
 <body>
@@ -250,8 +288,8 @@
                 </div>
                 <div class="form-group">
                     <label>اسم المجلة <span style="color: var(--rose-500);">*</span></label>
-                    <input type="text" id="pub_journal" list="pub_journal_list" placeholder="اختر من القائمة أو اكتب مجلة جديدة">
-                    <datalist id="pub_journal_list"></datalist>
+                    <input type="text" id="pub_journal" placeholder="اختر من القائمة أو اكتب مجلة جديدة" autocomplete="off">
+                    <div id="pub_journal_suggestions" class="journal-suggestions"></div>
                 </div>
                 
                 <div class="form-group">
@@ -446,34 +484,108 @@
         let currentTargetSheet = '';
         let selectedMembersData = {};
         let journalSuggestions = [];
+        let journalSuggestionHideTimer = null;
+        const JOURNAL_SUGGESTIONS_LIMIT = 300;
 
-        function renderJournalSuggestions() {
-            const datalist = document.getElementById('pub_journal_list');
-            if (!datalist) return;
-            datalist.innerHTML = '';
-            journalSuggestions.forEach(journalName => {
-                const option = document.createElement('option');
-                option.value = journalName;
-                datalist.appendChild(option);
+        function normalizeJournalText(value) {
+            return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+        }
+
+        function escapeHtmlAttr(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function renderJournalSuggestionsDropdown(query = '') {
+            const box = document.getElementById('pub_journal_suggestions');
+            if (!box) return;
+
+            const normalizedQuery = normalizeJournalText(query);
+            const filtered = journalSuggestions.filter(name => normalizeJournalText(name).includes(normalizedQuery));
+            const list = filtered.slice(0, JOURNAL_SUGGESTIONS_LIMIT);
+
+            if (list.length === 0) {
+                box.innerHTML = '<div class="journal-suggestions-empty">لا توجد نتائج مطابقة</div>';
+                box.style.display = 'block';
+                return;
+            }
+
+            box.innerHTML = list
+                .map(name => `<div class="journal-suggestion-item" data-journal="${escapeHtmlAttr(name)}">${name}</div>`)
+                .join('');
+            box.style.display = 'block';
+
+            box.querySelectorAll('.journal-suggestion-item').forEach(item => {
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    const journalName = item.getAttribute('data-journal') || '';
+                    const input = document.getElementById('pub_journal');
+                    if (input) input.value = journalName;
+                    hideJournalSuggestionsDropdown();
+                });
+            });
+        }
+
+        function hideJournalSuggestionsDropdown() {
+            const box = document.getElementById('pub_journal_suggestions');
+            if (box) box.style.display = 'none';
+        }
+
+        function setupJournalAutocomplete() {
+            const input = document.getElementById('pub_journal');
+            if (!input) return;
+
+            input.addEventListener('focus', () => {
+                if (journalSuggestionHideTimer) clearTimeout(journalSuggestionHideTimer);
+                renderJournalSuggestionsDropdown(input.value || '');
+            });
+
+            input.addEventListener('input', () => {
+                if (journalSuggestionHideTimer) clearTimeout(journalSuggestionHideTimer);
+                renderJournalSuggestionsDropdown(input.value || '');
+            });
+
+            input.addEventListener('blur', () => {
+                journalSuggestionHideTimer = setTimeout(() => {
+                    hideJournalSuggestionsDropdown();
+                }, 140);
             });
         }
 
         async function loadJournalSuggestions() {
+            const uniqueJournals = new Set();
+
+            try {
+                const liveResponse = await fetch(`${SCRIPT_URL}?action=read`);
+                if (liveResponse.ok) {
+                    const payload = await liveResponse.json();
+                    (payload?.publications || []).forEach(row => {
+                        const journalName = String(row?.journal || '').trim();
+                        if (journalName) uniqueJournals.add(journalName);
+                    });
+                }
+            } catch (error) {
+                console.warn('تعذر تحميل قائمة المجلات من Google Sheets:', error.message);
+            }
+
             try {
                 const response = await fetch('./data/publications.csv');
-                if (!response.ok) throw new Error('publications.csv not found');
-                const csvText = await response.text();
-                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-                const uniqueJournals = new Set();
-                (parsed.data || []).forEach(row => {
-                    const journalName = String(row?.journal || '').trim();
-                    if (journalName) uniqueJournals.add(journalName);
-                });
-                journalSuggestions = Array.from(uniqueJournals).sort((a, b) => a.localeCompare(b, 'ar'));
-                renderJournalSuggestions();
+                if (response.ok) {
+                    const csvText = await response.text();
+                    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                    (parsed.data || []).forEach(row => {
+                        const journalName = String(row?.journal || '').trim();
+                        if (journalName) uniqueJournals.add(journalName);
+                    });
+                }
             } catch (error) {
-                console.warn('تعذر تحميل قائمة المجلات المقترحة:', error.message);
+                console.warn('تعذر تحميل قائمة المجلات المحلية:', error.message);
             }
+
+            journalSuggestions = Array.from(uniqueJournals).sort((a, b) => a.localeCompare(b, 'ar'));
         }
 
         // ضبط تاريخ اليوم كقيمة افتراضية لجميع حقول التاريخ عند التحميل
@@ -482,6 +594,7 @@
             document.querySelectorAll('input[type="date"]').forEach(input => {
                 input.value = today;
             });
+            setupJournalAutocomplete();
             loadJournalSuggestions();
             
             // إزالة تنسيق الخطأ عند الكتابة في أي حقل
