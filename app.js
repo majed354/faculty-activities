@@ -5514,6 +5514,18 @@ function setupYearSelector() {
     });
 }
 
+function syncMainNavOffset() {
+    const header = document.querySelector('.main-header');
+    if (!header) return;
+
+    const headerHeight = Math.ceil(header.getBoundingClientRect().height);
+    if (!Number.isFinite(headerHeight) || headerHeight <= 0) return;
+
+    document.documentElement.style.setProperty('--main-nav-offset', `${headerHeight}px`);
+}
+
+window.syncMainNavOffset = syncMainNavOffset;
+
 // ========================================
 // التهيئة
 // ========================================
@@ -5530,6 +5542,11 @@ async function init() {
     setupYearSelector();
     setupDepartmentSelector();
     setupProgramSelector();
+    syncMainNavOffset();
+    window.addEventListener('resize', syncMainNavOffset);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', syncMainNavOffset);
+    }
     await loadAllData();
 
     // مؤشر حالة البيانات الحية

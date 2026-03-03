@@ -1462,7 +1462,7 @@
     align-items: center;
     justify-content: center;
     box-shadow: 0 5px 20px rgba(0,0,0,0.4); /* ظل قوي للبروز */
-    z-index: 2147483647; /* أعلى رقم طبقة ممكن لضمان الظهور فوق كل شيء */
+    z-index: 950; /* أقل من المودالات حتى لا يغطيها */
     text-decoration: none;
     border: 3px solid var(--gold-400); /* إطار ذهبي */
     transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -1483,6 +1483,20 @@
     line-height: 1;
     margin-top: -4px;
 }
+
+@media (max-width: 768px) {
+    .add-activity-fab {
+        width: 56px;
+        height: 56px;
+        left: max(12px, calc(env(safe-area-inset-left) + 8px));
+        bottom: max(12px, calc(env(safe-area-inset-bottom) + 8px));
+    }
+
+    .add-activity-fab::after {
+        font-size: 32px;
+    }
+}
+
 @media print {
     .fab-container,
     .add-activity-modal {
@@ -1728,7 +1742,10 @@
     align-items: center;
     justify-content: center;
     background: var(--primary-900, #0a1628);
-    min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    box-sizing: border-box;
 }
 
 .login-box {
@@ -1901,10 +1918,56 @@
 @media (max-width: 768px) {
     .welcome-badge {
         font-size: 0.75rem;
-        padding: 6px 12px;
+        padding: 6px 10px;
+        gap: 6px;
     }
+
+    .welcome-text {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .logout-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 1rem;
+        margin-right: 0;
+    }
+
+    .login-overlay {
+        min-height: 100dvh;
+    }
+
     .login-box {
-        padding: 30px 25px;
+        padding: 26px 18px;
+        max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px);
+        overflow-y: auto;
+    }
+
+    .modal {
+        padding: max(10px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    }
+
+    .modal-content {
+        width: min(96vw, 700px);
+        max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px);
+    }
+
+    .modal-close {
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        top: 10px;
+        left: 10px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .add-activity-modal {
+        height: 100dvh;
     }
 }
 
