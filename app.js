@@ -4461,12 +4461,23 @@ function renderPublications() {
     const container = document.getElementById('publicationsGrid');
     container.innerHTML = '';
     
-    const searchTerm = document.getElementById('pubSearch')?.value?.toLowerCase() || '';
+    const searchTerm = normalizeSearchText(document.getElementById('pubSearch')?.value || '');
     const citationsFilter = document.getElementById('pubCitationsFilter')?.value || '';
     
     // البحوث من ملف publications.csv
     let filtered = getPublications();
-    if (searchTerm) filtered = filtered.filter(p => p.title && p.title.toLowerCase().includes(searchTerm));
+    if (searchTerm) {
+        filtered = filtered.filter(pub => {
+            const titleMatches = normalizeSearchText(pub.title || '').includes(searchTerm);
+            if (titleMatches) return true;
+
+            const authorNames = splitIds(pub.authors_ids || pub.participant_ids)
+                .map(id => getMemberName(id))
+                .filter(name => name && name !== '-')
+                .join(' ');
+            return normalizeSearchText(authorNames).includes(searchTerm);
+        });
+    }
     if (citationsFilter) filtered = filtered.filter(p => p.citations_range === citationsFilter);
     filtered = sortByDateDesc(filtered, p => p.publish_date || p.date);
 
@@ -4484,6 +4495,8 @@ function renderPublications() {
         
         const card = document.createElement('div');
         card.className = 'publication-card clickable';
+        card.setAttribute('role', 'button');
+        card.tabIndex = 0;
         card.innerHTML = `
             <div class="publication-title">${pub.title || ''}</div>
             <div class="publication-journal">${pub.journal || ''}</div>
@@ -4498,6 +4511,12 @@ function renderPublications() {
             ${getRecordModifiedByHtml(pub)}
         `;
         card.onclick = () => showPublicationDetails(pub);
+        card.onkeydown = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                showPublicationDetails(pub);
+            }
+        };
         container.appendChild(card);
     });
 }
