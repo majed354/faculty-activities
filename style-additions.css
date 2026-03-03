@@ -2229,3 +2229,196 @@
     font-size: 0.95rem;
     font-weight: 700;
 }
+
+/* ========================================
+   تفاصيل بطاقات الإحصائيات
+======================================== */
+.clickable-stat-card {
+    cursor: pointer;
+}
+
+.clickable-stat-card:focus-visible {
+    outline: 2px solid rgba(198, 169, 98, 0.9);
+    outline-offset: 3px;
+}
+
+.clickable-stat-card::after {
+    content: 'انقر لعرض التفاصيل';
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    font-size: 0.7rem;
+    color: var(--gray-400);
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 2px 8px;
+    border-radius: 999px;
+    opacity: 0;
+    transform: translateY(-3px);
+    transition: 0.2s ease;
+    pointer-events: none;
+}
+
+.clickable-stat-card:hover::after,
+.clickable-stat-card:focus-visible::after {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.stats-detail-modal-content {
+    max-width: 900px !important;
+}
+
+.stats-detail-header h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.2rem;
+}
+
+.stats-detail-subtitle {
+    margin: 6px 0 0;
+    color: var(--gray-400);
+    font-size: 0.85rem;
+}
+
+.stats-detail-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 0 12px;
+    flex-wrap: wrap;
+}
+
+.stats-detail-search-input {
+    flex: 1;
+    min-width: 250px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
+.stats-detail-search-input::placeholder {
+    color: var(--gray-500);
+}
+
+.stats-detail-search-input:focus {
+    outline: none;
+    border-color: rgba(198, 169, 98, 0.7);
+    box-shadow: 0 0 0 3px rgba(198, 169, 98, 0.15);
+}
+
+.stats-detail-count {
+    color: var(--gray-400);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.stats-detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 58vh;
+    overflow-y: auto;
+    padding-left: 4px;
+}
+
+.stats-detail-item {
+    width: 100%;
+    text-align: right;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-right: 4px solid rgba(198, 169, 98, 0.45);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: inherit;
+}
+
+button.stats-detail-item {
+    cursor: pointer;
+    font: inherit;
+}
+
+.stats-detail-item.clickable:hover {
+    border-color: rgba(198, 169, 98, 0.55);
+    transform: translateX(-3px);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.stats-detail-item:focus-visible {
+    outline: 2px solid rgba(198, 169, 98, 0.85);
+    outline-offset: 2px;
+}
+
+.stats-detail-item-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.stats-detail-item-title {
+    color: #fff;
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+
+.stats-detail-item-badge {
+    background: rgba(198, 169, 98, 0.2);
+    border: 1px solid rgba(198, 169, 98, 0.4);
+    color: var(--gold-400);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.stats-detail-item-subtitle {
+    color: var(--gray-300);
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+.stats-detail-item-meta {
+    color: var(--gray-500);
+    font-size: 0.76rem;
+    line-height: 1.6;
+    margin-top: 2px;
+}
+
+.stats-detail-empty {
+    text-align: center;
+    padding: 30px 12px;
+    color: var(--gray-400);
+    border: 1px dashed rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+@media (max-width: 768px) {
+    .stats-detail-modal-content {
+        width: 96% !important;
+        padding: 1rem;
+    }
+
+    .stats-detail-controls {
+        align-items: stretch;
+    }
+
+    .stats-detail-search-input {
+        min-width: 100%;
+    }
+
+    .stats-detail-count {
+        width: 100%;
+        text-align: left;
+    }
+
+    .clickable-stat-card::after {
+        display: none;
+    }
+}

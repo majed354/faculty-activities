@@ -37,6 +37,8 @@ const KPI_EXCLUDED_RANKS = new Set(['معيد', 'محاضر', 'متعاون', '�
 const KPI_EXCLUDED_RANKS_FOR_PHD = new Set(['معيد', 'محاضر', 'متعاون', 'مدرس', 'أستاذ مساعد']);
 const localActivityAuditTrail = [];
 let publicationStatsState = { records: [], selectedJournal: '', selectedRecords: [] };
+let statsCardInteractionsBound = false;
+let statsDetailState = null;
 
 // بيانات الخطط الدراسية والبرامج
 let allPlansData = [];
@@ -2055,6 +2057,366 @@ function setupSectionsFilters() {
     populateProgramSelector();
 }
 
+function normalizeSearchText(value) {
+    return normalizeArabicDigits(String(value || ''))
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function setupStatCardInteractions() {
+    if (statsCardInteractionsBound) return;
+    const cards = document.querySelectorAll('.quick-stats .stat-card[data-stat-type]');
+    if (!cards.length) return;
+
+    cards.forEach(card => {
+        const statType = card.dataset.statType;
+        if (!statType) return;
+
+        card.classList.add('clickable-stat-card');
+        card.addEventListener('click', () => openDashboardStatDetails(statType));
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openDashboardStatDetails(statType);
+            }
+        });
+    });
+
+    statsCardInteractionsBound = true;
+}
+
+function ensureStatsDetailModal() {
+    let modal = document.getElementById('statsDetailModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'statsDetailModal';
+    modal.className = 'modal';
+    modal.innerHTML = '<div class="modal-content stats-detail-modal-content"></div>';
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeStatsDetailModal() {
+    const modal = document.getElementById('statsDetailModal');
+    if (modal) modal.classList.remove('active');
+    statsDetailState = null;
+}
+
+function buildFacultyStatDetailItems() {
+    const members = getUniqueActiveFacultyMembers()
+        .sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'ar'));
+
+    return members.map((member, index) => {
+        const memberId = String(member.id || '').trim();
+        const memberName = String(member.name || '').trim() || 'عضو هيئة تدريس';
+        const rank = String(member.rank || '').trim();
+        const department = String(member.department || '').trim();
+        const email = String(member.email || '').trim();
+
+        const subtitleParts = [];
+        if (rank) subtitleParts.push(rank);
+        if (department) subtitleParts.push(department);
+
+        const metaParts = [];
+        if (memberId) metaParts.push(`الرقم الوظيفي: ${memberId}`);
+        if (email) metaParts.push(email);
+
+        return {
+            title: memberName,
+            subtitle: subtitleParts.join(' | '),
+            meta: metaParts.join(' | '),
+            badge: rank || 'عضو',
+            primarySearch: normalizeSearchText(`${memberName} ${memberId}`),
+            searchText: normalizeSearchText(`${memberName} ${memberId} ${rank} ${department} ${email}`),
+            defaultOrder: index,
+            onClick: memberId ? () => {
+                closeStatsDetailModal();
+                showMemberDetails(memberId);
+            } : null
+        };
+    });
+}
+
+function buildPublicationsStatDetailItems() {
+    const publications = sortByDateDesc(getPublications(), p => p.publish_date || p.date);
+    return publications.map((pub, index) => {
+        const authorNames = splitIds(pub.authors_ids || pub.participant_ids)
+            .map(id => getMemberName(id))
+            .filter(name => name && name !== '-');
+        const authorsText = authorNames.length ? authorNames.join('، ') : 'مؤلفون غير محددين';
+        const journal = String(pub.journal || pub.location || '').trim() || 'جهة نشر غير محددة';
+        const publishDate = formatDate(pub.publish_date || pub.date);
+        const title = String(pub.title || '').trim() || 'بحث بدون عنوان';
+
+        return {
+            title,
+            subtitle: authorsText,
+            meta: `${journal} | ${publishDate}`,
+            badge: pub.student_author === 'نعم' ? 'طالب مشارك' : 'بحث',
+            primarySearch: normalizeSearchText(title),
+            searchText: normalizeSearchText(`${title} ${authorsText} ${journal} ${pub.citations_range || ''} ${publishDate}`),
+            defaultOrder: index,
+            onClick: () => {
+                closeStatsDetailModal();
+                showPublicationDetails(pub);
+            }
+        };
+    });
+}
+
+function buildThesesStatDetailItems() {
+    const theses = sortByDateDesc((data.theses || []), t => t.defense_date);
+    return theses.map((thesis, index) => {
+        const title = String(thesis.title || '').trim() || 'عنوان غير متوفر';
+        const studentName = String(thesis.student_name || '').trim() || 'طالب غير محدد';
+        const thesisType = getThesisTypeName(thesis.type || 'رسالة');
+        const supervisor = getMemberName(thesis.supervisor_id);
+        const defenseDate = formatDate(thesis.defense_date);
+
+        return {
+            title,
+            subtitle: `${studentName} | ${thesisType}`,
+            meta: `المشرف: ${supervisor} | ${defenseDate}`,
+            badge: thesis.status || thesis.type || 'رسالة',
+            primarySearch: normalizeSearchText(`${title} ${studentName}`),
+            searchText: normalizeSearchText(`${title} ${studentName} ${thesis.type || ''} ${thesis.status || ''} ${supervisor} ${defenseDate}`),
+            defaultOrder: index,
+            onClick: () => {
+                closeStatsDetailModal();
+                showThesisDetails(thesis);
+            }
+        };
+    });
+}
+
+function buildEventsStatDetailItems() {
+    const events = sortByDateDesc(getEvents(), eventItem => eventItem.date);
+    return events.map((eventItem, index) => {
+        const title = String(eventItem.title || '').trim() || (eventItem.category || 'فعالية علمية');
+        const category = String(eventItem.category || '').trim() || 'فعالية';
+        const participationType = String(eventItem.participation_type || '').trim();
+        const location = String(eventItem.location || eventItem.journal || '').trim() || 'مكان غير محدد';
+        const eventDate = formatDate(eventItem.date);
+        const participantNames = splitIds(eventItem.participant_ids)
+            .slice(0, 3)
+            .map(id => getMemberName(id))
+            .filter(name => name && name !== '-');
+        const participantsText = participantNames.length ? participantNames.join('، ') : '';
+
+        const subtitleParts = [category];
+        if (participationType) subtitleParts.push(participationType);
+        if (participantsText) subtitleParts.push(participantsText);
+
+        return {
+            title,
+            subtitle: subtitleParts.join(' | '),
+            meta: `${location} | ${eventDate}`,
+            badge: category,
+            primarySearch: normalizeSearchText(`${title} ${category}`),
+            searchText: normalizeSearchText(`${title} ${category} ${participationType} ${location} ${participantsText} ${eventDate}`),
+            defaultOrder: index,
+            onClick: () => {
+                closeStatsDetailModal();
+                showEventDetails(eventItem);
+            }
+        };
+    });
+}
+
+function buildDashboardStatDetailsPayload(statType) {
+    if (statType === 'faculty') {
+        const items = buildFacultyStatDetailItems();
+        return {
+            title: 'قائمة أعضاء هيئة التدريس',
+            subtitle: `الإجمالي: ${items.length} عضو`,
+            placeholder: 'ابحث بالاسم أو الرقم الوظيفي أو الرتبة العلمية...',
+            emptyMessage: 'لا توجد نتائج مطابقة في قائمة أعضاء هيئة التدريس.',
+            items
+        };
+    }
+
+    if (statType === 'publications') {
+        const items = buildPublicationsStatDetailItems();
+        return {
+            title: 'تفاصيل البحوث المنشورة',
+            subtitle: `الإجمالي: ${items.length} بحث`,
+            placeholder: 'ابحث بعنوان البحث أو المؤلفين أو جهة النشر...',
+            emptyMessage: 'لا توجد نتائج مطابقة في قائمة البحوث.',
+            items
+        };
+    }
+
+    if (statType === 'theses') {
+        const items = buildThesesStatDetailItems();
+        return {
+            title: 'تفاصيل الرسائل والمشاريع البحثية',
+            subtitle: `الإجمالي: ${items.length} سجل`,
+            placeholder: 'ابحث بعنوان الرسالة أو اسم الطالب أو المشرف...',
+            emptyMessage: 'لا توجد نتائج مطابقة في قائمة الرسائل.',
+            items
+        };
+    }
+
+    if (statType === 'events') {
+        const items = buildEventsStatDetailItems();
+        return {
+            title: 'تفاصيل الفعاليات العلمية',
+            subtitle: `الإجمالي: ${items.length} فعالية`,
+            placeholder: 'ابحث بعنوان الفعالية أو نوعها أو المكان...',
+            emptyMessage: 'لا توجد نتائج مطابقة في قائمة الفعاليات.',
+            items
+        };
+    }
+
+    return null;
+}
+
+function calculateStatsDetailSearchScore(item, normalizedQuery, tokens) {
+    const primarySearch = item.primarySearch || '';
+    const fullSearch = item.searchText || '';
+    let score = 0;
+
+    if (!normalizedQuery) return score;
+
+    if (primarySearch === normalizedQuery) score += 1200;
+    else if (primarySearch.startsWith(normalizedQuery)) score += 900;
+    else if (primarySearch.includes(normalizedQuery)) score += 600;
+
+    if (fullSearch.startsWith(normalizedQuery)) score += 220;
+    else if (fullSearch.includes(normalizedQuery)) score += 140;
+
+    tokens.forEach(token => {
+        if (!token) return;
+        if (primarySearch.startsWith(token)) score += 90;
+        else if (primarySearch.includes(token)) score += 60;
+        else if (fullSearch.includes(token)) score += 30;
+    });
+
+    return score;
+}
+
+function createStatsDetailItemElement(item) {
+    const element = document.createElement(item.onClick ? 'button' : 'div');
+    if (item.onClick) {
+        element.type = 'button';
+        element.className = 'stats-detail-item clickable';
+        element.addEventListener('click', item.onClick);
+    } else {
+        element.className = 'stats-detail-item';
+    }
+
+    const topRow = document.createElement('div');
+    topRow.className = 'stats-detail-item-top';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'stats-detail-item-title';
+    titleEl.textContent = item.title || '-';
+    topRow.appendChild(titleEl);
+
+    if (item.badge) {
+        const badgeEl = document.createElement('span');
+        badgeEl.className = 'stats-detail-item-badge';
+        badgeEl.textContent = item.badge;
+        topRow.appendChild(badgeEl);
+    }
+
+    element.appendChild(topRow);
+
+    if (item.subtitle) {
+        const subtitleEl = document.createElement('div');
+        subtitleEl.className = 'stats-detail-item-subtitle';
+        subtitleEl.textContent = item.subtitle;
+        element.appendChild(subtitleEl);
+    }
+
+    if (item.meta) {
+        const metaEl = document.createElement('div');
+        metaEl.className = 'stats-detail-item-meta';
+        metaEl.textContent = item.meta;
+        element.appendChild(metaEl);
+    }
+
+    return element;
+}
+
+function renderDashboardStatDetailsList(query) {
+    if (!statsDetailState) return;
+    const listContainer = document.getElementById('statsDetailList');
+    const counter = document.getElementById('statsDetailCount');
+    if (!listContainer || !counter) return;
+
+    const normalizedQuery = normalizeSearchText(query || '');
+    const tokens = normalizedQuery.split(' ').filter(Boolean);
+
+    let results = [...statsDetailState.items];
+    if (tokens.length > 0) {
+        results = results
+            .filter(item => tokens.every(token => (item.searchText || '').includes(token)))
+            .map(item => ({
+                ...item,
+                _searchScore: calculateStatsDetailSearchScore(item, normalizedQuery, tokens)
+            }))
+            .sort((a, b) => {
+                const scoreDiff = (b._searchScore || 0) - (a._searchScore || 0);
+                if (scoreDiff !== 0) return scoreDiff;
+                return (a.defaultOrder || 0) - (b.defaultOrder || 0);
+            });
+    } else {
+        results.sort((a, b) => (a.defaultOrder || 0) - (b.defaultOrder || 0));
+    }
+
+    counter.textContent = `النتائج: ${results.length} من ${statsDetailState.items.length}`;
+    listContainer.innerHTML = '';
+
+    if (results.length === 0) {
+        const emptyEl = document.createElement('div');
+        emptyEl.className = 'stats-detail-empty';
+        emptyEl.textContent = statsDetailState.emptyMessage || 'لا توجد بيانات مطابقة.';
+        listContainer.appendChild(emptyEl);
+        return;
+    }
+
+    results.forEach(item => {
+        listContainer.appendChild(createStatsDetailItemElement(item));
+    });
+}
+
+function openDashboardStatDetails(statType) {
+    const payload = buildDashboardStatDetailsPayload(statType);
+    if (!payload) return;
+
+    statsDetailState = payload;
+    const modal = ensureStatsDetailModal();
+    const content = modal.querySelector('.stats-detail-modal-content');
+    if (!content) return;
+
+    content.innerHTML = `
+        <span class="modal-close" onclick="closeStatsDetailModal()">&times;</span>
+        <div class="stats-detail-header">
+            <h3>${escapeHtml(payload.title)}</h3>
+            <p class="stats-detail-subtitle">${escapeHtml(payload.subtitle)}</p>
+        </div>
+        <div class="stats-detail-controls">
+            <input type="text" id="statsDetailSearchInput" class="stats-detail-search-input" placeholder="${escapeHtml(payload.placeholder)}" autocomplete="off">
+            <div class="stats-detail-count" id="statsDetailCount"></div>
+        </div>
+        <div class="stats-detail-list" id="statsDetailList"></div>
+    `;
+
+    const searchInput = content.querySelector('#statsDetailSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            renderDashboardStatDetailsList(e.target.value || '');
+        });
+    }
+
+    modal.classList.add('active');
+    renderDashboardStatDetailsList('');
+    requestAnimationFrame(() => searchInput?.focus());
+}
+
 function renderDashboard() {
     const publications = getPublications();
     const events = getEvents();
@@ -2063,7 +2425,9 @@ function renderDashboard() {
     document.getElementById('totalPublications').textContent = publications.length;
     document.getElementById('totalTheses').textContent = data.theses.length;
     document.getElementById('totalEvents').textContent = events.length;
-    
+
+    setupStatCardInteractions();
+
     renderLeaderboard();
     renderActivities();
     renderDashboardCharts();
@@ -3750,6 +4114,7 @@ document.addEventListener('click', (e) => {
     if (e.target?.id === 'recordDetailModal') closeRecordDetailModal();
     if (e.target?.id === 'recordEditorModal') closeRecordEditModal();
     if (e.target?.id === 'privilegePasswordModal') closePrivilegePasswordModal();
+    if (e.target?.id === 'statsDetailModal') closeStatsDetailModal();
 });
 
 // ========================================

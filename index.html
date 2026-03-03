@@ -144,7 +144,7 @@
         <section id="dashboard" class="tab-content active">
             <!-- الإحصائيات السريعة -->
             <div class="quick-stats">
-                <div class="stat-card stat-faculty">
+                <div class="stat-card stat-faculty" data-stat-type="faculty" role="button" tabindex="0" title="عرض تفاصيل أعضاء هيئة التدريس">
                     <div class="stat-icon">👨‍🏫</div>
                     <div class="stat-info">
                         <span class="stat-number" id="totalFaculty">0</span>
@@ -152,7 +152,7 @@
                     </div>
                     <div class="stat-decoration"></div>
                 </div>
-                <div class="stat-card stat-publications">
+                <div class="stat-card stat-publications" data-stat-type="publications" role="button" tabindex="0" title="عرض تفاصيل البحوث">
                     <div class="stat-icon">📄</div>
                     <div class="stat-info">
                         <span class="stat-number" id="totalPublications">0</span>
@@ -160,7 +160,7 @@
                     </div>
                     <div class="stat-decoration"></div>
                 </div>
-                <div class="stat-card stat-theses">
+                <div class="stat-card stat-theses" data-stat-type="theses" role="button" tabindex="0" title="عرض تفاصيل الرسائل">
                     <div class="stat-icon">🎓</div>
                     <div class="stat-info">
                         <span class="stat-number" id="totalTheses">0</span>
@@ -168,7 +168,7 @@
                     </div>
                     <div class="stat-decoration"></div>
                 </div>
-                <div class="stat-card stat-events">
+                <div class="stat-card stat-events" data-stat-type="events" role="button" tabindex="0" title="عرض تفاصيل الفعاليات">
                     <div class="stat-icon">📅</div>
                     <div class="stat-info">
                         <span class="stat-number" id="totalEvents">0</span>
@@ -732,6 +732,17 @@
     // ========================================
     let facultyListForLogin = [];
 
+    function normalizeArabicDigitsForLogin(value) {
+        if (value === null || value === undefined) return '';
+        const map = {
+            '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+            '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+            '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
+            '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
+        };
+        return String(value).replace(/[٠-٩۰-۹]/g, ch => map[ch] || ch);
+    }
+
     async function loadFacultyForLogin() {
         try {
             const response = await fetch('./data/faculty.csv');
@@ -744,8 +755,8 @@
     }
 
     async function handleLogin() {
-        const empId = document.getElementById('loginEmployeeId').value.trim();
-        const pass = document.getElementById('loginPassword').value;
+        const empId = normalizeArabicDigitsForLogin(document.getElementById('loginEmployeeId').value.trim());
+        const pass = normalizeArabicDigitsForLogin(document.getElementById('loginPassword').value);
         const errorMsg = document.getElementById('loginErrorMsg');
         errorMsg.textContent = '';
 
@@ -762,7 +773,10 @@
             await loadFacultyForLogin();
         }
 
-        const member = facultyListForLogin.find(m => m.id && m.id.trim() === empId);
+        const member = facultyListForLogin.find(m => {
+            const memberId = normalizeArabicDigitsForLogin(m.id).trim();
+            return memberId && memberId === empId;
+        });
         if (!member) {
             errorMsg.textContent = 'الرقم الوظيفي غير موجود في سجلات الأعضاء';
             return;
