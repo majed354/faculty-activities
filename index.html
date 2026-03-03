@@ -524,7 +524,7 @@
             <div class="program-stats-section" id="programStatsSection">
                 <div class="program-stats-header">
                     <h3>📊 إحصائيات البرامج الأكاديمية</h3>
-                    <span class="program-stats-hint">المؤشرات تُحسب على شعب المقررات الفريدة للبرنامج فقط (وبها تفصيل الذكور/الإناث ومتوسط كلٍ منهما)</span>
+                    <span class="program-stats-hint">المؤشرات تشمل تفصيل شعب الذكور/الإناث ومتوسط كلٍ منهما</span>
                 </div>
                 <div class="data-table-container">
                     <table class="data-table program-stats-table" id="programStatsTable">
@@ -533,13 +533,12 @@
                                 <th>البرنامج</th>
                                 <th>الدرجة</th>
                                 <th>الشعب</th>
-                                <th>شعب المقررات الفريدة</th>
-                                <th>متوسط طلاب/شعبة (فريد)</th>
-                                <th>شعب الذكور (فريد)</th>
+                                <th>متوسط طلاب/شعبة</th>
+                                <th>شعب الذكور</th>
                                 <th>متوسط الذكور/شعبة</th>
-                                <th>شعب الإناث (فريد)</th>
+                                <th>شعب الإناث</th>
                                 <th>متوسط الإناث/شعبة</th>
-                                <th>أعضاء (فريدة)</th>
+                                <th>أعضاء هيئة التدريس</th>
                             </tr>
                         </thead>
                         <tbody id="programStatsBody">
@@ -553,7 +552,7 @@
                 <div class="program-quality-header">
                     <h3>🎓 مؤشرات البرامج الأكاديمية</h3>
                 </div>
-                <p class="program-quality-hint">المؤشرات محسوبة على شعب المقررات الفريدة للبرنامج فقط اعتمادًا على ملف <code>new_all_plans.csv</code></p>
+                <p class="program-quality-hint">المؤشرات مبنية على بيانات ملف <code>new_all_plans.csv</code></p>
 
                 <div class="program-quality-grid" id="programQualityGrid">
                     <!-- يتم ملؤه ديناميكياً -->
@@ -561,11 +560,11 @@
 
                 <div class="program-quality-chart-row">
                     <div class="chart-card">
-                        <h3>متوسط عدد الطلاب في الشعبة (المقررات الفريدة)</h3>
+                        <h3>متوسط عدد الطلاب في الشعبة</h3>
                         <canvas id="programAvgStudentsChart"></canvas>
                     </div>
                     <div class="chart-card">
-                        <h3>شعب الذكور والإناث (المقررات الفريدة)</h3>
+                        <h3>شعب الذكور والإناث</h3>
                         <canvas id="programRatioChart"></canvas>
                     </div>
                 </div>

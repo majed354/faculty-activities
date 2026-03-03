@@ -10,6 +10,7 @@ let teachingCharts = {};
 let allCoursesMap = null;
 let teachingInitialized = false;
 let teachingDataLoading = false;
+let teachingDataLoadPromise = null;
 let tableFacultySummaryCache = new Map();
 
 // فلاتر الجدول التفصيلي (مستقلة تماماً)
@@ -90,51 +91,60 @@ async function loadTeachingDataFromSplitFiles() {
 // تحميل البيانات (lazy - تتأخر حتى يفتح المستخدم تبويب التدريس)
 // ========================================
 async function loadTeachingData() {
-    if (teachingData || teachingDataLoading) return;
-    teachingDataLoading = true;
-    showTeachingLoader(true);
-    try {
-        const t0 = performance.now();
-        setTeachingLoaderMessage('جاري تحميل بيانات النشاط التدريسي...');
+    if (teachingInitialized && teachingData) return teachingData;
+    if (teachingDataLoadPromise) return teachingDataLoadPromise;
 
+    teachingDataLoadPromise = (async () => {
+        teachingDataLoading = true;
+        showTeachingLoader(true);
         try {
-            teachingData = await loadTeachingDataFromSplitFiles();
-            console.log('🏫 مصدر بيانات التدريس: ملفات سنوية مقسمة');
-        } catch (splitError) {
-            console.warn('⚠️ تعذر تحميل النسخة المقسمة، سيتم استخدام teaching_data.json:', splitError.message);
-            setTeachingLoaderMessage('جاري تحميل بيانات النشاط التدريسي (نسخة احتياطية)...');
-            const response = await fetch(`${DATA_BASE_URL}/teaching_data.json`);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            teachingData = await response.json();
-            console.log('🏫 مصدر بيانات التدريس: teaching_data.json');
-        }
+            const t0 = performance.now();
+            setTeachingLoaderMessage('جاري تحميل بيانات النشاط التدريسي...');
 
-        tableFacultySummaryCache.clear();
-        if (typeof resetTeachingProgramAggregatesCache === 'function') {
-            resetTeachingProgramAggregatesCache();
-        }
-        console.log(`🏫 تحميل البيانات: ${Math.round(performance.now() - t0)}ms`);
+            try {
+                teachingData = await loadTeachingDataFromSplitFiles();
+                console.log('🏫 مصدر بيانات التدريس: ملفات سنوية مقسمة');
+            } catch (splitError) {
+                console.warn('⚠️ تعذر تحميل النسخة المقسمة، سيتم استخدام teaching_data.json:', splitError.message);
+                setTeachingLoaderMessage('جاري تحميل بيانات النشاط التدريسي (نسخة احتياطية)...');
+                const response = await fetch(`${DATA_BASE_URL}/teaching_data.json`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                teachingData = await response.json();
+                console.log('🏫 مصدر بيانات التدريس: teaching_data.json');
+            }
 
-        buildCoursesMap();
-        initTeachingFilters();
+            tableFacultySummaryCache.clear();
+            if (typeof resetTeachingProgramAggregatesCache === 'function') {
+                resetTeachingProgramAggregatesCache();
+            }
+            console.log(`🏫 تحميل البيانات: ${Math.round(performance.now() - t0)}ms`);
 
-        // المرحلة 1: عرض الجدول فوراً (الأهم للمستخدم)
-        renderTeachingTable();
-        teachingInitialized = true;
+            buildCoursesMap();
+            initTeachingFilters();
 
-        // المرحلة 2: تأجيل المخططات للإطار التالي حتى يظهر الجدول بدون تجميد
-        requestAnimationFrame(() => {
-            renderTeachingOverview();
-            chartsVisible = true;
+            // المرحلة 1: عرض الجدول فوراً (الأهم للمستخدم)
+            renderTeachingTable();
+            teachingInitialized = true;
+
+            // المرحلة 2: تأجيل المخططات للإطار التالي حتى يظهر الجدول بدون تجميد
+            requestAnimationFrame(() => {
+                renderTeachingOverview();
+                chartsVisible = true;
+                showTeachingLoader(false);
+                console.log(`🏫 اكتمال التحميل: ${Math.round(performance.now() - t0)}ms`);
+            });
+        } catch (error) {
+            console.warn('⚠️ تعذر تحميل بيانات النشاط التدريسي:', error.message);
             showTeachingLoader(false);
-            console.log(`🏫 اكتمال التحميل: ${Math.round(performance.now() - t0)}ms`);
-        });
-    } catch (error) {
-        console.warn('⚠️ تعذر تحميل بيانات النشاط التدريسي:', error.message);
-        showTeachingLoader(false);
-    } finally {
-        teachingDataLoading = false;
-    }
+        } finally {
+            teachingDataLoading = false;
+            teachingDataLoadPromise = null;
+        }
+
+        return teachingData;
+    })();
+
+    return teachingDataLoadPromise;
 }
 
 // مؤشر التحميل
@@ -155,9 +165,7 @@ function showTeachingLoader(show) {
 
 // تحميل بيانات التدريس عند الطلب فقط
 async function ensureTeachingLoaded() {
-    if (!teachingInitialized && !teachingDataLoading) {
-        await loadTeachingData();
-    }
+    await loadTeachingData();
 }
 
 // ========================================
@@ -1187,7 +1195,7 @@ function renderProgramStats(records) {
         const m = (typeof finalizeProgramBucket === 'function')
             ? finalizeProgramBucket(programMap[key])
             : null;
-        if (!m || m.totalSections <= 0) return;
+        if (!m || m.exclusiveSections <= 0) return;
 
         stats.push({
             key,
@@ -1212,8 +1220,7 @@ function renderProgramStats(records) {
         <tr>
             <td class="prog-name-cell">${s.name}</td>
             <td><span class="degree-badge degree-${degreeClass[s.degree] || 'other'}">${s.degree}</span></td>
-            <td><strong>${s.totalSections.toLocaleString('ar-SA')}</strong></td>
-            <td>${s.exclusiveSections.toLocaleString('ar-SA')}</td>
+            <td><strong>${s.exclusiveSections.toLocaleString('ar-SA')}</strong></td>
             <td><strong>${s.avgExclusiveStudents.toLocaleString('ar-SA')}</strong></td>
             <td>${s.maleSections.toLocaleString('ar-SA')}</td>
             <td>${s.avgMaleStudents.toLocaleString('ar-SA')}</td>

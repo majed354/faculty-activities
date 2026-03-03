@@ -2040,17 +2040,21 @@ function getFilteredRecordsForSections() {
 function setupSectionsFilters() {
     // تعبئة فلتر السنوات
     const yearFilter = document.getElementById('sectionsYearFilter');
-    if (yearFilter && teachingData) {
+    if (yearFilter) {
         const currentVal = yearFilter.value;
+        const years = (teachingData && Array.isArray(teachingData.years))
+            ? [...teachingData.years].sort((a, b) => a - b)
+            : [];
         yearFilter.innerHTML = '<option value="all">جميع السنوات</option>';
-        teachingData.years.forEach(y => {
+        years.forEach(y => {
             const opt = document.createElement('option');
             opt.value = y;
             opt.textContent = y + 'هـ';
             yearFilter.appendChild(opt);
         });
-        yearFilter.value = currentVal || 'all';
-        yearFilter.addEventListener('change', () => renderSectionsTab());
+        const currentValExists = years.some(y => String(y) === String(currentVal));
+        yearFilter.value = currentValExists ? currentVal : 'all';
+        yearFilter.onchange = () => renderSectionsTab();
     }
 
     // تعبئة فلتر البرامج
@@ -3429,7 +3433,7 @@ function renderProgramQualityIndicators() {
         programs.forEach(p => {
             const key = p.name + ' - ' + p.degree;
             const m = finalizeProgramBucket(programMap[key]);
-            if (m.totalSections <= 0) return;
+            if (m.exclusiveSections <= 0) return;
             stats.push({
                 viewMode: 'program',
                 key,
@@ -3468,11 +3472,11 @@ function renderProgramQualityIndicators() {
             <div class="pq-metrics">
                 <div class="pq-metric">
                     <span class="pq-metric-value">${s.avgExclusiveStudents.toLocaleString('ar-SA')}</span>
-                    <span class="pq-metric-label">متوسط طلاب/شعبة (فريد)</span>
+                    <span class="pq-metric-label">متوسط طلاب/شعبة</span>
                 </div>
                 <div class="pq-metric">
                     <span class="pq-metric-value">${s.exclusiveSections.toLocaleString('ar-SA')}</span>
-                    <span class="pq-metric-label">شعبة (مقررات فريدة)</span>
+                    <span class="pq-metric-label">عدد الشعب</span>
                 </div>
                 <div class="pq-metric">
                     <span class="pq-metric-value">${s.maleSections.toLocaleString('ar-SA')}</span>
@@ -3492,7 +3496,7 @@ function renderProgramQualityIndicators() {
                 </div>
                 <div class="pq-metric">
                     <span class="pq-metric-value">${s.exclusiveFacultyCount.toLocaleString('ar-SA')}</span>
-                    <span class="pq-metric-label">أعضاء (مقررات فريدة)</span>
+                    <span class="pq-metric-label">أعضاء هيئة التدريس</span>
                 </div>
                 ${s.unknownSections > 0 ? `
                 <div class="pq-metric">
@@ -3530,11 +3534,11 @@ function renderProgramQualityCharts(stats, context = {}) {
     }
 
     if (selectedProgram !== 'all') {
-        setProgramQualityChartTitle('programAvgStudentsChart', 'متوسط الطلاب في شعب الذكور والإناث (المقررات الفريدة) عبر السنوات');
-        setProgramQualityChartTitle('programRatioChart', 'عدد شعب الذكور والإناث (المقررات الفريدة) عبر السنوات');
+        setProgramQualityChartTitle('programAvgStudentsChart', 'متوسط الطلاب في شعب الذكور والإناث عبر السنوات');
+        setProgramQualityChartTitle('programRatioChart', 'عدد شعب الذكور والإناث عبر السنوات');
     } else {
-        setProgramQualityChartTitle('programAvgStudentsChart', 'متوسط عدد الطلاب في الشعبة (المقررات الفريدة) لكل برنامج');
-        setProgramQualityChartTitle('programRatioChart', `شعب الذكور والإناث (المقررات الفريدة) لكل برنامج${selectedYear === 'all' ? '' : ` - ${selectedYear}هـ`}`);
+        setProgramQualityChartTitle('programAvgStudentsChart', 'متوسط عدد الطلاب في الشعبة لكل برنامج');
+        setProgramQualityChartTitle('programRatioChart', `شعب الذكور والإناث لكل برنامج${selectedYear === 'all' ? '' : ` - ${selectedYear}هـ`}`);
     }
 
     // مخطط المتوسطات
@@ -3562,7 +3566,7 @@ function renderProgramQualityCharts(stats, context = {}) {
                             borderWidth: 1
                         },
                         {
-                            label: 'متوسط عام (فريد)',
+                            label: 'متوسط عام',
                             data: stats.map(s => s.avgExclusiveStudents),
                             type: 'line',
                             borderColor: '#e74c3c',
@@ -3591,7 +3595,7 @@ function renderProgramQualityCharts(stats, context = {}) {
                 data: {
                     labels,
                     datasets: [{
-                        label: 'متوسط طلاب/شعبة (فريد)',
+                        label: 'متوسط طلاب/شعبة',
                         data: stats.map(s => s.avgExclusiveStudents),
                         backgroundColor: bgColors,
                         borderColor: borderColorsList,
@@ -3676,7 +3680,7 @@ function renderProgramQualityCharts(stats, context = {}) {
                                 return [
                                     `متوسط الذكور/شعبة: ${s.avgMaleStudents.toLocaleString('ar-SA')}`,
                                     `متوسط الإناث/شعبة: ${s.avgFemaleStudents.toLocaleString('ar-SA')}`,
-                                    `متوسط عام (فريد): ${s.avgExclusiveStudents.toLocaleString('ar-SA')}`
+                                    `متوسط عام: ${s.avgExclusiveStudents.toLocaleString('ar-SA')}`
                                 ];
                             }
                         }
@@ -5494,10 +5498,8 @@ function setupTabs() {
             // عند فتح تبويب إحصائيات الشعب: تحميل بيانات التدريس والبرامج
             if (tabId === 'sections') {
                 ensureTeachingLoaded().then(() => {
-                    if (!sectionsTabInitialized) {
-                        setupSectionsFilters();
-                        sectionsTabInitialized = true;
-                    }
+                    setupSectionsFilters();
+                    sectionsTabInitialized = true;
                     renderSectionsTab();
                 });
             }
