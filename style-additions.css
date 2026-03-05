@@ -2485,3 +2485,9 @@ button.stats-detail-item {
         display: none;
     }
 }
+
+@media (max-width: 900px) {
+    .theses-print-grid {
+        grid-template-columns: 1fr;
+    }
+}

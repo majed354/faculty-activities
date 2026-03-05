@@ -281,16 +281,37 @@
                     <input type="text" id="thesesSearch" placeholder="🔍 بحث في الرسائل...">
                     <select id="thesesTypeFilter">
                         <option value="">جميع البرامج</option>
-                        <option value="دكتوراه-قراءات">دكتوراه القراءات</option>
-                        <option value="دكتوراه-دراسات قرآنية">دكتوراه الدراسات القرآنية</option>
-                        <option value="ماجستير-قراءات">ماجستير القراءات</option>
-                        <option value="ماجستير-دراسات قرآنية">ماجستير الدراسات القرآنية</option>
                     </select>
                     <select id="thesesStatusFilter">
                         <option value="">جميع الحالات</option>
                         <option value="منجزة">منجزة</option>
                         <option value="جارية">جارية</option>
                     </select>
+                    <button class="export-all-btn" id="toggleThesesPrintControls" title="طباعة مخصصة حسب المحددات">
+                        طباعة مخصصة
+                    </button>
+                </div>
+                <div id="thesesPrintControls" class="theses-print-controls" style="display: none;">
+                    <div class="theses-print-grid">
+                        <div class="theses-print-field">
+                            <label for="thesesPrintProgramSelect">البرامج (اختيار متعدد)</label>
+                            <select id="thesesPrintProgramSelect" multiple size="6"></select>
+                        </div>
+                        <div class="theses-print-field">
+                            <label for="thesesPrintYearSelect">السنوات (اختيار متعدد)</label>
+                            <select id="thesesPrintYearSelect" multiple size="6"></select>
+                        </div>
+                        <div class="theses-print-field">
+                            <label for="thesesPrintSupervisorSelect">المشرفون (اختيار متعدد)</label>
+                            <select id="thesesPrintSupervisorSelect" multiple size="6"></select>
+                        </div>
+                    </div>
+                    <div class="theses-print-actions">
+                        <button class="export-all-btn" id="printFilteredThesesBtn" title="طباعة حسب التحديد">
+                            طباعة النتائج المحددة
+                        </button>
+                        <span id="thesesPrintCountHint" class="theses-print-hint"></span>
+                    </div>
                 </div>
             </div>
             <div class="data-table-container">

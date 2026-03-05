@@ -515,6 +515,8 @@ async function loadYearData(year) {
     showAllLeaderboard = false;
 
     hideLoading();
+    populateThesesTypeFilter();
+    populateThesesPrintControls();
     renderAll();
 }
 
@@ -600,6 +602,282 @@ function getThesisTypeName(type) {
     if (type === 'ماجستير') return 'مشروع بحثي';
     if (type === 'دكتوراه') return 'رسالة علمية';
     return type;
+}
+
+function getThesisProgramLabel(type, specialization) {
+    const thesisTypeName = getThesisTypeName((type || '').trim());
+    const thesisSpec = (specialization || '').trim();
+    return thesisSpec ? `${thesisTypeName} ${thesisSpec}` : thesisTypeName;
+}
+
+function getDepartmentScopedThesesSource() {
+    const source = Array.isArray(allData?.theses) && allData.theses.length > 0
+        ? allData.theses
+        : (Array.isArray(data?.theses) ? data.theses : []);
+    if (currentDepartment === 'all') return [...source];
+
+    const deptIds = new Set(
+        (allData?.faculty || [])
+            .filter(f => (f.department || '').trim() === currentDepartment)
+            .map(f => String(f.id).trim())
+    );
+    return source.filter(t => deptIds.has(String(t.supervisor_id || '').trim()));
+}
+
+function populateThesesTypeFilter() {
+    const filterEl = document.getElementById('thesesTypeFilter');
+    if (!filterEl) return;
+
+    const previousValue = filterEl.value || '';
+    const source = getDepartmentScopedThesesSource();
+    const pairs = new Map();
+
+    source.forEach(thesis => {
+        const type = (thesis.type || '').trim();
+        const spec = (thesis.specialization || '').trim();
+        if (!type || !spec) return;
+        const key = `${type}-${spec}`;
+        if (!pairs.has(key)) {
+            pairs.set(key, { key, type, spec });
+        }
+    });
+
+    const typeOrder = { 'دكتوراه': 0, 'ماجستير': 1 };
+    const options = Array.from(pairs.values()).sort((a, b) => {
+        const aOrder = typeOrder[a.type] ?? 99;
+        const bOrder = typeOrder[b.type] ?? 99;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.spec.localeCompare(b.spec, 'ar');
+    });
+
+    filterEl.innerHTML = '';
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'جميع البرامج';
+    filterEl.appendChild(allOption);
+
+    options.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.key;
+        option.textContent = getThesisProgramLabel(item.type, item.spec);
+        filterEl.appendChild(option);
+    });
+
+    const hasPrevious = Array.from(filterEl.options).some(opt => opt.value === previousValue);
+    filterEl.value = hasPrevious ? previousValue : '';
+}
+
+function populateThesesPrintControls() {
+    const programEl = document.getElementById('thesesPrintProgramSelect');
+    const yearEl = document.getElementById('thesesPrintYearSelect');
+    const supervisorEl = document.getElementById('thesesPrintSupervisorSelect');
+    if (!programEl || !yearEl || !supervisorEl) return;
+
+    const prevPrograms = new Set(Array.from(programEl.selectedOptions).map(o => o.value));
+    const prevYears = new Set(Array.from(yearEl.selectedOptions).map(o => o.value));
+    const prevSupervisors = new Set(Array.from(supervisorEl.selectedOptions).map(o => o.value));
+
+    const source = getDepartmentScopedThesesSource();
+
+    const programMap = new Map();
+    const yearSet = new Set();
+    const supervisorSet = new Set();
+
+    source.forEach(thesis => {
+        const type = (thesis.type || '').trim();
+        const spec = (thesis.specialization || '').trim();
+        const year = String(thesis.year || '').trim();
+        const supervisorId = String(thesis.supervisor_id || '').trim();
+
+        if (type && spec) {
+            const key = `${type}|${spec}`;
+            if (!programMap.has(key)) {
+                programMap.set(key, { key, type, spec });
+            }
+        }
+        if (year) yearSet.add(year);
+        if (supervisorId) supervisorSet.add(supervisorId);
+    });
+
+    const typeOrder = { 'دكتوراه': 0, 'ماجستير': 1 };
+    const programs = Array.from(programMap.values()).sort((a, b) => {
+        const aOrder = typeOrder[a.type] ?? 99;
+        const bOrder = typeOrder[b.type] ?? 99;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.spec.localeCompare(b.spec, 'ar');
+    });
+    const years = Array.from(yearSet).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
+    const supervisors = Array.from(supervisorSet).map(id => ({
+        id,
+        label: getMemberName(id) === '-' ? id : getMemberName(id)
+    })).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+
+    programEl.innerHTML = '';
+    yearEl.innerHTML = '';
+    supervisorEl.innerHTML = '';
+
+    programs.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.key;
+        option.textContent = getThesisProgramLabel(item.type, item.spec);
+        if (prevPrograms.has(item.key)) option.selected = true;
+        programEl.appendChild(option);
+    });
+
+    years.forEach(year => {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = `سنة ${year}هـ`;
+        if (prevYears.has(year)) option.selected = true;
+        yearEl.appendChild(option);
+    });
+
+    supervisors.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.label;
+        if (prevSupervisors.has(item.id)) option.selected = true;
+        supervisorEl.appendChild(option);
+    });
+
+    updateThesesPrintCountHint();
+}
+
+function getMultiSelectValues(selectId) {
+    const el = document.getElementById(selectId);
+    if (!el) return [];
+    return Array.from(el.selectedOptions).map(o => o.value);
+}
+
+function getThesesPrintFilteredRecords() {
+    const selectedPrograms = new Set(getMultiSelectValues('thesesPrintProgramSelect'));
+    const selectedYears = new Set(getMultiSelectValues('thesesPrintYearSelect'));
+    const selectedSupervisors = new Set(getMultiSelectValues('thesesPrintSupervisorSelect'));
+
+    let filtered = getDepartmentScopedThesesSource();
+
+    if (selectedPrograms.size > 0) {
+        filtered = filtered.filter(thesis => {
+            const key = `${(thesis.type || '').trim()}|${(thesis.specialization || '').trim()}`;
+            return selectedPrograms.has(key);
+        });
+    }
+    if (selectedYears.size > 0) {
+        filtered = filtered.filter(thesis => selectedYears.has(String(thesis.year || '').trim()));
+    }
+    if (selectedSupervisors.size > 0) {
+        filtered = filtered.filter(thesis => selectedSupervisors.has(String(thesis.supervisor_id || '').trim()));
+    }
+
+    return sortByDateDesc(filtered, thesis => thesis.defense_date);
+}
+
+function updateThesesPrintCountHint() {
+    const hintEl = document.getElementById('thesesPrintCountHint');
+    if (!hintEl) return;
+    const count = getThesesPrintFilteredRecords().length;
+    hintEl.textContent = `عدد النتائج المطابقة: ${formatArabicDigits(count)}`;
+}
+
+function toggleThesesPrintControls() {
+    const controlsEl = document.getElementById('thesesPrintControls');
+    const toggleBtn = document.getElementById('toggleThesesPrintControls');
+    if (!controlsEl || !toggleBtn) return;
+
+    const isVisible = controlsEl.style.display !== 'none';
+    if (isVisible) {
+        controlsEl.style.display = 'none';
+        toggleBtn.textContent = 'طباعة مخصصة';
+        return;
+    }
+
+    populateThesesPrintControls();
+    controlsEl.style.display = 'block';
+    toggleBtn.textContent = 'إخفاء الطباعة المخصصة';
+}
+
+function printFilteredTheses() {
+    const records = getThesesPrintFilteredRecords();
+    if (!records.length) {
+        alert('لا توجد بيانات مطابقة للمحددات الحالية.');
+        return;
+    }
+
+    const programLabels = Array.from(document.getElementById('thesesPrintProgramSelect')?.selectedOptions || []).map(o => o.textContent.trim());
+    const yearLabels = Array.from(document.getElementById('thesesPrintYearSelect')?.selectedOptions || []).map(o => o.textContent.trim());
+    const supervisorLabels = Array.from(document.getElementById('thesesPrintSupervisorSelect')?.selectedOptions || []).map(o => o.textContent.trim());
+
+    const programsText = programLabels.length ? programLabels.join('، ') : 'الكل';
+    const yearsText = yearLabels.length ? yearLabels.join('، ') : 'الكل';
+    const supervisorsText = supervisorLabels.length ? supervisorLabels.join('، ') : 'الكل';
+
+    const rowsHtml = records.map((thesis, index) => {
+        const program = getThesisProgramLabel(thesis.type, thesis.specialization);
+        const supervisor = getMemberName(thesis.supervisor_id);
+        return `
+            <tr>
+                <td>${formatArabicDigits(index + 1)}</td>
+                <td>${escapeHtml(thesis.year || '-')}</td>
+                <td>${escapeHtml(program || '-')}</td>
+                <td>${escapeHtml(thesis.student_name || '-')}</td>
+                <td>${escapeHtml(thesis.title || '-')}</td>
+                <td>${escapeHtml(supervisor || '-')}</td>
+                <td>${escapeHtml(thesis.status || '-')}</td>
+                <td>${escapeHtml(formatDate(thesis.defense_date))}</td>
+            </tr>
+        `;
+    }).join('');
+
+    const printContent = `
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>طباعة مخصصة للرسائل</title>
+    <style>
+        body { font-family: 'Cairo', sans-serif; margin: 20px; color: #1f2937; }
+        h1 { margin: 0 0 8px; font-size: 24px; }
+        .meta { margin-bottom: 16px; line-height: 1.8; }
+        .meta b { color: #0f172a; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border: 1px solid #d1d5db; padding: 8px; vertical-align: top; text-align: right; }
+        th { background: #f3f4f6; }
+        .count { margin: 10px 0 16px; font-weight: 700; color: #111827; }
+        @media print { body { margin: 10px; } }
+    </style>
+</head>
+<body>
+    <h1>طباعة مخصصة للرسائل والمشاريع البحثية</h1>
+    <div class="meta">
+        <div><b>البرامج:</b> ${escapeHtml(programsText)}</div>
+        <div><b>السنوات:</b> ${escapeHtml(yearsText)}</div>
+        <div><b>المشرفون:</b> ${escapeHtml(supervisorsText)}</div>
+    </div>
+    <div class="count">إجمالي النتائج: ${formatArabicDigits(records.length)}</div>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>السنة</th>
+                <th>البرنامج</th>
+                <th>الطالب</th>
+                <th>عنوان البحث</th>
+                <th>المشرف</th>
+                <th>الحالة</th>
+                <th>تاريخ المناقشة</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${rowsHtml}
+        </tbody>
+    </table>
+    <script>window.onload = function(){ window.print(); };</script>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
 }
 
 function formatDate(dateStr) {
@@ -3748,8 +4026,7 @@ function showThesisDetails(thesis) {
     const modal = document.getElementById('thesisModal');
     const thesisType = (thesis.type || '').trim();
     const thesisSpec = (thesis.specialization || '').trim();
-    const thesisTypeName = getThesisTypeName(thesisType);
-    const programName = thesisTypeName + ' ' + (thesisSpec === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
+    const programName = getThesisProgramLabel(thesisType, thesisSpec);
     
     document.getElementById('modalBadge').textContent = programName;
     document.getElementById('modalBadge').className = 'thesis-badge ' + (thesisType === 'دكتوراه' ? 'phd' : 'masters');
@@ -3809,8 +4086,7 @@ function printThesis() {
     const thesis = currentThesis;
     const thesisType = (thesis.type || '').trim();
     const thesisSpec = (thesis.specialization || '').trim();
-    const thesisTypeName = getThesisTypeName(thesisType);
-    const programName = thesisTypeName + ' ' + (thesisSpec === 'قراءات' ? 'القراءات' : 'الدراسات القرآنية');
+    const programName = getThesisProgramLabel(thesisType, thesisSpec);
     const universityName = config.university_name || 'جامعة الطائف';
     const departmentName = config.department_name || 'قسم القراءات';
     
@@ -5515,6 +5791,11 @@ function setupFilters() {
     document.getElementById('thesesSearch')?.addEventListener('input', renderTheses);
     document.getElementById('thesesTypeFilter')?.addEventListener('change', renderTheses);
     document.getElementById('thesesStatusFilter')?.addEventListener('change', renderTheses);
+    document.getElementById('toggleThesesPrintControls')?.addEventListener('click', toggleThesesPrintControls);
+    document.getElementById('printFilteredThesesBtn')?.addEventListener('click', printFilteredTheses);
+    ['thesesPrintProgramSelect', 'thesesPrintYearSelect', 'thesesPrintSupervisorSelect'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', updateThesesPrintCountHint);
+    });
     
     document.getElementById('pubSearch')?.addEventListener('input', renderPublications);
     document.getElementById('pubCitationsFilter')?.addEventListener('change', renderPublications);
