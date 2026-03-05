@@ -597,16 +597,43 @@ function getShortName(fullName) {
     return prefix + ' ' + shortName;
 }
 
+function isMastersScientificThesis(thesis) {
+    if (!thesis) return false;
+    const type = (thesis.type || '').trim();
+    if (type !== 'ماجستير') return false;
+
+    const year = parseInt(String(thesis.year || '').trim(), 10);
+    const specialization = (thesis.specialization || '').trim();
+
+    return (!Number.isNaN(year) && year < 1440) || specialization === 'العقيدة';
+}
+
+function isScientificThesis(thesis) {
+    if (!thesis) return false;
+    const type = (thesis.type || '').trim();
+    if (type === 'دكتوراه') return true;
+    return isMastersScientificThesis(thesis);
+}
+
 // دالة لتحويل مسمى نوع الرسالة للعرض
-function getThesisTypeName(type) {
-    if (type === 'ماجستير') return 'مشروع بحثي';
+function getThesisTypeName(type, thesis = null) {
     if (type === 'دكتوراه') return 'رسالة علمية';
+    if (type === 'ماجستير') return (thesis && isScientificThesis(thesis)) ? 'رسالة علمية' : 'مشروع بحثي';
     return type;
 }
 
-function getThesisProgramLabel(type, specialization) {
-    const thesisTypeName = getThesisTypeName((type || '').trim());
+function getThesisProgramLabel(typeOrThesis, specialization = '') {
+    if (typeof typeOrThesis === 'object' && typeOrThesis !== null) {
+        const thesis = typeOrThesis;
+        const thesisType = (thesis.type || '').trim();
+        const thesisSpec = (thesis.specialization || '').trim();
+        const thesisTypeName = getThesisTypeName(thesisType, thesis);
+        return thesisSpec ? `${thesisTypeName} ${thesisSpec}` : thesisTypeName;
+    }
+
+    const thesisType = (typeOrThesis || '').trim();
     const thesisSpec = (specialization || '').trim();
+    const thesisTypeName = thesisType === 'ماجستير' ? 'ماجستير' : getThesisTypeName(thesisType);
     return thesisSpec ? `${thesisTypeName} ${thesisSpec}` : thesisTypeName;
 }
 
@@ -812,7 +839,7 @@ function printFilteredTheses() {
     const supervisorsText = supervisorLabels.length ? supervisorLabels.join('، ') : 'الكل';
 
     const rowsHtml = records.map((thesis, index) => {
-        const program = getThesisProgramLabel(thesis.type, thesis.specialization);
+        const program = getThesisProgramLabel(thesis);
         const supervisor = getMemberName(thesis.supervisor_id);
         return `
             <tr>
@@ -2453,7 +2480,7 @@ function buildThesesStatDetailItems() {
     return theses.map((thesis, index) => {
         const title = String(thesis.title || '').trim() || 'عنوان غير متوفر';
         const studentName = String(thesis.student_name || '').trim() || 'طالب غير محدد';
-        const thesisType = getThesisTypeName(thesis.type || 'رسالة');
+        const thesisType = getThesisTypeName(thesis.type || 'رسالة', thesis);
         const supervisor = getMemberName(thesis.supervisor_id);
         const defenseDate = formatDate(thesis.defense_date);
 
@@ -3374,17 +3401,17 @@ function renderDashboardCharts() {
     if (thesesCtx) {
         if (charts.theses) charts.theses.destroy();
         
-        const phdCompleted = data.theses.filter(t => t.type === 'دكتوراه' && t.status === 'منجزة').length;
-        const phdOngoing = data.theses.filter(t => t.type === 'دكتوراه' && t.status === 'جارية').length;
-        const mastersCompleted = data.theses.filter(t => t.type === 'ماجستير' && t.status === 'منجزة').length;
-        const mastersOngoing = data.theses.filter(t => t.type === 'ماجستير' && t.status === 'جارية').length;
+        const scientificCompleted = data.theses.filter(t => isScientificThesis(t) && t.status === 'منجزة').length;
+        const scientificOngoing = data.theses.filter(t => isScientificThesis(t) && t.status === 'جارية').length;
+        const projectCompleted = data.theses.filter(t => !isScientificThesis(t) && (t.type || '').trim() === 'ماجستير' && t.status === 'منجزة').length;
+        const projectOngoing = data.theses.filter(t => !isScientificThesis(t) && (t.type || '').trim() === 'ماجستير' && t.status === 'جارية').length;
         
         charts.theses = new Chart(thesesCtx, {
             type: 'doughnut',
             data: {
                 labels: ['رسائل علمية منجزة', 'رسائل علمية جارية', 'مشاريع بحثية منجزة', 'مشاريع بحثية جارية'],
                 datasets: [{
-                    data: [phdCompleted, phdOngoing, mastersCompleted, mastersOngoing],
+                    data: [scientificCompleted, scientificOngoing, projectCompleted, projectOngoing],
                     backgroundColor: [
                         'rgba(245, 158, 11, 0.8)',
                         'rgba(245, 158, 11, 0.4)',
@@ -4009,7 +4036,7 @@ function renderTheses() {
         tr.style.cursor = 'pointer';
         tr.onclick = () => showThesisDetails(thesis);
         tr.innerHTML = `
-            <td><span class="badge badge-${(thesis.type || '').trim() === 'دكتوراه' ? 'phd' : 'masters'}">${getThesisTypeName(thesis.type)}</span></td>
+            <td><span class="badge badge-${(thesis.type || '').trim() === 'دكتوراه' ? 'phd' : 'masters'}">${getThesisTypeName(thesis.type, thesis)}</span></td>
             <td>${thesis.student_name}</td>
             <td>${thesis.title}</td>
             <td>${getMemberName(thesis.supervisor_id)}</td>
@@ -4025,8 +4052,7 @@ function showThesisDetails(thesis) {
     currentDetailContext = { entity: 'theses', record: thesis, modalKind: 'thesis' };
     const modal = document.getElementById('thesisModal');
     const thesisType = (thesis.type || '').trim();
-    const thesisSpec = (thesis.specialization || '').trim();
-    const programName = getThesisProgramLabel(thesisType, thesisSpec);
+    const programName = getThesisProgramLabel(thesis);
     
     document.getElementById('modalBadge').textContent = programName;
     document.getElementById('modalBadge').className = 'thesis-badge ' + (thesisType === 'دكتوراه' ? 'phd' : 'masters');
@@ -4085,8 +4111,7 @@ function printThesis() {
     
     const thesis = currentThesis;
     const thesisType = (thesis.type || '').trim();
-    const thesisSpec = (thesis.specialization || '').trim();
-    const programName = getThesisProgramLabel(thesisType, thesisSpec);
+    const programName = getThesisProgramLabel(thesis);
     const universityName = config.university_name || 'جامعة الطائف';
     const departmentName = config.department_name || 'قسم القراءات';
     
@@ -4098,8 +4123,8 @@ function printThesis() {
     const examiner1 = thesis.examiner1_id?.trim() && examiner1Name !== '-' ? examiner1Name : null;
     const examiner2 = thesis.examiner2_id?.trim() && examiner2Name !== '-' ? examiner2Name : null;
     
-    // تحديد عنوان الصفحة حسب النوع
-    const pageTitle = thesisType === 'دكتوراه' ? 'بيانات الرسالة العلمية' : 'بيانات المشروع البحثي';
+    // تحديد عنوان الصفحة حسب تصنيف الرسالة (رسالة علمية/مشروع بحثي)
+    const pageTitle = isScientificThesis(thesis) ? 'بيانات الرسالة العلمية' : 'بيانات المشروع البحثي';
     
     const printContent = `
 <!DOCTYPE html>
@@ -4302,7 +4327,7 @@ function printThesis() {
         <div class="print-header">
             <div class="university-name">${universityName}</div>
             <div class="department-name">${departmentName}</div>
-            <div class="document-title">بيانات الرسالة العلمية</div>
+            <div class="document-title">${pageTitle}</div>
         </div>
         
         <div style="text-align: center;">
