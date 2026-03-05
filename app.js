@@ -1272,8 +1272,8 @@ function calculateMemberPoints(memberId) {
     );
     breakdown.phdSupervision = phdSupervised.length + scientificMastersSupervised.length;
     breakdown.mastersSupervision = projectMastersSupervised.length;
-    points += phdSupervised.length * (weights.phd_supervision || 10);
-    points += (scientificMastersSupervised.length + projectMastersSupervised.length) * (weights.masters_supervision || 3);
+    points += (phdSupervised.length + scientificMastersSupervised.length) * (weights.phd_supervision || 10);
+    points += projectMastersSupervised.length * (weights.masters_supervision || 3);
     
     // 4. الإشراف المشارك (رسائل علمية + مشاريع بحثية)
     const phdCoSupervised = data.theses.filter(t => 
@@ -1293,8 +1293,8 @@ function calculateMemberPoints(memberId) {
     );
     breakdown.phdCoSupervision = phdCoSupervised.length + scientificMastersCoSupervised.length;
     breakdown.mastersCoSupervision = projectMastersCoSupervised.length;
-    points += phdCoSupervised.length * (weights.phd_co_supervision || 5);
-    points += (scientificMastersCoSupervised.length + projectMastersCoSupervised.length) * (weights.masters_co_supervision || 2);
+    points += (phdCoSupervised.length + scientificMastersCoSupervised.length) * (weights.phd_co_supervision || 5);
+    points += projectMastersCoSupervised.length * (weights.masters_co_supervision || 2);
     
     // 7. مناقشة الرسائل العلمية (دكتوراه + ماجستير وفق التصنيف)
     const phdExamined = data.theses.filter(t => 
@@ -1313,8 +1313,8 @@ function calculateMemberPoints(memberId) {
     );
     breakdown.phdDiscussion = phdExamined.length + scientificMastersExamined.length;
     breakdown.mastersDiscussion = projectMastersExamined.length;
-    points += phdExamined.length * (weights.phd_discussion || 5);
-    points += (scientificMastersExamined.length + projectMastersExamined.length) * (weights.masters_discussion || 2);
+    points += (phdExamined.length + scientificMastersExamined.length) * (weights.phd_discussion || 5);
+    points += projectMastersExamined.length * (weights.masters_discussion || 2);
     
     // 9. المشاركات العلمية من participations
     data.participations.forEach(p => {
