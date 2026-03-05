@@ -605,7 +605,7 @@ function isMastersScientificThesis(thesis) {
     const year = parseInt(String(thesis.year || '').trim(), 10);
     const specialization = (thesis.specialization || '').trim();
 
-    return (!Number.isNaN(year) && year < 1440) || specialization === 'العقيدة';
+    return (!Number.isNaN(year) && year <= 1440) || specialization === 'العقيدة';
 }
 
 function isScientificThesis(thesis) {
@@ -1254,49 +1254,67 @@ function calculateMemberPoints(memberId) {
     breakdown.studentResearch = studentResearch.length;
     points += studentResearch.length * (weights.student_research || 8);
     
-    // 3. الإشراف على الدكتوراه (النقاط تُحتسب فقط للرسائل المنجزة)
+    // 3. الإشراف على الرسائل العلمية (دكتوراه + ماجستير وفق تصنيف الرسالة)
     const phdSupervised = data.theses.filter(t => 
         t.type === 'دكتوراه' && String(t.supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
     );
-    breakdown.phdSupervision = phdSupervised.length;
+    const scientificMastersSupervised = data.theses.filter(t =>
+        (t.type || '').trim() === 'ماجستير' &&
+        isScientificThesis(t) &&
+        String(t.supervisor_id).trim() === memberIdStr &&
+        t.status === 'منجزة'
+    );
+    const projectMastersSupervised = data.theses.filter(t =>
+        (t.type || '').trim() === 'ماجستير' &&
+        !isScientificThesis(t) &&
+        String(t.supervisor_id).trim() === memberIdStr &&
+        t.status === 'منجزة'
+    );
+    breakdown.phdSupervision = phdSupervised.length + scientificMastersSupervised.length;
+    breakdown.mastersSupervision = projectMastersSupervised.length;
     points += phdSupervised.length * (weights.phd_supervision || 10);
+    points += (scientificMastersSupervised.length + projectMastersSupervised.length) * (weights.masters_supervision || 3);
     
-    // 4. الإشراف المشارك على الدكتوراه (النقاط تُحتسب فقط للرسائل المنجزة)
+    // 4. الإشراف المشارك (رسائل علمية + مشاريع بحثية)
     const phdCoSupervised = data.theses.filter(t => 
         t.type === 'دكتوراه' && String(t.co_supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
     );
-    breakdown.phdCoSupervision = phdCoSupervised.length;
+    const scientificMastersCoSupervised = data.theses.filter(t =>
+        (t.type || '').trim() === 'ماجستير' &&
+        isScientificThesis(t) &&
+        String(t.co_supervisor_id).trim() === memberIdStr &&
+        t.status === 'منجزة'
+    );
+    const projectMastersCoSupervised = data.theses.filter(t =>
+        (t.type || '').trim() === 'ماجستير' &&
+        !isScientificThesis(t) &&
+        String(t.co_supervisor_id).trim() === memberIdStr &&
+        t.status === 'منجزة'
+    );
+    breakdown.phdCoSupervision = phdCoSupervised.length + scientificMastersCoSupervised.length;
+    breakdown.mastersCoSupervision = projectMastersCoSupervised.length;
     points += phdCoSupervised.length * (weights.phd_co_supervision || 5);
+    points += (scientificMastersCoSupervised.length + projectMastersCoSupervised.length) * (weights.masters_co_supervision || 2);
     
-    // 5. الإشراف على الماجستير (النقاط تُحتسب فقط للرسائل المنجزة)
-    const mastersSupervised = data.theses.filter(t => 
-        t.type === 'ماجستير' && String(t.supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
-    );
-    breakdown.mastersSupervision = mastersSupervised.length;
-    points += mastersSupervised.length * (weights.masters_supervision || 3);
-    
-    // 6. الإشراف المشارك على الماجستير (النقاط تُحتسب فقط للرسائل المنجزة)
-    const mastersCoSupervised = data.theses.filter(t => 
-        t.type === 'ماجستير' && String(t.co_supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
-    );
-    breakdown.mastersCoSupervision = mastersCoSupervised.length;
-    points += mastersCoSupervised.length * (weights.masters_co_supervision || 2);
-    
-    // 7. مناقشة رسائل الدكتوراه (داخلية)
+    // 7. مناقشة الرسائل العلمية (دكتوراه + ماجستير وفق التصنيف)
     const phdExamined = data.theses.filter(t => 
         t.type === 'دكتوراه' && 
         (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr)
     );
-    breakdown.phdDiscussion = phdExamined.length;
-    points += phdExamined.length * (weights.phd_discussion || 5);
-    
-    // 8. مناقشة رسائل الماجستير (داخلية)
-    const mastersExamined = data.theses.filter(t => 
-        t.type === 'ماجستير' && 
+    const scientificMastersExamined = data.theses.filter(t =>
+        (t.type || '').trim() === 'ماجستير' &&
+        isScientificThesis(t) &&
         (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr)
     );
-    breakdown.mastersDiscussion = mastersExamined.length;
-    points += mastersExamined.length * (weights.masters_discussion || 2);
+    const projectMastersExamined = data.theses.filter(t =>
+        (t.type || '').trim() === 'ماجستير' &&
+        !isScientificThesis(t) &&
+        (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr)
+    );
+    breakdown.phdDiscussion = phdExamined.length + scientificMastersExamined.length;
+    breakdown.mastersDiscussion = projectMastersExamined.length;
+    points += phdExamined.length * (weights.phd_discussion || 5);
+    points += (scientificMastersExamined.length + projectMastersExamined.length) * (weights.masters_discussion || 2);
     
     // 9. المشاركات العلمية من participations
     data.participations.forEach(p => {
