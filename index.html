@@ -277,41 +277,43 @@
         <section id="theses" class="tab-content">
             <div class="section-header">
                 <h2>📚 الإشراف والمناقشة</h2>
-                <div class="filters">
+                <div class="filters theses-filters">
                     <input type="text" id="thesesSearch" placeholder="🔍 بحث في الرسائل...">
-                    <select id="thesesTypeFilter">
-                        <option value="">جميع البرامج</option>
-                    </select>
                     <select id="thesesStatusFilter">
                         <option value="">جميع الحالات</option>
                         <option value="منجزة">منجزة</option>
                         <option value="جارية">جارية</option>
                     </select>
-                    <button class="export-all-btn" id="toggleThesesPrintControls" title="طباعة مخصصة حسب المحددات">
-                        طباعة مخصصة
+                    <div class="theses-multi-filter">
+                        <div class="theses-multi-filter-row">
+                            <select id="thesesTypeFilter" class="theses-filter-select" data-theses-filter-kind="program">
+                                <option value="">جميع البرامج</option>
+                            </select>
+                            <button type="button" class="theses-filter-plus-btn" id="addThesesProgramFilter" title="إضافة برنامج">+</button>
+                        </div>
+                        <div id="thesesProgramFilterExtras" class="theses-multi-filter-extra"></div>
+                    </div>
+                    <div class="theses-multi-filter">
+                        <div class="theses-multi-filter-row">
+                            <select id="thesesYearFilter" class="theses-filter-select" data-theses-filter-kind="year">
+                                <option value="">جميع السنوات</option>
+                            </select>
+                            <button type="button" class="theses-filter-plus-btn" id="addThesesYearFilter" title="إضافة سنة">+</button>
+                        </div>
+                        <div id="thesesYearFilterExtras" class="theses-multi-filter-extra"></div>
+                    </div>
+                    <div class="theses-multi-filter">
+                        <div class="theses-multi-filter-row">
+                            <select id="thesesSupervisorFilter" class="theses-filter-select" data-theses-filter-kind="supervisor">
+                                <option value="">جميع المشرفين</option>
+                            </select>
+                            <button type="button" class="theses-filter-plus-btn" id="addThesesSupervisorFilter" title="إضافة مشرف">+</button>
+                        </div>
+                        <div id="thesesSupervisorFilterExtras" class="theses-multi-filter-extra"></div>
+                    </div>
+                    <button class="export-all-btn" id="printFilteredThesesBtn" title="طباعة النتائج الحالية">
+                        طباعة النتائج
                     </button>
-                </div>
-                <div id="thesesPrintControls" class="theses-print-controls" style="display: none;">
-                    <div class="theses-print-grid">
-                        <div class="theses-print-field">
-                            <label for="thesesPrintProgramSelect">البرامج (اختيار متعدد)</label>
-                            <select id="thesesPrintProgramSelect" multiple size="6"></select>
-                        </div>
-                        <div class="theses-print-field">
-                            <label for="thesesPrintYearSelect">السنوات (اختيار متعدد)</label>
-                            <select id="thesesPrintYearSelect" multiple size="6"></select>
-                        </div>
-                        <div class="theses-print-field">
-                            <label for="thesesPrintSupervisorSelect">المشرفون (اختيار متعدد)</label>
-                            <select id="thesesPrintSupervisorSelect" multiple size="6"></select>
-                        </div>
-                    </div>
-                    <div class="theses-print-actions">
-                        <button class="export-all-btn" id="printFilteredThesesBtn" title="طباعة حسب التحديد">
-                            طباعة النتائج المحددة
-                        </button>
-                        <span id="thesesPrintCountHint" class="theses-print-hint"></span>
-                    </div>
                 </div>
             </div>
             <div class="data-table-container">
