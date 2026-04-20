@@ -819,7 +819,7 @@ function getSelectedThesesFilterLabels(kind) {
 
 function getFilteredThesesRecords() {
     const statusFilter = String(document.getElementById('thesesStatusFilter')?.value || '').trim();
-    const searchTerm = String(document.getElementById('thesesSearch')?.value || '').toLowerCase().trim();
+    const searchTerm = normalizeSearchText(document.getElementById('thesesSearch')?.value || '');
     const selectedPrograms = new Set(getSelectedThesesFilterValues('program'));
     const selectedYears = new Set(getSelectedThesesFilterValues('year'));
     const selectedSupervisors = new Set(getSelectedThesesFilterValues('supervisor'));
@@ -847,9 +847,9 @@ function getFilteredThesesRecords() {
 
     if (searchTerm) {
         filtered = filtered.filter(thesis =>
-            (thesis.title && thesis.title.toLowerCase().includes(searchTerm)) ||
-            (thesis.student_name && thesis.student_name.toLowerCase().includes(searchTerm)) ||
-            getMemberName(thesis.supervisor_id).toLowerCase().includes(searchTerm)
+            normalizeSearchText(thesis.title || '').includes(searchTerm) ||
+            normalizeSearchText(thesis.student_name || '').includes(searchTerm) ||
+            normalizeSearchText(getMemberName(thesis.supervisor_id)).includes(searchTerm)
         );
     }
 
@@ -2428,11 +2428,33 @@ function setupSectionsFilters() {
     populateProgramSelector();
 }
 
-function normalizeSearchText(value) {
+function normalizeArabicSearchBase(value) {
     return normalizeArabicDigits(String(value || ''))
         .toLowerCase()
-        .replace(/\s+/g, ' ')
+        .replace(/[\u200c-\u200f\u061c]/g, '')
+        .replace(/[\u064b-\u065f\u0670\u06d6-\u06ed]/g, '')
+        .replace(/\u0640/g, '')
+        .replace(/[أإآٱ]/g, 'ا')
+        .replace(/ؤ/g, 'و')
+        .replace(/ئ/g, 'ي')
+        .replace(/ء/g, '')
+        .replace(/و{2,}/g, 'و')
+        .replace(/ي{2,}/g, 'ي')
+        .replace(/ى/g, 'ي')
+        .replace(/[ةه]/g, 'ه')
+        .replace(/\s+/g, '')
         .trim();
+}
+
+function normalizeSearchText(value) {
+    return normalizeArabicSearchBase(value);
+}
+
+function getSearchTokens(value) {
+    return normalizeArabicDigits(String(value || ''))
+        .split(/\s+/)
+        .map(token => normalizeSearchText(token))
+        .filter(Boolean);
 }
 
 function setupStatCardInteractions() {
@@ -2719,7 +2741,7 @@ function renderDashboardStatDetailsList(query) {
     if (!listContainer || !counter) return;
 
     const normalizedQuery = normalizeSearchText(query || '');
-    const tokens = normalizedQuery.split(' ').filter(Boolean);
+    const tokens = getSearchTokens(query || '');
 
     let results = [...statsDetailState.items];
     if (tokens.length > 0) {

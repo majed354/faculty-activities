@@ -525,12 +525,41 @@
         const JOURNAL_CACHE_KEY = 'faculty_activities_journals_cache_v2';
         const FACULTY_DEPARTMENT_ORDER = ['القراءات', 'الشريعة', 'الأنظمة', 'الثقافة الإسلامية'];
 
+        function normalizeArabicDigits(value) {
+            if (value === null || value === undefined) return '';
+            const map = {
+                '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+                '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+                '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
+                '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
+            };
+            return String(value).replace(/[٠-٩۰-۹]/g, ch => map[ch] || ch);
+        }
+
+        function normalizeArabicSearchBase(value) {
+            return normalizeArabicDigits(String(value || ''))
+                .toLowerCase()
+                .replace(/[\u200c-\u200f\u061c]/g, '')
+                .replace(/[\u064b-\u065f\u0670\u06d6-\u06ed]/g, '')
+                .replace(/\u0640/g, '')
+                .replace(/[أإآٱ]/g, 'ا')
+                .replace(/ؤ/g, 'و')
+                .replace(/ئ/g, 'ي')
+                .replace(/ء/g, '')
+                .replace(/و{2,}/g, 'و')
+                .replace(/ي{2,}/g, 'ي')
+                .replace(/ى/g, 'ي')
+                .replace(/[ةه]/g, 'ه')
+                .replace(/\s+/g, '')
+                .trim();
+        }
+
         function normalizeJournalText(value) {
-            return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+            return normalizeArabicSearchBase(value);
         }
 
         function normalizeSearchText(value) {
-            return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+            return normalizeArabicSearchBase(value);
         }
 
         function escapeHtmlAttr(value) {
