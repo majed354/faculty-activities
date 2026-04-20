@@ -243,8 +243,8 @@
                 </optgroup>
 
                 <optgroup label="🎓 الإشراف والمناقشة">
-                    <option value="thesis_supervision">إشراف على رسالة علمية</option>
-                    <option value="thesis_discussion_internal">مناقشة داخلية (داخل الكلية)</option>
+                    <option value="thesis_supervision">إشراف على رسالة / مشروع بحثي</option>
+                    <option value="thesis_discussion_internal">مناقشة داخلية لرسالة / مشروع</option>
                     <option value="event_discussion_external">مناقشة خارجية (جامعة أخرى)</option>
                 </optgroup>
 
@@ -341,7 +341,10 @@
         </div>
 
         <div id="form-theses" class="form-section">
-            <h3 style="color: var(--amber-500); margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">بيانات الرسالة العلمية</h3>
+            <h3 style="color: var(--amber-500); margin-bottom: 12px; border-bottom: 1px solid #444; padding-bottom: 10px;">بيانات الرسالة / المشروع البحثي</h3>
+            <p style="color: var(--gray-400); font-size: 0.9rem; margin-bottom: 18px;">
+                يُستخدم هذا النموذج لإدخال الرسالة العلمية أو المشروع البحثي، وكذلك المناقشة الداخلية لهما.
+            </p>
             <div class="input-grid">
                 <div class="form-group">
                     <label>السنة (هجري) <span style="color: var(--rose-500);">*</span></label>
@@ -359,6 +362,10 @@
                     <select id="thesis_spec">
                         <option value="قراءات">قراءات</option>
                         <option value="دراسات قرآنية">دراسات قرآنية</option>
+                        <option value="أصول الفقه">أصول الفقه</option>
+                        <option value="الفقه">الفقه</option>
+                        <option value="العقيدة">العقيدة</option>
+                        <option value="القانون">القانون</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -366,7 +373,7 @@
                     <input type="text" id="thesis_student_name">
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
-                    <label>عنوان الرسالة <span style="color: var(--rose-500);">*</span></label>
+                    <label>عنوان الرسالة / المشروع <span style="color: var(--rose-500);">*</span></label>
                     <input type="text" id="thesis_title">
                 </div>
 
@@ -407,7 +414,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>حالة الرسالة <span style="color: var(--rose-500);">*</span></label>
+                    <label>حالة الرسالة / المشروع <span style="color: var(--rose-500);">*</span></label>
                     <select id="thesis_status">
                         <option value="منجزة">منجزة</option>
                         <option value="جارية">جارية</option>

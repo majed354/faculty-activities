@@ -5464,6 +5464,10 @@ function generateActivityForm() {
                         <select class="form-select" id="actSpecialization">
                             <option value="قراءات">قراءات</option>
                             <option value="دراسات قرآنية">دراسات قرآنية</option>
+                            <option value="أصول الفقه">أصول الفقه</option>
+                            <option value="الفقه">الفقه</option>
+                            <option value="العقيدة">العقيدة</option>
+                            <option value="القانون">القانون</option>
                         </select>
                     </div>
                 </div>
@@ -5472,8 +5476,8 @@ function generateActivityForm() {
                     <input type="text" class="form-input" id="actStudentName" placeholder="اسم الطالب الكامل">
                 </div>
                 <div class="form-group">
-                    <label><span class="required">*</span> عنوان الرسالة</label>
-                    <textarea class="form-textarea" id="actTitle" placeholder="عنوان الرسالة"></textarea>
+                    <label><span class="required">*</span> عنوان الرسالة / المشروع</label>
+                    <textarea class="form-textarea" id="actTitle" placeholder="عنوان الرسالة أو المشروع"></textarea>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -5510,6 +5514,19 @@ function generateActivityForm() {
                         </select>
                     </div>
                     <div class="form-group">
+                        <label><span class="required">*</span> التخصص</label>
+                        <select class="form-select" id="actSpecialization">
+                            <option value="قراءات">قراءات</option>
+                            <option value="دراسات قرآنية">دراسات قرآنية</option>
+                            <option value="أصول الفقه">أصول الفقه</option>
+                            <option value="الفقه">الفقه</option>
+                            <option value="العقيدة">العقيدة</option>
+                            <option value="القانون">القانون</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
                         <label><span class="required">*</span> تاريخ المناقشة</label>
                         <input type="date" class="form-input" id="actDate">
                     </div>
@@ -5519,8 +5536,8 @@ function generateActivityForm() {
                     <input type="text" class="form-input" id="actStudentName" placeholder="اسم الطالب">
                 </div>
                 <div class="form-group">
-                    <label><span class="required">*</span> عنوان الرسالة</label>
-                    <textarea class="form-textarea" id="actTitle" placeholder="عنوان الرسالة"></textarea>
+                    <label><span class="required">*</span> عنوان الرسالة / المشروع</label>
+                    <textarea class="form-textarea" id="actTitle" placeholder="عنوان الرسالة أو المشروع"></textarea>
                 </div>
                 ${selectedActivityType.id === 'external_discussion' ? `
                 <div class="form-group">
