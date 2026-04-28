@@ -2390,6 +2390,13 @@ function renderSectionsTab() {
         renderProgramStats();
     }
     renderProgramQualityIndicators();
+    ensureCustomSectionsStatsState();
+    renderCustomStatsControls();
+    if (customSectionsStatsState.lastReport) {
+        renderCustomStatsReport(buildCustomStatsReport());
+    } else if (customSectionsStatsState.isOpen) {
+        renderCustomStatsEmpty('اختر السنوات والمؤشرات ثم أنشئ التقرير.');
+    }
 }
 
 function getFilteredRecordsForSections() {
@@ -3780,6 +3787,21 @@ function finalizeProgramBucket(bucket) {
 // مؤشرات البرامج الأكاديمية (تبويب إحصائيات الشعب)
 // ========================================
 let programQualityCharts = {};
+const CUSTOM_STATS_DEFAULT_METRICS = ['faculty_count', 'publications_count', 'teaching_faculty_count', 'sections_count', 'students_count'];
+const CUSTOM_STATS_EVENT_CATEGORIES = new Set([
+    'مؤتمر',
+    'ندوة',
+    'ورشة عمل',
+    'تحكيم علمي',
+    'تأليف كتب',
+    'استشارة علمية',
+    'مشاركة إعلامية',
+    'مناقشة خارجية',
+    'جائزة',
+    'براءة اختراع',
+    'بحوث الطلاب'
+]);
+let customSectionsStatsState = null;
 
 function renderProgramQualityIndicators() {
     const grid = document.getElementById('programQualityGrid');
@@ -4081,6 +4103,1055 @@ function renderProgramQualityCharts(stats, context = {}) {
                 }
             }
         });
+    }
+}
+
+function parseCustomStatsYear(value) {
+    const parsed = parseInt(normalizeArabicDigits(String(value ?? '')).trim(), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatCustomStatsNumber(value) {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue)
+        ? numericValue.toLocaleString('ar-SA')
+        : String(value ?? '-');
+}
+
+function formatCustomStatsYearLabel(year) {
+    return `${formatCustomStatsNumber(year)}هـ`;
+}
+
+function formatCustomStatsYearsLabel(years) {
+    const labels = years.map(formatCustomStatsYearLabel);
+    if (labels.length <= 3) return labels.join('، ');
+    return `${labels.slice(0, 3).join('، ')} ...`;
+}
+
+function getCustomStatsProgramLabel(programKey = currentProgram || 'all') {
+    if (!programKey || programKey === 'all') return 'جميع البرامج';
+    return programKey;
+}
+
+function getCustomStatsDepartmentLabel() {
+    return currentDepartment === 'all' ? 'جميع الأقسام' : `قسم ${currentDepartment}`;
+}
+
+function getCustomStatsAvailableYears() {
+    const years = new Set();
+
+    (config.available_years || []).forEach(year => {
+        const parsedYear = parseCustomStatsYear(year);
+        if (parsedYear !== null) years.add(parsedYear);
+    });
+
+    if (teachingData && Array.isArray(teachingData.years)) {
+        teachingData.years.forEach(year => {
+            const parsedYear = parseCustomStatsYear(year);
+            if (parsedYear !== null) years.add(parsedYear);
+        });
+    }
+
+    ['faculty', 'publications', 'theses', 'participations'].forEach(key => {
+        (allData[key] || []).forEach(record => {
+            const parsedYear = parseCustomStatsYear(record?.year);
+            if (parsedYear !== null) years.add(parsedYear);
+        });
+    });
+
+    return Array.from(years).sort((a, b) => b - a);
+}
+
+function getDefaultCustomStatsYears() {
+    const availableYears = getCustomStatsAvailableYears();
+    if (availableYears.length === 0) return [];
+
+    const sectionsYear = getSectionsSelectedYear();
+    const parsedSectionsYear = sectionsYear !== 'all' ? parseCustomStatsYear(sectionsYear) : null;
+    if (parsedSectionsYear !== null && availableYears.includes(parsedSectionsYear)) {
+        return [parsedSectionsYear];
+    }
+
+    const parsedCurrentYear = currentYear !== 'all' ? parseCustomStatsYear(currentYear) : null;
+    if (parsedCurrentYear !== null && availableYears.includes(parsedCurrentYear)) {
+        return [parsedCurrentYear];
+    }
+
+    return [availableYears[0]];
+}
+
+function ensureCustomSectionsStatsState() {
+    const availableYears = getCustomStatsAvailableYears();
+    const availableMetricKeys = getCustomStatsMetricDefinitions().map(metric => metric.key);
+
+    if (!customSectionsStatsState) {
+        customSectionsStatsState = {
+            isOpen: false,
+            reportMode: 'summary',
+            detailMode: 'summary',
+            selectedYears: getDefaultCustomStatsYears(),
+            selectedMetrics: [...CUSTOM_STATS_DEFAULT_METRICS],
+            lastReport: null
+        };
+    }
+
+    customSectionsStatsState.selectedYears = (customSectionsStatsState.selectedYears || [])
+        .map(parseCustomStatsYear)
+        .filter(year => year !== null && availableYears.includes(year));
+
+    if (customSectionsStatsState.selectedYears.length === 0) {
+        customSectionsStatsState.selectedYears = getDefaultCustomStatsYears();
+    }
+
+    customSectionsStatsState.selectedMetrics = (customSectionsStatsState.selectedMetrics || [])
+        .filter(key => availableMetricKeys.includes(key));
+
+    if (customSectionsStatsState.selectedMetrics.length === 0) {
+        customSectionsStatsState.selectedMetrics = [...CUSTOM_STATS_DEFAULT_METRICS];
+    }
+}
+
+function getCustomStatsMetricDefinitions() {
+    const sharedScopeLabel = getCustomStatsDepartmentLabel();
+    const teachingScopeLabel = currentProgram === 'all'
+        ? `${getCustomStatsDepartmentLabel()} - النشاط التدريسي`
+        : `${getCustomStatsDepartmentLabel()} - ${getCustomStatsProgramLabel()}`;
+
+    return [
+        {
+            key: 'faculty_count',
+            label: 'عدد أعضاء هيئة التدريس',
+            description: 'الأعضاء الفاعلون في السنوات المحددة',
+            scopeLabel: sharedScopeLabel,
+            compute(context) {
+                return {
+                    value: context.activeFaculty.length,
+                    details: context.activeFaculty.map(member => `${member.name}${member.rank ? ` - ${member.rank}` : ''}`),
+                    scopeLabel: sharedScopeLabel
+                };
+            }
+        },
+        {
+            key: 'publications_count',
+            label: 'عدد البحوث المنشورة',
+            description: 'بحوث الأعضاء المنشورة',
+            scopeLabel: sharedScopeLabel,
+            compute(context) {
+                return {
+                    value: context.publications.length,
+                    details: context.publications.map(pub => {
+                        const journal = String(pub.journal || '').trim();
+                        return `${pub.title || 'بحث بدون عنوان'}${journal ? ` - ${journal}` : ''}`;
+                    }),
+                    scopeLabel: sharedScopeLabel
+                };
+            }
+        },
+        {
+            key: 'student_research_count',
+            label: 'عدد بحوث الطلاب',
+            description: 'الإشراف على نشر أبحاث الطلاب',
+            scopeLabel: sharedScopeLabel,
+            compute(context) {
+                return {
+                    value: context.studentResearch.length,
+                    details: context.studentResearch.map(item => item.title || 'بحث طلابي'),
+                    scopeLabel: sharedScopeLabel
+                };
+            }
+        },
+        {
+            key: 'theses_total_count',
+            label: 'عدد الرسائل والمشاريع',
+            description: 'جميع الرسائل والمشاريع البحثية المرتبطة بالقسم',
+            scopeLabel: sharedScopeLabel,
+            compute(context) {
+                return {
+                    value: context.theses.length,
+                    details: context.theses.map(thesis => `${thesis.student_name || 'طالب'} - ${thesis.title || 'عنوان غير متوفر'}`),
+                    scopeLabel: sharedScopeLabel
+                };
+            }
+        },
+        {
+            key: 'scientific_theses_count',
+            label: 'عدد الرسائل العلمية',
+            description: 'الدكتوراه والماجستير المصنف كرسالة علمية',
+            scopeLabel: sharedScopeLabel,
+            compute(context) {
+                return {
+                    value: context.scientificTheses.length,
+                    details: context.scientificTheses.map(thesis => `${thesis.student_name || 'طالب'} - ${thesis.title || 'عنوان غير متوفر'}`),
+                    scopeLabel: sharedScopeLabel
+                };
+            }
+        },
+        {
+            key: 'research_projects_count',
+            label: 'عدد المشاريع البحثية',
+            description: 'مشاريع الماجستير المصنفة كمشروع بحثي',
+            scopeLabel: sharedScopeLabel,
+            compute(context) {
+                return {
+                    value: context.researchProjects.length,
+                    details: context.researchProjects.map(thesis => `${thesis.student_name || 'طالب'} - ${thesis.title || 'عنوان غير متوفر'}`),
+                    scopeLabel: sharedScopeLabel
+                };
+            }
+        },
+        {
+            key: 'events_count',
+            label: 'عدد الفعاليات العلمية',
+            description: 'المؤتمرات والندوات والورش وسائر الأنشطة العلمية',
+            scopeLabel: sharedScopeLabel,
+            compute(context) {
+                return {
+                    value: context.events.length,
+                    details: context.events.map(eventItem => `${eventItem.category || 'فعالية'} - ${eventItem.title || 'بدون عنوان'}`),
+                    scopeLabel: sharedScopeLabel
+                };
+            }
+        },
+        {
+            key: 'teaching_faculty_count',
+            label: 'عدد أعضاء التدريس في الشعب',
+            description: 'الأعضاء الذين لديهم نشاط تدريسي فعلي في النطاق المختار',
+            scopeLabel: teachingScopeLabel,
+            compute(context) {
+                return {
+                    value: context.teaching.facultyCount,
+                    details: context.teaching.facultyDetails.map(item => `${item.name} - ${formatCustomStatsNumber(item.sections)} شعبة`),
+                    scopeLabel: teachingScopeLabel
+                };
+            }
+        },
+        {
+            key: 'sections_count',
+            label: 'عدد الشعب التدريسية',
+            description: 'إجمالي الشعب المرتبطة بالنطاق المختار',
+            scopeLabel: teachingScopeLabel,
+            compute(context) {
+                return {
+                    value: context.teaching.totalSections,
+                    details: context.teaching.sectionDetails.map(item => `${item.courseName}${item.courseCode ? ` (${item.courseCode})` : ''} - ${item.facultyName} - ${formatCustomStatsNumber(item.students)} طالب - ${formatCustomStatsNumber(item.hours)} ساعة`),
+                    scopeLabel: teachingScopeLabel
+                };
+            }
+        },
+        {
+            key: 'courses_count',
+            label: 'عدد المقررات',
+            description: 'المقررات الفريدة ضمن الشعب المختارة',
+            scopeLabel: teachingScopeLabel,
+            compute(context) {
+                return {
+                    value: context.teaching.totalCourses,
+                    details: context.teaching.courseDetails.map(item => `${item.name}${item.code ? ` (${item.code})` : ''} - ${formatCustomStatsNumber(item.sections)} شعبة - ${formatCustomStatsNumber(item.students)} طالب`),
+                    scopeLabel: teachingScopeLabel
+                };
+            }
+        },
+        {
+            key: 'students_count',
+            label: 'عدد الطلاب',
+            description: 'إجمالي طلاب الشعب ضمن النطاق المختار',
+            scopeLabel: teachingScopeLabel,
+            compute(context) {
+                return {
+                    value: context.teaching.totalStudents,
+                    details: context.teaching.courseDetails.map(item => `${item.name}${item.code ? ` (${item.code})` : ''} - ${formatCustomStatsNumber(item.students)} طالب`),
+                    scopeLabel: teachingScopeLabel
+                };
+            }
+        },
+        {
+            key: 'teaching_hours',
+            label: 'ساعات التدريس',
+            description: 'مجموع الساعات المعتمدة في الشعب المختارة',
+            scopeLabel: teachingScopeLabel,
+            compute(context) {
+                return {
+                    value: context.teaching.totalHours,
+                    details: context.teaching.courseDetails.map(item => `${item.name}${item.code ? ` (${item.code})` : ''} - ${formatCustomStatsNumber(item.hours)} ساعة`),
+                    scopeLabel: teachingScopeLabel
+                };
+            }
+        }
+    ];
+}
+
+function getCustomStatsMetricDefinitionMap() {
+    const map = new Map();
+    getCustomStatsMetricDefinitions().forEach(metric => map.set(metric.key, metric));
+    return map;
+}
+
+function customStatsRecordMatchesYears(recordYear, selectedYearSet) {
+    const parsedYear = parseCustomStatsYear(recordYear);
+    return parsedYear !== null && selectedYearSet.has(parsedYear);
+}
+
+function customStatsRecordMatchesDepartment(idsFieldValue, deptIds) {
+    if (!deptIds) return true;
+    const ids = splitIds(idsFieldValue || '');
+    return ids.some(id => deptIds.has(id));
+}
+
+function buildCustomStatsTeachingScope(selectedYearSet, deptIds, programKey) {
+    const result = {
+        totalSections: 0,
+        totalStudents: 0,
+        totalHours: 0,
+        totalCourses: 0,
+        facultyCount: 0,
+        sectionDetails: [],
+        courseDetails: [],
+        facultyDetails: []
+    };
+
+    if (!teachingData || !Array.isArray(teachingData.records)) return result;
+
+    const courseMap = new Map();
+    const facultyMap = new Map();
+    const sectionDetails = [];
+
+    teachingData.records.forEach(record => {
+        const recordYear = parseCustomStatsYear(record?.y);
+        if (recordYear === null || !selectedYearSet.has(recordYear)) return;
+
+        const facultyId = String(record?.fid || '').trim();
+        if (deptIds && !deptIds.has(facultyId)) return;
+
+        const facultyInfo = teachingData.faculty_index?.[facultyId] || getMemberData(facultyId) || {};
+        const facultyName = String(facultyInfo.n || facultyInfo.name || getMemberName(facultyId) || '-').trim() || '-';
+        const facultyEntry = facultyMap.get(facultyId) || {
+            id: facultyId,
+            name: facultyName,
+            sections: 0,
+            students: 0,
+            hours: 0
+        };
+
+        (record?.cs || []).forEach(course => {
+            const courseCode = normalizeCourseCode(course?.cc);
+            if (programKey !== 'all' && !courseBelongsToProgramKey(courseCode, programKey)) return;
+
+            const courseName = String(course?.cn || courseCode || 'مقرر').trim() || 'مقرر';
+            const students = Number(course?.e) || 0;
+            const hours = Number(course?.h) || 0;
+            const mode = String(course?.m || '').trim();
+
+            result.totalSections += 1;
+            result.totalStudents += students;
+            result.totalHours += hours;
+
+            facultyEntry.sections += 1;
+            facultyEntry.students += students;
+            facultyEntry.hours += hours;
+            facultyMap.set(facultyId, facultyEntry);
+
+            const courseEntry = courseMap.get(courseCode || courseName) || {
+                code: courseCode,
+                name: courseName,
+                sections: 0,
+                students: 0,
+                hours: 0
+            };
+            courseEntry.sections += 1;
+            courseEntry.students += students;
+            courseEntry.hours += hours;
+            courseMap.set(courseCode || courseName, courseEntry);
+
+            sectionDetails.push({
+                year: recordYear,
+                courseCode,
+                courseName,
+                facultyName,
+                students,
+                hours,
+                mode
+            });
+        });
+    });
+
+    result.totalCourses = courseMap.size;
+    result.facultyCount = facultyMap.size;
+    result.sectionDetails = sectionDetails.sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return (a.courseName || '').localeCompare((b.courseName || ''), 'ar');
+    });
+    result.courseDetails = Array.from(courseMap.values()).sort((a, b) => {
+        if (b.sections !== a.sections) return b.sections - a.sections;
+        return (a.name || '').localeCompare((b.name || ''), 'ar');
+    });
+    result.facultyDetails = Array.from(facultyMap.values()).sort((a, b) => {
+        if (b.sections !== a.sections) return b.sections - a.sections;
+        return (a.name || '').localeCompare((b.name || ''), 'ar');
+    });
+
+    return result;
+}
+
+function buildCustomStatsContextForYears(years) {
+    const selectedYearSet = new Set((years || []).map(parseCustomStatsYear).filter(year => year !== null));
+    const deptIds = getDepartmentFacultyIds(currentDepartment || 'all');
+    const activeFacultyMap = new Map();
+
+    (allData.faculty || []).forEach(member => {
+        if (!customStatsRecordMatchesYears(member?.year, selectedYearSet)) return;
+        if (currentDepartment !== 'all' && String(member?.department || '').trim() !== currentDepartment) return;
+        if (String(member?.active || '').trim() !== 'نعم') return;
+
+        const memberId = String(member?.id || '').trim();
+        if (!memberId) return;
+        if (!activeFacultyMap.has(memberId)) {
+            activeFacultyMap.set(memberId, member);
+        }
+    });
+
+    const publications = (allData.publications || []).filter(pub =>
+        customStatsRecordMatchesYears(pub?.year, selectedYearSet) &&
+        customStatsRecordMatchesDepartment(pub?.authors_ids || pub?.participant_ids || '', deptIds)
+    );
+
+    const theses = (allData.theses || []).filter(thesis =>
+        customStatsRecordMatchesYears(thesis?.year, selectedYearSet) &&
+        (!deptIds || deptIds.has(String(thesis?.supervisor_id || '').trim()))
+    );
+
+    const participations = (allData.participations || []).filter(item =>
+        customStatsRecordMatchesYears(item?.year, selectedYearSet) &&
+        customStatsRecordMatchesDepartment(item?.participant_ids || '', deptIds)
+    );
+
+    const studentResearch = participations.filter(item => String(item?.category || '').trim() === 'بحوث الطلاب');
+    const events = participations.filter(item => CUSTOM_STATS_EVENT_CATEGORIES.has(String(item?.category || '').trim()));
+    const researchProjects = theses.filter(thesis => (thesis.type || '').trim() === 'ماجستير' && !isScientificThesis(thesis));
+    const scientificTheses = theses.filter(thesis => isScientificThesis(thesis));
+    const teaching = buildCustomStatsTeachingScope(selectedYearSet, deptIds, currentProgram || 'all');
+
+    return {
+        years: Array.from(selectedYearSet).sort((a, b) => a - b),
+        activeFaculty: Array.from(activeFacultyMap.values()).sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'ar')),
+        publications,
+        theses,
+        scientificTheses,
+        researchProjects,
+        participations,
+        studentResearch,
+        events,
+        teaching
+    };
+}
+
+function buildCustomStatsRow(label, context, metricDefinitions) {
+    const metrics = {};
+    metricDefinitions.forEach(metric => {
+        metrics[metric.key] = metric.compute(context);
+    });
+    return { label, context, metrics };
+}
+
+function buildCustomStatsDetailBlock(title, row, metricDefinitions) {
+    return {
+        title,
+        sections: metricDefinitions.map(metric => {
+            const metricResult = row.metrics[metric.key] || {};
+            return {
+                metricKey: metric.key,
+                metricLabel: metric.label,
+                value: metricResult.value || 0,
+                scopeLabel: metricResult.scopeLabel || metric.scopeLabel || '',
+                items: Array.isArray(metricResult.details) ? metricResult.details : []
+            };
+        })
+    };
+}
+
+function buildCustomStatsReport() {
+    ensureCustomSectionsStatsState();
+
+    const years = [...(customSectionsStatsState.selectedYears || [])].sort((a, b) => a - b);
+    const metricMap = getCustomStatsMetricDefinitionMap();
+    const metricDefinitions = (customSectionsStatsState.selectedMetrics || [])
+        .map(key => metricMap.get(key))
+        .filter(Boolean);
+
+    if (years.length === 0) {
+        return { error: 'اختر سنة واحدة على الأقل لإنشاء التقرير.' };
+    }
+
+    if (metricDefinitions.length === 0) {
+        return { error: 'اختر مؤشرًا واحدًا على الأقل لإنشاء التقرير.' };
+    }
+
+    const reportMode = customSectionsStatsState.reportMode || 'summary';
+    const detailMode = customSectionsStatsState.detailMode || 'summary';
+    const scope = {
+        departmentLabel: getCustomStatsDepartmentLabel(),
+        programLabel: getCustomStatsProgramLabel(),
+        affectsTeachingByProgram: currentProgram !== 'all'
+    };
+
+    let rows = [];
+    let totalRow = null;
+    let detailBlocks = [];
+
+    if (reportMode === 'aggregate') {
+        const context = buildCustomStatsContextForYears(years);
+        const row = buildCustomStatsRow(formatCustomStatsYearsLabel(years), context, metricDefinitions);
+        rows = [row];
+        if (detailMode === 'detailed') {
+            detailBlocks = [buildCustomStatsDetailBlock('تفاصيل الإجمالي', row, metricDefinitions)];
+        }
+    } else {
+        rows = years.map(year => {
+            const context = buildCustomStatsContextForYears([year]);
+            return buildCustomStatsRow(formatCustomStatsYearLabel(year), context, metricDefinitions);
+        });
+
+        if (years.length > 1) {
+            const totalContext = buildCustomStatsContextForYears(years);
+            totalRow = buildCustomStatsRow('الإجمالي', totalContext, metricDefinitions);
+        }
+
+        if (detailMode === 'detailed') {
+            detailBlocks = rows.map(row => buildCustomStatsDetailBlock(`تفاصيل ${row.label}`, row, metricDefinitions));
+        }
+    }
+
+    return {
+        generatedAt: new Date(),
+        years,
+        reportMode,
+        detailMode,
+        scope,
+        metricDefinitions,
+        rows,
+        totalRow,
+        detailBlocks
+    };
+}
+
+function getCustomStatsModeOptions() {
+    return [
+        { value: 'aggregate', label: 'إجمالي' },
+        { value: 'summary', label: 'ملخص سنوي' }
+    ];
+}
+
+function getCustomStatsDetailOptions() {
+    return [
+        { value: 'summary', label: 'ملخص' },
+        { value: 'detailed', label: 'تفصيلي' }
+    ];
+}
+
+function renderCustomStatsModeSwitch() {
+    const container = document.getElementById('customStatsModeSwitch');
+    if (!container) return;
+
+    container.innerHTML = getCustomStatsModeOptions().map(option => `
+        <button type="button" class="${customSectionsStatsState.reportMode === option.value ? 'active' : ''}" data-custom-stats-mode="${option.value}">
+            ${escapeHtml(option.label)}
+        </button>
+    `).join('');
+}
+
+function renderCustomStatsDetailSwitch() {
+    const container = document.getElementById('customStatsDetailSwitch');
+    if (!container) return;
+
+    container.innerHTML = getCustomStatsDetailOptions().map(option => `
+        <button type="button" class="${customSectionsStatsState.detailMode === option.value ? 'active' : ''}" data-custom-stats-detail="${option.value}">
+            ${escapeHtml(option.label)}
+        </button>
+    `).join('');
+}
+
+function renderCustomStatsScopeMeta() {
+    const container = document.getElementById('customStatsScopeMeta');
+    if (!container) return;
+
+    container.innerHTML = `
+        <span class="custom-stats-meta-pill"><strong>القسم:</strong>${escapeHtml(getCustomStatsDepartmentLabel())}</span>
+        <span class="custom-stats-meta-pill"><strong>البرنامج:</strong>${escapeHtml(getCustomStatsProgramLabel())}</span>
+        <span class="custom-stats-meta-pill"><strong>ملاحظة:</strong>مؤشرات التدريس تتأثر بفلتر البرنامج الحالي، أما المؤشرات العامة فتُحسب على مستوى القسم والسنوات المختارة.</span>
+    `;
+}
+
+function renderCustomStatsYearsList() {
+    const container = document.getElementById('customStatsYearsList');
+    if (!container) return;
+
+    const availableYears = getCustomStatsAvailableYears();
+    container.innerHTML = availableYears.map(year => `
+        <label class="custom-stats-year-chip">
+            <input type="checkbox" data-custom-stats-year="${year}" ${customSectionsStatsState.selectedYears.includes(year) ? 'checked' : ''}>
+            <span>${formatCustomStatsYearLabel(year)}</span>
+        </label>
+    `).join('');
+}
+
+function renderCustomStatsMetricsList() {
+    const container = document.getElementById('customStatsMetricsList');
+    if (!container) return;
+
+    const metricDefinitions = getCustomStatsMetricDefinitions();
+    container.innerHTML = metricDefinitions.map(metric => `
+        <div class="custom-stats-metric-card">
+            <input type="checkbox" id="metric_${metric.key}" data-custom-stats-metric="${metric.key}" ${customSectionsStatsState.selectedMetrics.includes(metric.key) ? 'checked' : ''}>
+            <label for="metric_${metric.key}">
+                <span class="custom-stats-metric-title">${escapeHtml(metric.label)}</span>
+                <span class="custom-stats-metric-desc">${escapeHtml(metric.description)}</span>
+            </label>
+        </div>
+    `).join('');
+}
+
+function renderCustomStatsControls() {
+    ensureCustomSectionsStatsState();
+    renderCustomStatsModeSwitch();
+    renderCustomStatsDetailSwitch();
+    renderCustomStatsScopeMeta();
+    renderCustomStatsYearsList();
+    renderCustomStatsMetricsList();
+    updateCustomStatsExportButtons();
+}
+
+function updateCustomStatsExportButtons() {
+    const hasReport = !!customSectionsStatsState?.lastReport;
+    ['customStatsExportExcelBtn', 'customStatsExportCsvBtn', 'customStatsExportPdfBtn'].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = !hasReport;
+    });
+}
+
+function toggleCustomStatsWorkspace(forceState = null) {
+    ensureCustomSectionsStatsState();
+    const workspace = document.getElementById('customStatsWorkspace');
+    if (!workspace) return;
+
+    customSectionsStatsState.isOpen = forceState === null ? !customSectionsStatsState.isOpen : !!forceState;
+    workspace.style.display = customSectionsStatsState.isOpen ? 'grid' : 'none';
+
+    if (customSectionsStatsState.isOpen) {
+        renderCustomStatsControls();
+        if (customSectionsStatsState.lastReport) {
+            renderCustomStatsReport(buildCustomStatsReport());
+        } else {
+            renderCustomStatsEmpty('اختر السنوات والمؤشرات ثم أنشئ التقرير.');
+        }
+    }
+}
+
+function getCustomStatsSummaryText(report) {
+    if (!report) return 'اختر السنوات والمؤشرات ثم أنشئ التقرير.';
+
+    const metricsLabel = `${formatCustomStatsNumber(report.metricDefinitions.length)} مؤشر`;
+    const yearsLabel = report.reportMode === 'aggregate'
+        ? formatCustomStatsYearsLabel(report.years)
+        : `${formatCustomStatsNumber(report.years.length)} سنة`;
+    const modeLabel = report.reportMode === 'aggregate' ? 'إجمالي' : 'ملخص سنوي';
+    const detailLabel = report.detailMode === 'detailed' ? 'تفصيلي' : 'ملخص';
+
+    return `${modeLabel} - ${detailLabel} - ${metricsLabel} - ${yearsLabel}`;
+}
+
+function renderCustomStatsEmpty(message) {
+    const container = document.getElementById('customStatsResult');
+    const summary = document.getElementById('customStatsResultSummary');
+    if (summary) summary.textContent = message;
+    if (container) container.innerHTML = `<div class="custom-stats-empty">${escapeHtml(message)}</div>`;
+    customSectionsStatsState.lastReport = null;
+    updateCustomStatsExportButtons();
+}
+
+function getCustomStatsMainTableHeaders(report) {
+    const firstHeader = report.reportMode === 'aggregate' ? 'الفترة' : 'السنة';
+    return [firstHeader, ...report.metricDefinitions.map(metric => metric.label)];
+}
+
+function getCustomStatsMainTableRows(report) {
+    const rows = report.rows.map(row => [
+        row.label,
+        ...report.metricDefinitions.map(metric => formatCustomStatsNumber(row.metrics[metric.key]?.value || 0))
+    ]);
+
+    if (report.totalRow) {
+        rows.push([
+            report.totalRow.label,
+            ...report.metricDefinitions.map(metric => formatCustomStatsNumber(report.totalRow.metrics[metric.key]?.value || 0))
+        ]);
+    }
+
+    return rows;
+}
+
+function buildCustomStatsTableHtml(report) {
+    const headers = getCustomStatsMainTableHeaders(report);
+    const rows = getCustomStatsMainTableRows(report);
+
+    return `
+        <div class="data-table-container">
+            <table class="data-table custom-stats-report-table">
+                <thead>
+                    <tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
+                </thead>
+                <tbody>
+                    ${rows.map((row, rowIndex) => {
+                        const isTotalRow = !!report.totalRow && rowIndex === rows.length - 1;
+                        return `
+                            <tr class="${isTotalRow ? 'total-row' : ''}">
+                                ${row.map((cell, cellIndex) => `<td class="${cellIndex === 0 ? 'metric-cell' : ''}">${escapeHtml(cell)}</td>`).join('')}
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function buildCustomStatsDetailHtml(report) {
+    if (report.detailMode !== 'detailed' || !report.detailBlocks.length) return '';
+
+    const maxVisibleItems = 24;
+
+    return `
+        <div class="custom-stats-detail-board">
+            ${report.detailBlocks.map(block => `
+                <div class="custom-stats-detail-card">
+                    <h4>${escapeHtml(block.title)}</h4>
+                    ${block.sections.map(section => {
+                        const items = section.items || [];
+                        const visibleItems = items.slice(0, maxVisibleItems);
+                        const hiddenCount = Math.max(items.length - visibleItems.length, 0);
+
+                        return `
+                            <div class="custom-stats-detail-section">
+                                <div class="custom-stats-detail-section-title">
+                                    ${escapeHtml(section.metricLabel)}: ${escapeHtml(formatCustomStatsNumber(section.value))}
+                                </div>
+                                <ul class="custom-stats-detail-list">
+                                    ${visibleItems.length > 0
+                                        ? visibleItems.map(item => `<li>${escapeHtml(item)}</li>`).join('')
+                                        : '<li>لا توجد تفاصيل إضافية لهذا المؤشر.</li>'}
+                                </ul>
+                                ${hiddenCount > 0 ? `<div class="custom-stats-detail-note">تم إظهار أول ${formatCustomStatsNumber(maxVisibleItems)} عنصر فقط، والمتبقي ${formatCustomStatsNumber(hiddenCount)} عنصر.</div>` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderCustomStatsReport(report) {
+    const container = document.getElementById('customStatsResult');
+    const summary = document.getElementById('customStatsResultSummary');
+    if (!container || !summary) return;
+
+    if (!report || report.error) {
+        renderCustomStatsEmpty(report?.error || 'تعذر إنشاء التقرير المطلوب.');
+        return;
+    }
+
+    customSectionsStatsState.lastReport = report;
+    summary.textContent = getCustomStatsSummaryText(report);
+
+    const metaHtml = `
+        <div class="custom-stats-result-meta">
+            <span class="custom-stats-meta-pill"><strong>القسم:</strong>${escapeHtml(report.scope.departmentLabel)}</span>
+            <span class="custom-stats-meta-pill"><strong>البرنامج:</strong>${escapeHtml(report.scope.programLabel)}</span>
+            <span class="custom-stats-meta-pill"><strong>السنوات:</strong>${escapeHtml(formatCustomStatsYearsLabel(report.years))}</span>
+            <span class="custom-stats-meta-pill"><strong>التوليد:</strong>${escapeHtml(new Date(report.generatedAt).toLocaleString('ar-SA'))}</span>
+        </div>
+    `;
+
+    container.innerHTML = metaHtml + buildCustomStatsTableHtml(report) + buildCustomStatsDetailHtml(report);
+    updateCustomStatsExportButtons();
+}
+
+function generateCustomStatsReport() {
+    renderCustomStatsReport(buildCustomStatsReport());
+}
+
+function resetCustomStatsSelections() {
+    customSectionsStatsState = {
+        isOpen: true,
+        reportMode: 'summary',
+        detailMode: 'summary',
+        selectedYears: getDefaultCustomStatsYears(),
+        selectedMetrics: [...CUSTOM_STATS_DEFAULT_METRICS],
+        lastReport: null
+    };
+    renderCustomStatsControls();
+    renderCustomStatsEmpty('تمت إعادة ضبط الإعدادات. اختر المؤشرات والسنوات ثم أنشئ التقرير.');
+}
+
+function buildCustomStatsMainMatrix(report) {
+    return [
+        getCustomStatsMainTableHeaders(report),
+        ...getCustomStatsMainTableRows(report)
+    ];
+}
+
+function buildCustomStatsDetailsMatrix(report) {
+    if (report.detailMode !== 'detailed' || !report.detailBlocks.length) return [];
+
+    const rows = [['الفترة', 'المؤشر', 'القيمة', 'النطاق', 'التفصيل']];
+    report.detailBlocks.forEach(block => {
+        block.sections.forEach(section => {
+            const items = section.items && section.items.length ? section.items : ['لا توجد تفاصيل إضافية'];
+            items.forEach((item, index) => {
+                rows.push([
+                    block.title,
+                    index === 0 ? section.metricLabel : '',
+                    index === 0 ? formatCustomStatsNumber(section.value) : '',
+                    index === 0 ? section.scopeLabel : '',
+                    item
+                ]);
+            });
+        });
+    });
+    return rows;
+}
+
+function escapeCsvValue(value, delimiter = ';') {
+    const text = String(value ?? '');
+    if (text.includes('"') || text.includes('\n') || text.includes('\r') || text.includes(delimiter)) {
+        return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+}
+
+function convertMatrixToDelimitedText(matrix, delimiter = ';') {
+    return matrix.map(row => row.map(cell => escapeCsvValue(cell, delimiter)).join(delimiter)).join('\n');
+}
+
+function downloadBlobFile(blob, filename) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function getCustomStatsFileBaseName(report) {
+    const modePart = report.reportMode === 'aggregate' ? 'aggregate' : 'summary';
+    const yearsPart = report.years.join('-');
+    return `custom_sections_stats_${modePart}_${yearsPart}`;
+}
+
+function exportCustomStatsCsv() {
+    const report = customSectionsStatsState?.lastReport;
+    if (!report) return;
+
+    const mainText = convertMatrixToDelimitedText(buildCustomStatsMainMatrix(report));
+    const detailsMatrix = buildCustomStatsDetailsMatrix(report);
+    const detailsText = detailsMatrix.length ? `\n\n${convertMatrixToDelimitedText(detailsMatrix)}` : '';
+    const blob = new Blob([`\uFEFF${mainText}${detailsText}`], { type: 'text/csv;charset=utf-8;' });
+    downloadBlobFile(blob, `${getCustomStatsFileBaseName(report)}.csv`);
+}
+
+function buildCustomStatsMatrixTableHtml(matrix) {
+    if (!matrix || matrix.length === 0) return '';
+    const [headers, ...rows] = matrix;
+
+    return `
+        <table>
+            <thead>
+                <tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+                ${rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function exportCustomStatsExcel() {
+    const report = customSectionsStatsState?.lastReport;
+    if (!report) return;
+
+    const mainTable = buildCustomStatsMatrixTableHtml(buildCustomStatsMainMatrix(report));
+    const detailsMatrix = buildCustomStatsDetailsMatrix(report);
+    const detailsTable = detailsMatrix.length
+        ? `<h3>تفاصيل المؤشرات</h3>${buildCustomStatsMatrixTableHtml(detailsMatrix)}`
+        : '';
+
+    const html = `
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body { font-family: Tahoma, Arial, sans-serif; padding: 24px; direction: rtl; }
+                h1, h3 { color: #1f2937; }
+                .meta { margin-bottom: 16px; color: #4b5563; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+                th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: right; }
+                th { background: #e2e8f0; }
+            </style>
+        </head>
+        <body>
+            <h1>الإحصائيات المخصصة - إحصائيات الشعب</h1>
+            <div class="meta">القسم: ${escapeHtml(report.scope.departmentLabel)} | البرنامج: ${escapeHtml(report.scope.programLabel)} | السنوات: ${escapeHtml(formatCustomStatsYearsLabel(report.years))}</div>
+            ${mainTable}
+            ${detailsTable}
+        </body>
+        </html>
+    `;
+
+    const blob = new Blob([`\uFEFF${html}`], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    downloadBlobFile(blob, `${getCustomStatsFileBaseName(report)}.xls`);
+}
+
+function exportCustomStatsPdf() {
+    const report = customSectionsStatsState?.lastReport;
+    if (!report) return;
+
+    const mainTable = buildCustomStatsMatrixTableHtml(buildCustomStatsMainMatrix(report));
+    const detailsMatrix = buildCustomStatsDetailsMatrix(report);
+    const detailsTable = detailsMatrix.length
+        ? `<h2>تفاصيل المؤشرات</h2>${buildCustomStatsMatrixTableHtml(detailsMatrix)}`
+        : '';
+
+    const printContent = `
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>الإحصائيات المخصصة</title>
+            <style>
+                body { font-family: "Cairo", Tahoma, Arial, sans-serif; margin: 24px; color: #111827; direction: rtl; }
+                h1, h2 { margin-bottom: 8px; }
+                .meta { margin-bottom: 18px; line-height: 1.8; color: #374151; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+                th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: right; vertical-align: top; }
+                th { background: #f3f4f6; }
+                @media print { body { margin: 10mm; } }
+            </style>
+        </head>
+        <body>
+            <h1>الإحصائيات المخصصة - إحصائيات الشعب</h1>
+            <div class="meta">
+                القسم: ${escapeHtml(report.scope.departmentLabel)}<br>
+                البرنامج: ${escapeHtml(report.scope.programLabel)}<br>
+                السنوات: ${escapeHtml(formatCustomStatsYearsLabel(report.years))}<br>
+                تاريخ التوليد: ${escapeHtml(new Date(report.generatedAt).toLocaleString('ar-SA'))}
+            </div>
+            ${mainTable}
+            ${detailsTable}
+            <script>window.onload = function(){ window.print(); };</script>
+        </body>
+        </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        alert('تعذر فتح نافذة الطباعة. تأكد من السماح بالنوافذ المنبثقة.');
+        return;
+    }
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+}
+
+function bindCustomStatsWorkspaceEvents() {
+    const workspace = document.getElementById('customStatsWorkspace');
+    if (!workspace || workspace.dataset.bound === 'true') return;
+
+    workspace.dataset.bound = 'true';
+
+    workspace.addEventListener('click', event => {
+        const modeButton = event.target.closest('[data-custom-stats-mode]');
+        if (modeButton) {
+            ensureCustomSectionsStatsState();
+            customSectionsStatsState.reportMode = modeButton.getAttribute('data-custom-stats-mode') || 'summary';
+            renderCustomStatsControls();
+            if (customSectionsStatsState.lastReport) generateCustomStatsReport();
+            return;
+        }
+
+        const detailButton = event.target.closest('[data-custom-stats-detail]');
+        if (detailButton) {
+            ensureCustomSectionsStatsState();
+            customSectionsStatsState.detailMode = detailButton.getAttribute('data-custom-stats-detail') || 'summary';
+            renderCustomStatsControls();
+            if (customSectionsStatsState.lastReport) generateCustomStatsReport();
+        }
+    });
+
+    workspace.addEventListener('change', event => {
+        const yearInput = event.target.closest('[data-custom-stats-year]');
+        if (yearInput) {
+            ensureCustomSectionsStatsState();
+            const year = parseCustomStatsYear(yearInput.getAttribute('data-custom-stats-year'));
+            if (year === null) return;
+
+            if (yearInput.checked) {
+                if (!customSectionsStatsState.selectedYears.includes(year)) {
+                    customSectionsStatsState.selectedYears.push(year);
+                }
+            } else {
+                customSectionsStatsState.selectedYears = customSectionsStatsState.selectedYears.filter(value => value !== year);
+            }
+
+            if (customSectionsStatsState.lastReport) generateCustomStatsReport();
+            return;
+        }
+
+        const metricInput = event.target.closest('[data-custom-stats-metric]');
+        if (metricInput) {
+            ensureCustomSectionsStatsState();
+            const metricKey = metricInput.getAttribute('data-custom-stats-metric');
+            if (!metricKey) return;
+
+            if (metricInput.checked) {
+                if (!customSectionsStatsState.selectedMetrics.includes(metricKey)) {
+                    customSectionsStatsState.selectedMetrics.push(metricKey);
+                }
+            } else {
+                customSectionsStatsState.selectedMetrics = customSectionsStatsState.selectedMetrics.filter(key => key !== metricKey);
+            }
+
+            if (customSectionsStatsState.lastReport) generateCustomStatsReport();
+        }
+    });
+}
+
+function setupCustomStatsWorkspace() {
+    ensureCustomSectionsStatsState();
+    bindCustomStatsWorkspaceEvents();
+
+    document.getElementById('sectionsCustomStatsBtn')?.addEventListener('click', () => {
+        toggleCustomStatsWorkspace();
+    });
+
+    document.getElementById('customStatsGenerateBtn')?.addEventListener('click', generateCustomStatsReport);
+    document.getElementById('customStatsResetBtn')?.addEventListener('click', resetCustomStatsSelections);
+    document.getElementById('customStatsResetMetricsBtn')?.addEventListener('click', () => {
+        ensureCustomSectionsStatsState();
+        customSectionsStatsState.selectedMetrics = [...CUSTOM_STATS_DEFAULT_METRICS];
+        renderCustomStatsControls();
+        if (customSectionsStatsState.lastReport) generateCustomStatsReport();
+    });
+    document.getElementById('customStatsSelectAllYearsBtn')?.addEventListener('click', () => {
+        ensureCustomSectionsStatsState();
+        customSectionsStatsState.selectedYears = [...getCustomStatsAvailableYears()];
+        renderCustomStatsControls();
+        if (customSectionsStatsState.lastReport) generateCustomStatsReport();
+    });
+    document.getElementById('customStatsExportExcelBtn')?.addEventListener('click', exportCustomStatsExcel);
+    document.getElementById('customStatsExportCsvBtn')?.addEventListener('click', exportCustomStatsCsv);
+    document.getElementById('customStatsExportPdfBtn')?.addEventListener('click', exportCustomStatsPdf);
+
+    renderCustomStatsControls();
+    if (!customSectionsStatsState.lastReport) {
+        renderCustomStatsEmpty('اختر السنوات والمؤشرات ثم أنشئ التقرير.');
     }
 }
 
@@ -5950,6 +7021,7 @@ async function init() {
     setupYearSelector();
     setupDepartmentSelector();
     setupProgramSelector();
+    setupCustomStatsWorkspace();
     syncMainNavOffset();
     window.addEventListener('resize', syncMainNavOffset);
     if (window.visualViewport) {
