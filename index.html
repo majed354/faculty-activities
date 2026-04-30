@@ -134,6 +134,10 @@
                 <span class="nav-icon">📈</span>
                 <span class="nav-text">مؤشرات الجودة</span>
             </button>
+            <button class="nav-btn" data-tab="analytics" title="الاستوديو الإحصائي">
+                <span class="nav-icon">🧭</span>
+                <span class="nav-text">الاستوديو الإحصائي</span>
+            </button>
         </div>
     </nav>
 
@@ -525,10 +529,6 @@
         <section id="sections" class="tab-content">
             <div class="section-header">
                 <h2>📋 إحصائيات الشعب والبرامج</h2>
-                <button class="custom-stats-launch-btn" id="sectionsCustomStatsBtn" type="button" title="إنشاء إحصائيات مخصصة">
-                    <span class="icon">🧮</span>
-                    <span>إحصائيات مخصصة</span>
-                </button>
             </div>
 
             <!-- فلتر البرنامج - داخل القسم فقط -->
@@ -544,67 +544,6 @@
                     <select id="sectionsYearFilter">
                         <option value="all">جميع السنوات</option>
                     </select>
-                </div>
-            </div>
-
-            <div class="custom-stats-workspace" id="customStatsWorkspace" style="display: none;">
-                <div class="custom-stats-builder-card">
-                    <div class="custom-stats-builder-header">
-                        <div>
-                            <h3>مولد الإحصائيات المخصصة</h3>
-                            <p>كوّن تقريرًا مرنًا داخل نفس التبويب، واختر السنوات والمؤشرات وطريقة العرض ثم صدّره.</p>
-                        </div>
-                        <span class="custom-stats-badge">مرن</span>
-                    </div>
-
-                    <div class="custom-stats-top-grid">
-                        <div class="custom-stats-control-group">
-                            <label>نمط التقرير</label>
-                            <div class="custom-stats-segmented" id="customStatsModeSwitch"></div>
-                        </div>
-                        <div class="custom-stats-control-group">
-                            <label>مستوى البيانات</label>
-                            <div class="custom-stats-segmented" id="customStatsDetailSwitch"></div>
-                        </div>
-                    </div>
-
-                    <div class="custom-stats-meta-strip" id="customStatsScopeMeta"></div>
-
-                    <div class="custom-stats-picker-grid">
-                        <div class="custom-stats-picker-card">
-                            <div class="picker-header">
-                                <h4>السنوات المحددة</h4>
-                                <button type="button" class="picker-mini-btn" id="customStatsSelectAllYearsBtn">تحديد الكل</button>
-                            </div>
-                            <div class="custom-stats-years-list" id="customStatsYearsList"></div>
-                        </div>
-
-                        <div class="custom-stats-picker-card">
-                            <div class="picker-header">
-                                <h4>المؤشرات المراد تضمينها</h4>
-                                <button type="button" class="picker-mini-btn" id="customStatsResetMetricsBtn">الافتراضي</button>
-                            </div>
-                            <div class="custom-stats-metrics-grid" id="customStatsMetricsList"></div>
-                        </div>
-                    </div>
-
-                    <div class="custom-stats-actions">
-                        <button type="button" class="custom-stats-generate-btn" id="customStatsGenerateBtn">إنشاء التقرير</button>
-                        <button type="button" class="custom-stats-ghost-btn" id="customStatsResetBtn">إعادة الضبط</button>
-                        <button type="button" class="custom-stats-export-btn" id="customStatsExportExcelBtn" disabled>Excel</button>
-                        <button type="button" class="custom-stats-export-btn" id="customStatsExportCsvBtn" disabled>CSV</button>
-                        <button type="button" class="custom-stats-export-btn" id="customStatsExportPdfBtn" disabled>PDF</button>
-                    </div>
-                </div>
-
-                <div class="custom-stats-results-card">
-                    <div class="custom-stats-results-header">
-                        <div>
-                            <h3>نتيجة الإحصائيات المخصصة</h3>
-                            <p id="customStatsResultSummary">اختر السنوات والمؤشرات ثم أنشئ التقرير.</p>
-                        </div>
-                    </div>
-                    <div id="customStatsResult"></div>
                 </div>
             </div>
 
@@ -784,6 +723,111 @@
                 </div>
             </div>
 
+        </section>
+
+        <!-- ===== الاستوديو الإحصائي ===== -->
+        <section id="analytics" class="tab-content">
+            <div class="section-header">
+                <h2>🧭 الاستوديو الإحصائي</h2>
+            </div>
+            <p class="analytics-studio-intro">منصة مرنة لبناء تقارير شاملة من بيانات الموقع، مع تحديد دقيق للسنوات، وتجميعات متعددة، وفلاتر مخصّصة، وإخراج احترافي.</p>
+
+            <div class="analytics-studio-card analytics-studio-builder">
+                <div class="analytics-studio-grid">
+                    <div class="analytics-studio-field">
+                        <label for="analyticsStudioMode">نوع التقرير</label>
+                        <select id="analyticsStudioMode">
+                            <option value="summary">إجمالي</option>
+                            <option value="detail">تفصيلي</option>
+                        </select>
+                    </div>
+                    <div class="analytics-studio-field">
+                        <label for="analyticsStudioSource">مصدر البيانات</label>
+                        <select id="analyticsStudioSource"></select>
+                    </div>
+                    <div class="analytics-studio-field">
+                        <label for="analyticsStudioYearFrom">من سنة</label>
+                        <select id="analyticsStudioYearFrom"></select>
+                    </div>
+                    <div class="analytics-studio-field">
+                        <label for="analyticsStudioYearTo">إلى سنة</label>
+                        <select id="analyticsStudioYearTo"></select>
+                    </div>
+                    <div class="analytics-studio-field">
+                        <label for="analyticsStudioGroupPrimary">التجميع الأساسي</label>
+                        <select id="analyticsStudioGroupPrimary"></select>
+                    </div>
+                    <div class="analytics-studio-field">
+                        <label for="analyticsStudioGroupSecondary">التجميع الثانوي</label>
+                        <select id="analyticsStudioGroupSecondary"></select>
+                    </div>
+                </div>
+
+                <div class="analytics-studio-field analytics-studio-search-field">
+                    <label for="analyticsStudioSearch">بحث نصي</label>
+                    <input type="text" id="analyticsStudioSearch" placeholder="ابحث بالاسم أو العنوان أو الرقم أو أي نص متاح في المصدر">
+                </div>
+
+                <div class="analytics-studio-shell">
+                    <div class="analytics-studio-shell-head">
+                        <div>
+                            <h3>الفلاتر المتاحة</h3>
+                            <p id="analyticsStudioFiltersCaption">تتغير الفلاتر تلقائيًا حسب مصدر البيانات الذي تختاره.</p>
+                        </div>
+                    </div>
+                    <div class="analytics-studio-grid" id="analyticsStudioFilters"></div>
+                </div>
+
+                <div class="analytics-studio-shell">
+                    <div class="analytics-studio-shell-head">
+                        <div>
+                            <h3>الإحصاءات المطلوبة</h3>
+                            <p>يمكنك اختيار أكثر من إحصائية لتظهر معًا في التقرير نفسه.</p>
+                        </div>
+                    </div>
+                    <div class="analytics-studio-metrics-grid" id="analyticsStudioMetrics"></div>
+                </div>
+
+                <div class="analytics-studio-actions">
+                    <button class="analytics-studio-primary-btn" id="analyticsStudioRunBtn" type="button">بناء التقرير</button>
+                    <button class="analytics-studio-secondary-btn" id="analyticsStudioResetBtn" type="button">إعادة الضبط</button>
+                </div>
+            </div>
+
+            <div class="analytics-studio-results hidden" id="analyticsStudioResults">
+                <div id="analyticsStudioExportArea">
+                    <div class="analytics-studio-card">
+                        <div class="analytics-studio-results-head">
+                            <div>
+                                <h3>نتائج التحليل</h3>
+                                <p id="analyticsStudioCaption" class="analytics-studio-caption"></p>
+                            </div>
+                            <div class="analytics-studio-export-btns">
+                                <button class="analytics-studio-secondary-btn" id="analyticsStudioExportPdfBtn" type="button">PDF</button>
+                                <button class="analytics-studio-secondary-btn" id="analyticsStudioExportCsvBtn" type="button">CSV</button>
+                                <button class="analytics-studio-secondary-btn" id="analyticsStudioExportExcelBtn" type="button">Excel</button>
+                            </div>
+                        </div>
+                        <div class="analytics-studio-summary-grid" id="analyticsStudioSummary"></div>
+                    </div>
+
+                    <div class="analytics-studio-card analytics-studio-chart-card">
+                        <h3 id="analyticsStudioChartTitle">التمثيل البياني</h3>
+                        <div class="analytics-studio-chart-wrap">
+                            <canvas id="analyticsStudioChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="analytics-studio-card">
+                        <div class="data-table-container">
+                            <table class="data-table analytics-studio-table">
+                                <thead id="analyticsStudioTableHead"></thead>
+                                <tbody id="analyticsStudioTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
     </main>
