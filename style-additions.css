@@ -748,6 +748,66 @@
     font-size: 0.85rem;
 }
 
+.member-points-scope {
+    display: block;
+    margin-top: 8px;
+    color: var(--gray-400);
+    font-size: 0.8rem;
+}
+
+.member-modal-toolbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 22px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    flex-wrap: wrap;
+}
+
+.member-modal-year-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 180px;
+}
+
+.member-modal-year-filter label {
+    color: var(--gray-300);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.member-modal-year-filter select {
+    background: rgba(15, 23, 42, 0.9);
+    color: #fff;
+    border: 1px solid rgba(198, 169, 98, 0.35);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+.member-modal-scope-note {
+    color: var(--gray-400);
+    font-size: 0.85rem;
+    line-height: 1.7;
+}
+
+@media (max-width: 768px) {
+    .member-modal-year-filter {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .member-modal-year-filter select {
+        width: 100%;
+    }
+}
+
 .member-breakdown {
     margin-bottom: 25px;
 }

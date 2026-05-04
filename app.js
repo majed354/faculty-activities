@@ -44,6 +44,7 @@ let analyticsStudioReport = null;
 let analyticsStudioChart = null;
 let analyticsStudioTeachingRowsCache = null;
 let analyticsStudioInitialized = false;
+let memberModalState = { memberId: null, selectedYear: 'all', token: 0 };
 
 // بيانات الخطط الدراسية والبرامج
 let allPlansData = [];
@@ -617,6 +618,82 @@ function isScientificThesis(thesis) {
     const type = (thesis.type || '').trim();
     if (type === 'دكتوراه') return true;
     return isMastersScientificThesis(thesis);
+}
+
+function normalizeMemberYearFilter(year) {
+    if (year === null || year === undefined || year === '' || year === 'all') return 'all';
+    if (year === 'current') return 'current';
+    const parsedYear = parseInt(String(year).trim(), 10);
+    return Number.isNaN(parsedYear) ? 'all' : parsedYear;
+}
+
+function recordMatchesYear(record, selectedYear) {
+    if (selectedYear === 'all' || selectedYear === 'current') return true;
+    const rawYear = record?.year ?? record?.y;
+    const parsedYear = parseInt(String(rawYear || '').trim(), 10);
+    return !Number.isNaN(parsedYear) && parsedYear === selectedYear;
+}
+
+function getScopedDataCollection(key, selectedYear = 'current') {
+    const normalizedYear = normalizeMemberYearFilter(selectedYear);
+    if (normalizedYear === 'current') {
+        return Array.isArray(data[key]) ? data[key] : [];
+    }
+
+    const source = Array.isArray(allData[key]) ? allData[key] : [];
+    if (normalizedYear === 'all') return source;
+    return source.filter(record => recordMatchesYear(record, normalizedYear));
+}
+
+function getMemberAvailableYears(memberId) {
+    const memberIdStr = String(memberId || '').trim();
+    const years = new Set();
+    const addYear = value => {
+        const parsedYear = parseInt(String(value || '').trim(), 10);
+        if (!Number.isNaN(parsedYear)) years.add(parsedYear);
+    };
+
+    (allData.faculty || []).forEach(member => {
+        if (String(member.id || '').trim() === memberIdStr) addYear(member.year);
+    });
+
+    (allData.theses || []).forEach(thesis => {
+        const matchesMember =
+            String(thesis.supervisor_id || '').trim() === memberIdStr ||
+            String(thesis.co_supervisor_id || '').trim() === memberIdStr ||
+            String(thesis.examiner1_id || '').trim() === memberIdStr ||
+            String(thesis.examiner2_id || '').trim() === memberIdStr;
+        if (matchesMember) addYear(thesis.year);
+    });
+
+    (allData.publications || []).forEach(publication => {
+        const authors = (publication.authors_ids || publication.participant_ids || '')
+            .split('|')
+            .map(id => id.trim());
+        if (authors.includes(memberIdStr)) addYear(publication.year);
+    });
+
+    (allData.participations || []).forEach(participation => {
+        const participants = (participation.participant_ids || '')
+            .split('|')
+            .map(id => id.trim());
+        if (participants.includes(memberIdStr)) addYear(participation.year);
+    });
+
+    if (typeof teachingData !== 'undefined' && teachingData && Array.isArray(teachingData.records)) {
+        teachingData.records.forEach(record => {
+            if (String(record.fid || '').trim() === memberIdStr) addYear(record.y);
+        });
+    }
+
+    return Array.from(years).sort((a, b) => b - a);
+}
+
+function getMemberScopeLabel(selectedYear) {
+    const normalizedYear = normalizeMemberYearFilter(selectedYear);
+    if (normalizedYear === 'all') return 'كل السنوات';
+    if (normalizedYear === 'current') return 'السنة الحالية';
+    return `${formatArabicDigits(normalizedYear)}هـ`;
 }
 
 // دالة لتحويل مسمى نوع الرسالة للعرض
@@ -1277,15 +1354,19 @@ function getAllParticipations() {
 // ========================================
 // حساب النقاط
 // ========================================
-function calculateMemberPoints(memberId) {
+function calculateMemberPoints(memberId, options = {}) {
     const weights = config.weights || {};
     let points = 0;
     const breakdown = {};
     const memberIdStr = String(memberId).trim();
+    const selectedYear = normalizeMemberYearFilter(options.year ?? 'current');
+    const scopedPublications = getScopedDataCollection('publications', selectedYear);
+    const scopedParticipations = getScopedDataCollection('participations', selectedYear);
+    const scopedTheses = getScopedDataCollection('theses', selectedYear);
     
     // 1. البحوث العلمية للأعضاء (من publications.csv)
-    if (data.publications && data.publications.length > 0) {
-        const memberPubs = data.publications.filter(p => {
+    if (scopedPublications.length > 0) {
+        const memberPubs = scopedPublications.filter(p => {
             const authors = (p.authors_ids || '').split('|').map(id => id.trim());
             return authors.includes(memberIdStr);
         });
@@ -1294,7 +1375,7 @@ function calculateMemberPoints(memberId) {
     }
     
     // 2. بحوث الطلاب (الإشراف على نشر بحث لطالب)
-    const studentResearch = data.participations.filter(p => {
+    const studentResearch = scopedParticipations.filter(p => {
         if (p.category !== 'بحوث الطلاب') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
@@ -1303,16 +1384,16 @@ function calculateMemberPoints(memberId) {
     points += studentResearch.length * (weights.student_research || 8);
     
     // 3. الإشراف على الرسائل العلمية (دكتوراه + ماجستير وفق تصنيف الرسالة)
-    const phdSupervised = data.theses.filter(t => 
+    const phdSupervised = scopedTheses.filter(t => 
         t.type === 'دكتوراه' && String(t.supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
     );
-    const scientificMastersSupervised = data.theses.filter(t =>
+    const scientificMastersSupervised = scopedTheses.filter(t =>
         (t.type || '').trim() === 'ماجستير' &&
         isScientificThesis(t) &&
         String(t.supervisor_id).trim() === memberIdStr &&
         t.status === 'منجزة'
     );
-    const projectMastersSupervised = data.theses.filter(t =>
+    const projectMastersSupervised = scopedTheses.filter(t =>
         (t.type || '').trim() === 'ماجستير' &&
         !isScientificThesis(t) &&
         String(t.supervisor_id).trim() === memberIdStr &&
@@ -1324,16 +1405,16 @@ function calculateMemberPoints(memberId) {
     points += projectMastersSupervised.length * (weights.masters_supervision || 3);
     
     // 4. الإشراف المشارك (رسائل علمية + مشاريع بحثية)
-    const phdCoSupervised = data.theses.filter(t => 
+    const phdCoSupervised = scopedTheses.filter(t => 
         t.type === 'دكتوراه' && String(t.co_supervisor_id).trim() === memberIdStr && t.status === 'منجزة'
     );
-    const scientificMastersCoSupervised = data.theses.filter(t =>
+    const scientificMastersCoSupervised = scopedTheses.filter(t =>
         (t.type || '').trim() === 'ماجستير' &&
         isScientificThesis(t) &&
         String(t.co_supervisor_id).trim() === memberIdStr &&
         t.status === 'منجزة'
     );
-    const projectMastersCoSupervised = data.theses.filter(t =>
+    const projectMastersCoSupervised = scopedTheses.filter(t =>
         (t.type || '').trim() === 'ماجستير' &&
         !isScientificThesis(t) &&
         String(t.co_supervisor_id).trim() === memberIdStr &&
@@ -1345,16 +1426,16 @@ function calculateMemberPoints(memberId) {
     points += projectMastersCoSupervised.length * (weights.masters_co_supervision || 2);
     
     // 7. مناقشة الرسائل العلمية (دكتوراه + ماجستير وفق التصنيف)
-    const phdExamined = data.theses.filter(t => 
+    const phdExamined = scopedTheses.filter(t => 
         t.type === 'دكتوراه' && 
         (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr)
     );
-    const scientificMastersExamined = data.theses.filter(t =>
+    const scientificMastersExamined = scopedTheses.filter(t =>
         (t.type || '').trim() === 'ماجستير' &&
         isScientificThesis(t) &&
         (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr)
     );
-    const projectMastersExamined = data.theses.filter(t =>
+    const projectMastersExamined = scopedTheses.filter(t =>
         (t.type || '').trim() === 'ماجستير' &&
         !isScientificThesis(t) &&
         (String(t.examiner1_id).trim() === memberIdStr || String(t.examiner2_id).trim() === memberIdStr)
@@ -1365,7 +1446,7 @@ function calculateMemberPoints(memberId) {
     points += projectMastersExamined.length * (weights.masters_discussion || 2);
     
     // 9. المشاركات العلمية من participations
-    data.participations.forEach(p => {
+    scopedParticipations.forEach(p => {
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         if (!participants.includes(memberIdStr)) return;
         
@@ -2907,13 +2988,17 @@ function renderLeaderboard() {
 // ========================================
 // عرض تفاصيل العضو
 // ========================================
-function computeMemberTeachingSummary(memberId) {
+function computeMemberTeachingSummary(memberId, options = {}) {
     if (typeof teachingData === 'undefined' || !teachingData || !Array.isArray(teachingData.records)) {
         return null;
     }
 
     const memberIdStr = String(memberId || '').trim();
-    const memberRecords = teachingData.records.filter(r => String(r.fid || '').trim() === memberIdStr);
+    const selectedYear = normalizeMemberYearFilter(options.year ?? 'all');
+    const memberRecords = teachingData.records.filter(record => {
+        if (String(record.fid || '').trim() !== memberIdStr) return false;
+        return recordMatchesYear(record, selectedYear);
+    });
 
     let totalSections = 0;
     let totalStudents = 0;
@@ -2984,40 +3069,78 @@ function buildMemberTeachingSummaryHtml(summary, { loading = false } = {}) {
     `;
 }
 
-function loadMemberTeachingSummaryIntoModal(memberId) {
+function loadMemberTeachingSummaryIntoModal(memberId, selectedYear = 'all', requestToken = memberModalState.token) {
     if (typeof ensureTeachingLoaded !== 'function') return;
 
     ensureTeachingLoaded()
         .then(() => {
+            const requestedMemberId = String(memberId || '').trim();
+            const requestedYear = normalizeMemberYearFilter(selectedYear);
+            if (
+                memberModalState.memberId !== requestedMemberId ||
+                normalizeMemberYearFilter(memberModalState.selectedYear) !== requestedYear ||
+                memberModalState.token !== requestToken
+            ) {
+                return;
+            }
             const container = document.getElementById('memberTeachingSummaryContainer');
             if (!container) return;
-            const summary = computeMemberTeachingSummary(memberId);
+            const summary = computeMemberTeachingSummary(memberId, { year: requestedYear });
             container.innerHTML = buildMemberTeachingSummaryHtml(summary);
         })
         .catch(() => {
+            const requestedMemberId = String(memberId || '').trim();
+            const requestedYear = normalizeMemberYearFilter(selectedYear);
+            if (
+                memberModalState.memberId !== requestedMemberId ||
+                normalizeMemberYearFilter(memberModalState.selectedYear) !== requestedYear ||
+                memberModalState.token !== requestToken
+            ) {
+                return;
+            }
             const container = document.getElementById('memberTeachingSummaryContainer');
             if (!container) return;
             container.innerHTML = buildMemberTeachingSummaryHtml(null);
         });
 }
 
-function showMemberDetails(memberId) {
+function showMemberDetails(memberId, selectedYear = 'all') {
     const member = getMemberData(memberId);
     if (!member) return;
-    
-    const { points, breakdown } = calculateMemberPoints(memberId);
-    
-    // جمع أنشطة العضو
-    const memberActivities = getMemberActivities(memberId);
-    const teachingSummary = computeMemberTeachingSummary(memberId);
+
+    const normalizedMemberId = String(memberId).trim();
+    const availableYears = getMemberAvailableYears(normalizedMemberId);
+    const normalizedSelectedYear = normalizeMemberYearFilter(selectedYear);
+    const resolvedSelectedYear =
+        normalizedSelectedYear === 'all' || normalizedSelectedYear === 'current' || availableYears.includes(normalizedSelectedYear)
+            ? normalizedSelectedYear
+            : 'all';
+    const renderToken = memberModalState.token + 1;
+    memberModalState = { memberId: normalizedMemberId, selectedYear: resolvedSelectedYear, token: renderToken };
+
+    const { points, breakdown } = calculateMemberPoints(normalizedMemberId, { year: resolvedSelectedYear });
+    const memberActivities = getMemberActivities(normalizedMemberId, { year: resolvedSelectedYear });
+    const teachingSummary = computeMemberTeachingSummary(normalizedMemberId, { year: resolvedSelectedYear });
     const shouldLoadTeachingSummary = !teachingSummary && typeof ensureTeachingLoaded === 'function';
-    
-    // إنشاء HTML للـ Modal
+    const scopeLabel = getMemberScopeLabel(resolvedSelectedYear);
+    const hasDetailedActivities = [
+        memberActivities.theses,
+        memberActivities.publications,
+        memberActivities.events,
+        memberActivities.externalDiscussions,
+        memberActivities.reviewing,
+        memberActivities.books,
+        memberActivities.consultings,
+        memberActivities.media,
+        memberActivities.studentResearch,
+        memberActivities.awards
+    ].some(list => list.length > 0);
+
     const modalHtml = `
         <div id="memberModal" class="modal active">
             <div class="modal-content member-modal-content">
                 <span class="modal-close" onclick="closeMemberModal()">&times;</span>
-                
+
                 <div class="member-header">
                     <div class="member-avatar-large">👨‍🏫</div>
                     <div class="member-info-main">
@@ -3028,9 +3151,23 @@ function showMemberDetails(memberId) {
                     <div class="member-points-display">
                         <span class="points-number">${points}</span>
                         <span class="points-label">نقطة</span>
+                        <span class="member-points-scope">${scopeLabel}</span>
                     </div>
                 </div>
-                
+
+                <div class="member-modal-toolbar">
+                    <div class="member-modal-year-filter">
+                        <label for="memberModalYearFilter">السنة</label>
+                        <select id="memberModalYearFilter" onchange="changeMemberModalYear(this.value)">
+                            <option value="all" ${resolvedSelectedYear === 'all' ? 'selected' : ''}>كل السنوات</option>
+                            ${availableYears.map(year => `
+                                <option value="${year}" ${resolvedSelectedYear === year ? 'selected' : ''}>${formatArabicDigits(year)}هـ</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div class="member-modal-scope-note">يتم تحديث البحوث والفعاليات والتفاصيل وفق السنة المختارة.</div>
+                </div>
+
                 <div class="member-breakdown">
                     <h3>📊 تفصيل النقاط</h3>
                     <div class="breakdown-grid">
@@ -3156,13 +3293,13 @@ function showMemberDetails(memberId) {
                         </div>` : ''}
                     </div>
                 </div>
-                
+
                 <div class="member-activities-section">
                     <h3>📝 تفاصيل الأنشطة</h3>
                     <div id="memberTeachingSummaryContainer">
                         ${buildMemberTeachingSummaryHtml(teachingSummary, { loading: shouldLoadTeachingSummary })}
                     </div>
-                    
+
                     ${memberActivities.theses.length > 0 ? `
                     <div class="activity-group">
                         <h4>🎓 الرسائل العلمية (${memberActivities.theses.length})</h4>
@@ -3172,11 +3309,12 @@ function showMemberDetails(memberId) {
                                     <span class="activity-badge ${t.type === 'دكتوراه' ? 'phd' : 'masters'}">${t.type}</span>
                                     <span class="activity-role">${t.role}</span>
                                     <span class="activity-title">${t.student_name} - ${t.title.substring(0, 50)}...</span>
+                                    <span class="activity-meta">${formatDate(t.defense_date)}</span>
                                 </div>
                             `).join('')}
                         </div>
                     </div>` : ''}
-                    
+
                     ${memberActivities.publications.length > 0 ? `
                     <div class="activity-group">
                         <h4>📄 البحوث المنشورة (${memberActivities.publications.length})</h4>
@@ -3184,12 +3322,12 @@ function showMemberDetails(memberId) {
                             ${memberActivities.publications.map(p => `
                                 <div class="activity-item-detail">
                                     <span class="activity-title">${p.title}</span>
-                                    <span class="activity-meta">${p.journal || p.location} - ${formatDate(p.date)}</span>
+                                    <span class="activity-meta">${p.journal || p.location || 'وعاء نشر غير محدد'} - ${formatDate(p.publish_date || p.date)}</span>
                                 </div>
                             `).join('')}
                         </div>
                     </div>` : ''}
-                    
+
                     ${memberActivities.events.length > 0 ? `
                     <div class="activity-group">
                         <h4>🎯 الفعاليات العلمية (${memberActivities.events.length})</h4>
@@ -3198,12 +3336,12 @@ function showMemberDetails(memberId) {
                                 <div class="activity-item-detail">
                                     <span class="activity-badge event">${e.category}</span>
                                     <span class="activity-title">${e.title}</span>
-                                    <span class="activity-meta">${e.location} - ${e.participation_type}</span>
+                                    <span class="activity-meta">${[e.location, e.participation_type, formatDate(e.date)].filter(Boolean).join(' - ')}</span>
                                 </div>
                             `).join('')}
                         </div>
                     </div>` : ''}
-                    
+
                     ${memberActivities.externalDiscussions.length > 0 ? `
                     <div class="activity-group">
                         <h4>🎓 المناقشات الخارجية (${memberActivities.externalDiscussions.length})</h4>
@@ -3217,7 +3355,7 @@ function showMemberDetails(memberId) {
                             `).join('')}
                         </div>
                     </div>` : ''}
-                    
+
                     ${memberActivities.reviewing.length > 0 ? `
                     <div class="activity-group">
                         <h4>✅ التحكيم العلمي (${memberActivities.reviewing.length})</h4>
@@ -3226,7 +3364,7 @@ function showMemberDetails(memberId) {
                                 <div class="activity-item-detail">
                                     <span class="activity-badge reviewing">تحكيم</span>
                                     <span class="activity-title">${r.title}</span>
-                                    <span class="activity-meta">${r.location || ''} - ${formatDate(r.date)}</span>
+                                    <span class="activity-meta">${[r.location, formatDate(r.date)].filter(Boolean).join(' - ')}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -3240,7 +3378,7 @@ function showMemberDetails(memberId) {
                                 <div class="activity-item-detail">
                                     <span class="activity-badge event">تأليف كتب</span>
                                     <span class="activity-title">${b.title}</span>
-                                    <span class="activity-meta">${b.location || ''} - ${formatDate(b.date)}</span>
+                                    <span class="activity-meta">${[b.location, formatDate(b.date)].filter(Boolean).join(' - ')}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -3254,7 +3392,7 @@ function showMemberDetails(memberId) {
                                 <div class="activity-item-detail">
                                     <span class="activity-badge event">استشارة</span>
                                     <span class="activity-title">${c.title}</span>
-                                    <span class="activity-meta">${c.location || ''}${c.consulting_hours ? ` - ${c.consulting_hours} ساعة` : ''}</span>
+                                    <span class="activity-meta">${[c.location, c.consulting_hours ? `${c.consulting_hours} ساعة` : '', formatDate(c.date)].filter(Boolean).join(' - ')}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -3268,12 +3406,12 @@ function showMemberDetails(memberId) {
                                 <div class="activity-item-detail">
                                     <span class="activity-badge event">إعلام</span>
                                     <span class="activity-title">${m.title}</span>
-                                    <span class="activity-meta">${m.location || ''} - ${formatDate(m.date)}</span>
+                                    <span class="activity-meta">${[m.location, formatDate(m.date)].filter(Boolean).join(' - ')}</span>
                                 </div>
                             `).join('')}
                         </div>
                     </div>` : ''}
-                    
+
                     ${memberActivities.studentResearch.length > 0 ? `
                     <div class="activity-group">
                         <h4>📝 بحوث الطلاب - إشراف (${memberActivities.studentResearch.length})</h4>
@@ -3282,12 +3420,12 @@ function showMemberDetails(memberId) {
                                 <div class="activity-item-detail">
                                     <span class="activity-badge student">بحث طالب</span>
                                     <span class="activity-title">${s.title}</span>
-                                    <span class="activity-meta">${s.location || ''} - ${formatDate(s.date)}</span>
+                                    <span class="activity-meta">${[s.location, formatDate(s.date)].filter(Boolean).join(' - ')}</span>
                                 </div>
                             `).join('')}
                         </div>
                     </div>` : ''}
-                    
+
                     ${memberActivities.awards.length > 0 ? `
                     <div class="activity-group">
                         <h4>🏆 الجوائز والتكريمات (${memberActivities.awards.length})</h4>
@@ -3296,35 +3434,47 @@ function showMemberDetails(memberId) {
                                 <div class="activity-item-detail">
                                     <span class="activity-badge award">${a.category}</span>
                                     <span class="activity-title">${a.title}</span>
-                                    <span class="activity-meta">${a.granting_body || a.location}</span>
+                                    <span class="activity-meta">${[a.granting_body || a.location, formatDate(a.date)].filter(Boolean).join(' - ')}</span>
                                 </div>
                             `).join('')}
                         </div>
+                    </div>` : ''}
+
+                    ${!hasDetailedActivities ? `
+                    <div class="activity-group">
+                        <div class="member-teaching-empty">لا توجد سجلات بحثية أو نشاطات إضافية لهذا العضو في ${scopeLabel}.</div>
                     </div>` : ''}
                 </div>
             </div>
         </div>
     `;
-    
-    // إزالة أي modal سابق
+
     const existingModal = document.getElementById('memberModal');
     if (existingModal) existingModal.remove();
-    
-    // إضافة الـ modal
+
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 
     if (shouldLoadTeachingSummary) {
-        loadMemberTeachingSummaryIntoModal(memberId);
+        loadMemberTeachingSummaryIntoModal(normalizedMemberId, resolvedSelectedYear, renderToken);
     }
 }
 
+function changeMemberModalYear(value) {
+    if (!memberModalState.memberId) return;
+    showMemberDetails(memberModalState.memberId, value);
+}
+
 // دالة لجمع أنشطة العضو
-function getMemberActivities(memberId) {
+function getMemberActivities(memberId, options = {}) {
     const memberIdStr = String(memberId).trim();
+    const selectedYear = normalizeMemberYearFilter(options.year ?? 'current');
+    const scopedTheses = getScopedDataCollection('theses', selectedYear);
+    const scopedPublications = getScopedDataCollection('publications', selectedYear);
+    const scopedParticipations = getScopedDataCollection('participations', selectedYear);
     
     // الرسائل العلمية
     const theses = [];
-    data.theses.forEach(t => {
+    scopedTheses.forEach(t => {
         if (String(t.supervisor_id).trim() === memberIdStr) {
             theses.push({ ...t, role: 'مشرف رئيسي' });
         } else if (String(t.co_supervisor_id).trim() === memberIdStr) {
@@ -3335,74 +3485,86 @@ function getMemberActivities(memberId) {
     });
     
     // البحوث العلمية للأعضاء (من publications.csv)
-    const publications = (data.publications || []).filter(p => {
+    const publications = scopedPublications.filter(p => {
         const authors = (p.authors_ids || '').split('|').map(id => id.trim());
         return authors.includes(memberIdStr);
     });
     
     // بحوث الطلاب (من participations.csv)
-    const studentResearch = data.participations.filter(p => {
+    const studentResearch = scopedParticipations.filter(p => {
         if (p.category !== 'بحوث الطلاب') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
     
     // الفعاليات (مؤتمرات، ندوات، ورش عمل)
-    const events = data.participations.filter(p => {
+    const events = scopedParticipations.filter(p => {
         if (p.category !== 'مؤتمر' && p.category !== 'ندوة' && p.category !== 'ورشة عمل') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
     
     // المناقشات الخارجية
-    const externalDiscussions = data.participations.filter(p => {
+    const externalDiscussions = scopedParticipations.filter(p => {
         if (p.category !== 'مناقشة خارجية') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
     
     // التحكيم العلمي
-    const reviewing = data.participations.filter(p => {
+    const reviewing = scopedParticipations.filter(p => {
         if (p.category !== 'تحكيم علمي') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
 
     // التأليف والنشر (الكتب)
-    const books = data.participations.filter(p => {
+    const books = scopedParticipations.filter(p => {
         if (p.category !== 'تأليف كتب') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
 
     // الاستشارات العلمية
-    const consultings = data.participations.filter(p => {
+    const consultings = scopedParticipations.filter(p => {
         if (p.category !== 'استشارة علمية') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
 
     // المشاركات الإعلامية
-    const media = data.participations.filter(p => {
+    const media = scopedParticipations.filter(p => {
         if (p.category !== 'مشاركة إعلامية') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
     
     // الجوائز وبراءات الاختراع
-    const awards = data.participations.filter(p => {
+    const awards = scopedParticipations.filter(p => {
         if (p.category !== 'جائزة' && p.category !== 'براءة اختراع') return false;
         const participants = (p.participant_ids || '').split('|').map(id => id.trim());
         return participants.includes(memberIdStr);
     });
-    
-    return { theses, publications, studentResearch, events, externalDiscussions, reviewing, books, consultings, media, awards };
+
+    return {
+        theses: sortByDateDesc(theses, thesis => thesis.defense_date),
+        publications: sortByDateDesc(publications, publication => publication.publish_date || publication.date),
+        studentResearch: sortByDateDesc(studentResearch, item => item.date),
+        events: sortByDateDesc(events, item => item.date),
+        externalDiscussions: sortByDateDesc(externalDiscussions, item => item.date),
+        reviewing: sortByDateDesc(reviewing, item => item.date),
+        books: sortByDateDesc(books, item => item.date),
+        consultings: sortByDateDesc(consultings, item => item.date),
+        media: sortByDateDesc(media, item => item.date),
+        awards: sortByDateDesc(awards, item => item.date)
+    };
 }
 
 // دالة إغلاق modal العضو
 function closeMemberModal() {
     const modal = document.getElementById('memberModal');
     if (modal) modal.remove();
+    memberModalState = { memberId: null, selectedYear: 'all', token: memberModalState.token };
 }
 
 // إغلاق modal العضو بالنقر خارجه
