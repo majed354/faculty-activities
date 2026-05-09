@@ -5329,6 +5329,13 @@ function analyticsStudioText(value, fallback = '') {
     return text || fallback;
 }
 
+function analyticsStudioFormatEmploymentStatus(value) {
+    const normalized = analyticsStudioText(value, 'غير محدد');
+    if (normalized === 'نعم') return 'نعم (على رأس العمل)';
+    if (normalized === 'لا') return 'لا';
+    return normalized;
+}
+
 function analyticsStudioNumber(value) {
     const numericValue = Number(value);
     return Number.isFinite(numericValue) ? numericValue : 0;
@@ -5398,6 +5405,12 @@ function analyticsStudioSafeFileName(value) {
 
 function analyticsStudioMetricHeader(metric) {
     return metric.unit ? `${metric.label}` : metric.label;
+}
+
+function analyticsStudioBuildMultiFilterSummary(selectedValues, totalOptionsCount) {
+    if (!selectedValues.length || selectedValues.length === totalOptionsCount) return 'الكل';
+    if (selectedValues.length === 1) return selectedValues[0];
+    return `تم اختيار ${formatArabicDigits(selectedValues.length)} عناصر`;
 }
 
 function analyticsStudioFormatValue(value, formatter = null) {
@@ -5611,7 +5624,7 @@ function getAnalyticsStudioSourceDefinitions() {
             metrics: [
                 { id: 'record_count', label: 'عدد السجلات', unit: 'سجل', compute: rows => rows.length, format: analyticsStudioFormatCount },
                 { id: 'unique_faculty', label: 'عدد الأعضاء', unit: 'عضو', compute: rows => analyticsStudioDistinctCount(rows, row => row.id), format: analyticsStudioFormatCount },
-                { id: 'active_faculty', label: 'الأعضاء الفاعلون', unit: 'عضو', compute: rows => analyticsStudioDistinctCount(rows.filter(row => analyticsStudioText(row.active) === 'نعم'), row => row.id), format: analyticsStudioFormatCount },
+                { id: 'active_faculty', label: 'الأعضاء الفاعلون', unit: 'عضو', compute: rows => analyticsStudioDistinctCount(rows.filter(row => analyticsStudioText(row.activeFlag) === 'نعم'), row => row.id), format: analyticsStudioFormatCount },
                 { id: 'distinct_departments', label: 'عدد الأقسام', unit: 'قسم', compute: rows => analyticsStudioDistinctCount(rows, row => row.department), format: analyticsStudioFormatCount },
                 { id: 'professor_count', label: 'عدد الأساتذة', unit: 'عضو', compute: rows => analyticsStudioDistinctCount(rows.filter(row => analyticsStudioText(row.rank) === 'أستاذ'), row => row.id), format: analyticsStudioFormatCount },
                 { id: 'associate_professor_count', label: 'عدد الأساتذة المشاركين', unit: 'عضو', compute: rows => analyticsStudioDistinctCount(rows.filter(row => analyticsStudioText(row.rank) === 'أستاذ مشارك'), row => row.id), format: analyticsStudioFormatCount },
@@ -5833,7 +5846,8 @@ function analyticsStudioGetFacultyRows() {
         year: parseCustomStatsYear(member.year),
         department: analyticsStudioText(member.department, 'غير محدد'),
         rank: analyticsStudioText(member.rank, 'غير محدد'),
-        active: analyticsStudioText(member.active, 'غير محدد')
+        activeFlag: analyticsStudioText(member.active, 'غير محدد'),
+        active: analyticsStudioFormatEmploymentStatus(member.active)
     })).filter(row => row.year !== null);
 }
 
@@ -5949,6 +5963,10 @@ function renderAnalyticsStudioFilters(source, resetSelections = false) {
     if (!container) return;
 
     const rows = source.getRows();
+    const preservedSelections = !resetSelections
+        ? Object.fromEntries(source.filters.map(filter => [filter.id, getAnalyticsStudioSelectedFilterValues(filter)]))
+        : {};
+
     container.innerHTML = source.filters.map(filter => {
         const rawValues = Array.from(new Set(rows.flatMap(row => {
             const values = typeof filter.getOptionsValues === 'function'
@@ -5957,17 +5975,48 @@ function renderAnalyticsStudioFilters(source, resetSelections = false) {
             return (Array.isArray(values) ? values : [values]).map(value => analyticsStudioText(value)).filter(Boolean);
         })));
         const options = rawValues.sort((a, b) => a.localeCompare(b, 'ar'));
-        const defaultValues = resetSelections && filter.id === 'department' && currentDepartment !== 'all' && options.includes(currentDepartment)
-            ? [currentDepartment]
-            : [];
-        const multipleAttr = filter.multi ? 'multiple size="5"' : '';
+        const defaultValues = preservedSelections[filter.id]?.length
+            ? preservedSelections[filter.id]
+            : (resetSelections && filter.id === 'department' && currentDepartment !== 'all' && options.includes(currentDepartment)
+                ? [currentDepartment]
+                : []);
         const defaultAttr = encodeURIComponent(JSON.stringify(defaultValues));
+
+        if (filter.multi) {
+            const selectedValues = defaultValues.filter(value => options.includes(value));
+            const summaryText = analyticsStudioBuildMultiFilterSummary(selectedValues, options.length);
+            return `
+                <div class="analytics-studio-field analytics-studio-field-multi">
+                    <label>${escapeHtml(filter.label)}</label>
+                    <div class="analytics-studio-multi-select" data-filter-id="${filter.id}" data-default-values="${defaultAttr}">
+                        <button type="button" class="analytics-studio-multi-trigger" aria-expanded="false">
+                            <span class="analytics-studio-multi-trigger-text">${escapeHtml(summaryText)}</span>
+                            <span class="analytics-studio-multi-trigger-icon">▾</span>
+                        </button>
+                        <div class="analytics-studio-multi-panel hidden">
+                            <label class="analytics-studio-multi-option analytics-studio-multi-option-all">
+                                <input type="checkbox" data-select-all="true">
+                                <span>الكل</span>
+                            </label>
+                            <div class="analytics-studio-multi-options-list">
+                                ${options.map(option => `
+                                    <label class="analytics-studio-multi-option">
+                                        <input type="checkbox" value="${escapeHtml(option)}" ${selectedValues.includes(option) ? 'checked' : ''}>
+                                        <span>${escapeHtml(option)}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
         return `
             <div class="analytics-studio-field">
                 <label for="analyticsStudioFilter_${filter.id}">${escapeHtml(filter.label)}</label>
-                <select id="analyticsStudioFilter_${filter.id}" data-filter-id="${filter.id}" data-default-values="${defaultAttr}" ${multipleAttr}>
-                    ${filter.multi ? '' : '<option value="">الكل</option>'}
+                <select id="analyticsStudioFilter_${filter.id}" data-filter-id="${filter.id}" data-default-values="${defaultAttr}">
+                    <option value="">الكل</option>
                     ${options.map(option => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('')}
                 </select>
             </div>
@@ -5980,6 +6029,53 @@ function renderAnalyticsStudioFilters(source, resetSelections = false) {
             option.selected = defaultValues.includes(option.value);
         });
         select.addEventListener('change', analyticsStudioClearReport);
+    });
+
+    container.querySelectorAll('.analytics-studio-multi-select').forEach(wrapper => {
+        const trigger = wrapper.querySelector('.analytics-studio-multi-trigger');
+        const panel = wrapper.querySelector('.analytics-studio-multi-panel');
+        const allCheckbox = wrapper.querySelector('input[data-select-all="true"]');
+        const optionCheckboxes = Array.from(wrapper.querySelectorAll('.analytics-studio-multi-options-list input[type="checkbox"]'));
+
+        const syncMultiState = (clearReport = false) => {
+            const checkedValues = optionCheckboxes.filter(input => input.checked).map(input => input.value);
+            const allSelected = optionCheckboxes.length > 0 && checkedValues.length === optionCheckboxes.length;
+            if (allCheckbox) allCheckbox.checked = allSelected || checkedValues.length === 0;
+            const label = wrapper.querySelector('.analytics-studio-multi-trigger-text');
+            if (label) {
+                label.textContent = analyticsStudioBuildMultiFilterSummary(checkedValues, optionCheckboxes.length);
+            }
+            if (clearReport) analyticsStudioClearReport();
+        };
+
+        trigger?.addEventListener('click', event => {
+            event.preventDefault();
+            const isOpen = !panel.classList.contains('hidden');
+            document.querySelectorAll('.analytics-studio-multi-panel').forEach(otherPanel => {
+                if (otherPanel !== panel) otherPanel.classList.add('hidden');
+            });
+            document.querySelectorAll('.analytics-studio-multi-trigger[aria-expanded="true"]').forEach(otherTrigger => {
+                if (otherTrigger !== trigger) otherTrigger.setAttribute('aria-expanded', 'false');
+            });
+            panel.classList.toggle('hidden', isOpen);
+            trigger.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+        });
+
+        allCheckbox?.addEventListener('change', () => {
+            const shouldCheckAll = allCheckbox.checked;
+            optionCheckboxes.forEach(input => {
+                input.checked = shouldCheckAll;
+            });
+            syncMultiState(true);
+        });
+
+        optionCheckboxes.forEach(input => {
+            input.addEventListener('change', () => {
+                syncMultiState(true);
+            });
+        });
+
+        syncMultiState(false);
     });
 }
 
@@ -6017,13 +6113,15 @@ function getSelectedAnalyticsStudioMetrics(source) {
 }
 
 function getAnalyticsStudioSelectedFilterValues(filter) {
-    const select = document.getElementById(`analyticsStudioFilter_${filter.id}`);
-    if (!select) return [];
     if (filter.multi) {
-        return Array.from(select.selectedOptions)
-            .map(option => analyticsStudioText(option.value))
+        const wrapper = document.querySelector(`.analytics-studio-multi-select[data-filter-id="${filter.id}"]`);
+        if (!wrapper) return [];
+        return Array.from(wrapper.querySelectorAll('.analytics-studio-multi-options-list input[type="checkbox"]:checked'))
+            .map(input => analyticsStudioText(input.value))
             .filter(Boolean);
     }
+    const select = document.getElementById(`analyticsStudioFilter_${filter.id}`);
+    if (!select) return [];
     const value = analyticsStudioText(select.value);
     return value ? [value] : [];
 }
@@ -6722,6 +6820,13 @@ function setupAnalyticsStudio() {
     document.getElementById('analyticsStudioExportPdfBtn')?.addEventListener('click', exportAnalyticsStudioPDF);
     document.getElementById('analyticsStudioExportCsvBtn')?.addEventListener('click', exportAnalyticsStudioCSV);
     document.getElementById('analyticsStudioExportExcelBtn')?.addEventListener('click', exportAnalyticsStudioExcel);
+    document.addEventListener('click', event => {
+        if (event.target.closest('.analytics-studio-multi-select')) return;
+        document.querySelectorAll('.analytics-studio-multi-panel').forEach(panel => panel.classList.add('hidden'));
+        document.querySelectorAll('.analytics-studio-multi-trigger[aria-expanded="true"]').forEach(trigger => {
+            trigger.setAttribute('aria-expanded', 'false');
+        });
+    });
 
     analyticsStudioInitialized = true;
     resetAnalyticsStudioView();
