@@ -5400,6 +5400,23 @@ function analyticsStudioMetricHeader(metric) {
     return metric.unit ? `${metric.label}` : metric.label;
 }
 
+function analyticsStudioFormatValue(value, formatter = null) {
+    if (typeof formatter === 'function') {
+        return formatter(value);
+    }
+
+    if (Array.isArray(value)) {
+        const items = value.map(item => analyticsStudioText(item)).filter(Boolean);
+        return items.length ? items.join('، ') : '-';
+    }
+
+    if (value === null || value === undefined || value === '') {
+        return '-';
+    }
+
+    return String(value);
+}
+
 function analyticsStudioDestroyChart() {
     if (analyticsStudioChart) {
         analyticsStudioChart.destroy();
@@ -5570,6 +5587,15 @@ function getAnalyticsStudioSourceDefinitions() {
             getRows: analyticsStudioGetFacultyRows,
             getYear: row => row.year,
             searchText: row => `${row.name || ''} ${row.id || ''} ${row.rank || ''} ${row.department || ''} ${row.email || ''}`,
+            detailColumns: [
+                { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value) },
+                { id: 'id', label: 'الرقم', getValue: row => analyticsStudioText(row.id, '-') },
+                { id: 'name', label: 'الاسم', getValue: row => analyticsStudioText(row.name, '-') },
+                { id: 'rank', label: 'الرتبة العلمية', getValue: row => analyticsStudioText(row.rank, '-') },
+                { id: 'email', label: 'البريد الإلكتروني', getValue: row => analyticsStudioText(row.email, '-') },
+                { id: 'active', label: 'الحالة', getValue: row => analyticsStudioText(row.active, '-') },
+                { id: 'department', label: 'القسم', getValue: row => analyticsStudioText(row.department, '-') }
+            ],
             groups: [
                 { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value), sort: 'numeric' },
                 { id: 'department', label: 'القسم', getValue: row => analyticsStudioText(row.department, 'غير محدد') },
@@ -5578,7 +5604,7 @@ function getAnalyticsStudioSourceDefinitions() {
             ],
             filters: [
                 { id: 'department', label: 'القسم', getValue: row => analyticsStudioText(row.department, 'غير محدد') },
-                { id: 'rank', label: 'الرتبة العلمية', getValue: row => analyticsStudioText(row.rank, 'غير محدد') },
+                { id: 'rank', label: 'الرتبة العلمية', getValue: row => analyticsStudioText(row.rank, 'غير محدد'), multi: true },
                 { id: 'active', label: 'الحالة', getValue: row => analyticsStudioText(row.active, 'غير محدد') }
             ],
             defaultMetrics: ['unique_faculty', 'active_faculty', 'distinct_departments', 'assistant_professor_count'],
@@ -5599,6 +5625,19 @@ function getAnalyticsStudioSourceDefinitions() {
             getRows: analyticsStudioGetPublicationRows,
             getYear: row => row.year,
             searchText: row => `${row.title || ''} ${row.journal || ''} ${(row.authorNames || []).join(' ')} ${row.departmentLabel || ''} ${row.city || ''} ${row.country || ''}`,
+            detailColumns: [
+                { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value) },
+                { id: 'title', label: 'عنوان البحث', getValue: row => analyticsStudioText(row.title, '-') },
+                { id: 'authors', label: 'المؤلفون', getValue: row => row.authorNames },
+                { id: 'department', label: 'القسم', getValue: row => row.departmentList?.length ? row.departmentList : [row.departmentLabel] },
+                { id: 'journal', label: 'وعاء النشر', getValue: row => row.journalName },
+                { id: 'institution', label: 'الجهة', getValue: row => row.institution },
+                { id: 'city', label: 'المدينة', getValue: row => row.city },
+                { id: 'country', label: 'الدولة', getValue: row => row.country },
+                { id: 'publish_date', label: 'تاريخ النشر', getValue: row => formatDate(row.publish_date || row.date) },
+                { id: 'citations_range', label: 'نطاق الاقتباسات', getValue: row => analyticsStudioText(row.citations_range, '-') },
+                { id: 'student_author', label: 'طالب مشارك', getValue: row => row.studentAuthorLabel }
+            ],
             groups: [
                 { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value), sort: 'numeric' },
                 { id: 'department', label: 'القسم', getValue: row => row.departmentLabel },
@@ -5641,6 +5680,19 @@ function getAnalyticsStudioSourceDefinitions() {
             getRows: analyticsStudioGetThesisRows,
             getYear: row => row.year,
             searchText: row => `${row.title || ''} ${row.student_name || ''} ${row.supervisorName || ''} ${row.specializationLabel || ''} ${row.statusLabel || ''}`,
+            detailColumns: [
+                { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value) },
+                { id: 'title', label: 'العنوان', getValue: row => analyticsStudioText(row.title, '-') },
+                { id: 'student_name', label: 'الطالب', getValue: row => analyticsStudioText(row.student_name, '-') },
+                { id: 'kind', label: 'التصنيف', getValue: row => row.thesisKind },
+                { id: 'degree', label: 'الدرجة', getValue: row => row.degreeLabel },
+                { id: 'specialization', label: 'التخصص', getValue: row => row.specializationLabel },
+                { id: 'status', label: 'الحالة', getValue: row => row.statusLabel },
+                { id: 'program', label: 'البرنامج', getValue: row => row.programLabel },
+                { id: 'supervisor', label: 'المشرف', getValue: row => row.supervisorName },
+                { id: 'department', label: 'القسم', getValue: row => row.supervisorDepartment },
+                { id: 'defense_date', label: 'تاريخ المناقشة', getValue: row => formatDate(row.defense_date) }
+            ],
             groups: [
                 { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value), sort: 'numeric' },
                 { id: 'kind', label: 'التصنيف', getValue: row => row.thesisKind },
@@ -5677,6 +5729,18 @@ function getAnalyticsStudioSourceDefinitions() {
             getRows: analyticsStudioGetParticipationRows,
             getYear: row => row.year,
             searchText: row => `${row.title || ''} ${row.categoryLabel || ''} ${row.participationTypeLabel || ''} ${row.locationLabel || ''} ${(row.participantNames || []).join(' ')} ${row.departmentLabel || ''}`,
+            detailColumns: [
+                { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value) },
+                { id: 'title', label: 'العنوان', getValue: row => analyticsStudioText(row.title, '-') },
+                { id: 'category', label: 'التصنيف', getValue: row => row.categoryLabel },
+                { id: 'type', label: 'نوع المشاركة', getValue: row => row.participationTypeLabel },
+                { id: 'participants', label: 'المشاركون', getValue: row => row.participantNames },
+                { id: 'department', label: 'القسم', getValue: row => row.departmentList?.length ? row.departmentList : [row.departmentLabel] },
+                { id: 'location', label: 'المكان', getValue: row => row.locationLabel },
+                { id: 'organized', label: 'تنظيم القسم', getValue: row => row.organizedByDepartmentLabel },
+                { id: 'student_details', label: 'تفاصيل الطلاب', getValue: row => analyticsStudioText(row.student_details, '-') },
+                { id: 'date', label: 'التاريخ', getValue: row => formatDate(row.date) }
+            ],
             groups: [
                 { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value), sort: 'numeric' },
                 { id: 'category', label: 'التصنيف', getValue: row => row.categoryLabel },
@@ -5718,6 +5782,20 @@ function getAnalyticsStudioSourceDefinitions() {
             getRows: analyticsStudioBuildTeachingRows,
             getYear: row => row.year,
             searchText: row => `${row.courseName || ''} ${row.courseCode || ''} ${row.facultyName || ''} ${row.department || ''} ${row.mode || ''} ${row.degree || ''} ${row.programLabel || ''}`,
+            detailColumns: [
+                { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value) },
+                { id: 'faculty', label: 'عضو هيئة التدريس', getValue: row => row.facultyName },
+                { id: 'department', label: 'القسم', getValue: row => row.department },
+                { id: 'rank', label: 'الرتبة العلمية', getValue: row => row.rank },
+                { id: 'courseCode', label: 'رمز المقرر', getValue: row => row.courseCode },
+                { id: 'courseName', label: 'اسم المقرر', getValue: row => row.courseName },
+                { id: 'program', label: 'البرنامج', getValue: row => row.programLabel },
+                { id: 'degree', label: 'الدرجة', getValue: row => row.degree },
+                { id: 'mode', label: 'النمط', getValue: row => row.mode },
+                { id: 'term', label: 'الفصل', getValue: row => row.term },
+                { id: 'students', label: 'عدد الطلاب', getValue: row => analyticsStudioFormatCount(row.students) },
+                { id: 'hours', label: 'الساعات', getValue: row => analyticsStudioFormatCount(row.hours) }
+            ],
             groups: [
                 { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value), sort: 'numeric' },
                 { id: 'department', label: 'القسم', getValue: row => row.department },
@@ -5730,7 +5808,7 @@ function getAnalyticsStudioSourceDefinitions() {
             filters: [
                 { id: 'department', label: 'القسم', getValue: row => row.department },
                 { id: 'faculty', label: 'عضو هيئة التدريس', getValue: row => row.facultyName },
-                { id: 'rank', label: 'الرتبة العلمية', getValue: row => row.rank },
+                { id: 'rank', label: 'الرتبة العلمية', getValue: row => row.rank, multi: true },
                 { id: 'degree', label: 'الدرجة', getValue: row => row.degree },
                 { id: 'mode', label: 'النمط', getValue: row => row.mode },
                 { id: 'program', label: 'البرنامج', getValue: row => row.programLabel }
@@ -5838,7 +5916,7 @@ function updateAnalyticsStudioSecondaryGroups(resetSelections = false) {
         .join('');
 
     secondarySelect.innerHTML = '<option value="">بدون تجميع ثانوي</option>' + optionsHtml;
-    if (currentSecondary && source.groups.some(group => group.id === currentSecondary && group.id !== primaryValue)) {
+    if (currentSecondary && primaryValue && source.groups.some(group => group.id === currentSecondary && group.id !== primaryValue)) {
         secondarySelect.value = currentSecondary;
     } else {
         secondarySelect.value = '';
@@ -5861,11 +5939,9 @@ function syncAnalyticsStudioGroupingState() {
     }
 
     primarySelect.disabled = false;
-    if (!primarySelect.value && source.groups.length) {
-        primarySelect.value = source.groups[0].id;
-    }
     updateAnalyticsStudioSecondaryGroups();
-    secondarySelect.disabled = false;
+    secondarySelect.disabled = !primarySelect.value;
+    if (!primarySelect.value) secondarySelect.value = '';
 }
 
 function renderAnalyticsStudioFilters(source, resetSelections = false) {
@@ -5881,15 +5957,17 @@ function renderAnalyticsStudioFilters(source, resetSelections = false) {
             return (Array.isArray(values) ? values : [values]).map(value => analyticsStudioText(value)).filter(Boolean);
         })));
         const options = rawValues.sort((a, b) => a.localeCompare(b, 'ar'));
-        const defaultValue = resetSelections && filter.id === 'department' && currentDepartment !== 'all' && options.includes(currentDepartment)
-            ? currentDepartment
-            : '';
+        const defaultValues = resetSelections && filter.id === 'department' && currentDepartment !== 'all' && options.includes(currentDepartment)
+            ? [currentDepartment]
+            : [];
+        const multipleAttr = filter.multi ? 'multiple size="5"' : '';
+        const defaultAttr = encodeURIComponent(JSON.stringify(defaultValues));
 
         return `
             <div class="analytics-studio-field">
                 <label for="analyticsStudioFilter_${filter.id}">${escapeHtml(filter.label)}</label>
-                <select id="analyticsStudioFilter_${filter.id}" data-filter-id="${filter.id}" data-default-value="${escapeHtml(defaultValue)}">
-                    <option value="">الكل</option>
+                <select id="analyticsStudioFilter_${filter.id}" data-filter-id="${filter.id}" data-default-values="${defaultAttr}" ${multipleAttr}>
+                    ${filter.multi ? '' : '<option value="">الكل</option>'}
                     ${options.map(option => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('')}
                 </select>
             </div>
@@ -5897,8 +5975,10 @@ function renderAnalyticsStudioFilters(source, resetSelections = false) {
     }).join('');
 
     container.querySelectorAll('select').forEach(select => {
-        const defaultValue = select.getAttribute('data-default-value') || '';
-        if (defaultValue) select.value = defaultValue;
+        const defaultValues = JSON.parse(decodeURIComponent(select.getAttribute('data-default-values') || '%5B%5D'));
+        Array.from(select.options).forEach(option => {
+            option.selected = defaultValues.includes(option.value);
+        });
         select.addEventListener('change', analyticsStudioClearReport);
     });
 }
@@ -5936,6 +6016,18 @@ function getSelectedAnalyticsStudioMetrics(source) {
     return source.metrics.filter(metric => selectedIds.includes(metric.id));
 }
 
+function getAnalyticsStudioSelectedFilterValues(filter) {
+    const select = document.getElementById(`analyticsStudioFilter_${filter.id}`);
+    if (!select) return [];
+    if (filter.multi) {
+        return Array.from(select.selectedOptions)
+            .map(option => analyticsStudioText(option.value))
+            .filter(Boolean);
+    }
+    const value = analyticsStudioText(select.value);
+    return value ? [value] : [];
+}
+
 function getAnalyticsStudioFilteredRows(source) {
     const fromYear = parseCustomStatsYear(document.getElementById('analyticsStudioYearFrom')?.value);
     const toYear = parseCustomStatsYear(document.getElementById('analyticsStudioYearTo')?.value);
@@ -5951,13 +6043,12 @@ function getAnalyticsStudioFilteredRows(source) {
     });
 
     source.filters.forEach(filter => {
-        const select = document.getElementById(`analyticsStudioFilter_${filter.id}`);
-        const selectedValue = analyticsStudioText(select?.value);
-        if (!selectedValue) return;
+        const selectedValues = getAnalyticsStudioSelectedFilterValues(filter);
+        if (!selectedValues.length) return;
         rows = rows.filter(row => (
             typeof filter.matches === 'function'
-                ? filter.matches(row, selectedValue)
-                : analyticsStudioText(filter.getValue(row)) === selectedValue
+                ? selectedValues.some(selectedValue => filter.matches(row, selectedValue))
+                : selectedValues.includes(analyticsStudioText(filter.getValue(row)))
         ));
     });
 
@@ -5988,20 +6079,79 @@ function analyticsStudioBuildYearLabel(rows, source) {
     return `${formatCustomStatsYearLabel(years[0])} - ${formatCustomStatsYearLabel(years[years.length - 1])}`;
 }
 
-function analyticsStudioSortGroups(rows, primaryGroup, secondaryGroup) {
-    const compareValues = (left, right, group) => {
-        if (!group) return 0;
-        if (group.sort === 'numeric') {
-            return analyticsStudioNumber(left) - analyticsStudioNumber(right);
-        }
-        return analyticsStudioFormatGroupValue(group, left).localeCompare(analyticsStudioFormatGroupValue(group, right), 'ar');
-    };
+function analyticsStudioCompareGroupValues(left, right, group) {
+    if (!group) return 0;
+    if (group.sort === 'numeric') {
+        return analyticsStudioNumber(left) - analyticsStudioNumber(right);
+    }
+    return analyticsStudioFormatGroupValue(group, left).localeCompare(analyticsStudioFormatGroupValue(group, right), 'ar');
+}
 
+function analyticsStudioSortGroups(rows, primaryGroup, secondaryGroup) {
     rows.sort((a, b) => {
-        const primaryCmp = compareValues(a.primaryValue, b.primaryValue, primaryGroup);
+        const primaryCmp = analyticsStudioCompareGroupValues(a.primaryValue, b.primaryValue, primaryGroup);
         if (primaryCmp !== 0) return primaryCmp;
-        return compareValues(a.secondaryValue, b.secondaryValue, secondaryGroup);
+        return analyticsStudioCompareGroupValues(a.secondaryValue, b.secondaryValue, secondaryGroup);
     });
+}
+
+function analyticsStudioBuildGroupedMetricRows(records, metricDefs, primaryGroup, secondaryGroup) {
+    if (!primaryGroup) return [];
+
+    const grouped = new Map();
+    records.forEach(record => {
+        const primaryValue = primaryGroup.getValue(record);
+        const secondaryValue = secondaryGroup ? secondaryGroup.getValue(record) : '';
+        const key = `${analyticsStudioText(primaryValue)}||${analyticsStudioText(secondaryValue)}`;
+
+        if (!grouped.has(key)) {
+            grouped.set(key, {
+                primaryValue,
+                secondaryValue,
+                records: []
+            });
+        }
+
+        grouped.get(key).records.push(record);
+    });
+
+    const rows = Array.from(grouped.values()).map(group => ({
+        ...group,
+        metricValues: computeAnalyticsStudioMetricValues(group.records, metricDefs)
+    }));
+
+    analyticsStudioSortGroups(rows, primaryGroup, secondaryGroup);
+    return rows;
+}
+
+function analyticsStudioGetVisibleDetailColumns(source, primaryGroup, secondaryGroup) {
+    const detailColumns = Array.isArray(source.detailColumns) ? source.detailColumns : [];
+    const hiddenIds = new Set([primaryGroup?.id, secondaryGroup?.id].filter(Boolean));
+    return detailColumns.filter(column => !hiddenIds.has(column.id));
+}
+
+function analyticsStudioSortDetailRecords(records, source, primaryGroup, secondaryGroup) {
+    const rows = [...records];
+    rows.sort((left, right) => {
+        const primaryCmp = primaryGroup
+            ? analyticsStudioCompareGroupValues(primaryGroup.getValue(left), primaryGroup.getValue(right), primaryGroup)
+            : 0;
+        if (primaryCmp !== 0) return primaryCmp;
+
+        const secondaryCmp = secondaryGroup
+            ? analyticsStudioCompareGroupValues(secondaryGroup.getValue(left), secondaryGroup.getValue(right), secondaryGroup)
+            : 0;
+        if (secondaryCmp !== 0) return secondaryCmp;
+
+        const leftYear = source.getYear(left);
+        const rightYear = source.getYear(right);
+        if (leftYear !== rightYear) {
+            return analyticsStudioNumber(rightYear) - analyticsStudioNumber(leftYear);
+        }
+
+        return analyticsStudioText(source.searchText(left)).localeCompare(analyticsStudioText(source.searchText(right)), 'ar');
+    });
+    return rows;
 }
 
 function analyticsStudioBuildCaption(report) {
@@ -6011,11 +6161,15 @@ function analyticsStudioBuildCaption(report) {
         `الفترة: ${report.yearLabel}`
     ];
 
-    if (report.mode === 'detail' && report.primaryGroup) {
-        const grouping = report.secondaryGroup
-            ? `${report.primaryGroup.label} ثم ${report.secondaryGroup.label}`
-            : report.primaryGroup.label;
-        parts.push(`التجميع: ${grouping}`);
+    if (report.mode === 'detail') {
+        if (report.primaryGroup) {
+            const grouping = report.secondaryGroup
+                ? `${report.primaryGroup.label} ثم ${report.secondaryGroup.label}`
+                : report.primaryGroup.label;
+            parts.push(`الترتيب: ${grouping}`);
+        } else {
+            parts.push('الترتيب: مباشر حسب السجلات');
+        }
     }
 
     if (report.activeFilters.length) {
@@ -6048,8 +6202,8 @@ function runAnalyticsStudioReport() {
     }
 
     const activeFilters = source.filters.map(filter => {
-        const value = analyticsStudioText(document.getElementById(`analyticsStudioFilter_${filter.id}`)?.value);
-        return value ? `${filter.label}: ${value}` : '';
+        const values = getAnalyticsStudioSelectedFilterValues(filter);
+        return values.length ? `${filter.label}: ${values.join('، ')}` : '';
     }).filter(Boolean);
 
     const yearLabel = analyticsStudioBuildYearLabel(filteredRows, source);
@@ -6058,6 +6212,22 @@ function runAnalyticsStudioReport() {
     let rows = [];
     let primaryGroup = null;
     let secondaryGroup = null;
+    let chartRows = [];
+    let tableHeaders = [];
+    let tableRows = [];
+    let outputRowsCount = 0;
+
+    const primaryId = mode === 'detail'
+        ? analyticsStudioText(document.getElementById('analyticsStudioGroupPrimary')?.value)
+        : '';
+    const secondaryId = mode === 'detail'
+        ? analyticsStudioText(document.getElementById('analyticsStudioGroupSecondary')?.value)
+        : '';
+
+    primaryGroup = source.groups.find(group => group.id === primaryId) || null;
+    secondaryGroup = primaryGroup
+        ? (source.groups.find(group => group.id === secondaryId && group.id !== primaryGroup.id) || null)
+        : null;
 
     if (mode === 'summary') {
         rows = [{
@@ -6066,76 +6236,74 @@ function runAnalyticsStudioReport() {
             records: filteredRows,
             metricValues: computeAnalyticsStudioMetricValues(filteredRows, metricDefs)
         }];
+        chartRows = rows;
+        tableHeaders = ['النطاق', ...metricDefs.map(analyticsStudioMetricHeader)];
+        tableRows = rows.map(row => [
+            'إجمالي البيانات المطابقة',
+            ...metricDefs.map(metric => metric.format(row.metricValues[metric.id]))
+        ]);
+        outputRowsCount = rows.length;
+    } else if (Array.isArray(source.detailColumns) && source.detailColumns.length) {
+        const detailColumns = analyticsStudioGetVisibleDetailColumns(source, primaryGroup, secondaryGroup);
+        const detailRecords = analyticsStudioSortDetailRecords(filteredRows, source, primaryGroup, secondaryGroup);
+        chartRows = primaryGroup ? analyticsStudioBuildGroupedMetricRows(filteredRows, metricDefs, primaryGroup, secondaryGroup) : [];
+        rows = chartRows;
+        tableHeaders = [
+            ...(primaryGroup ? [primaryGroup.label] : []),
+            ...(secondaryGroup ? [secondaryGroup.label] : []),
+            ...detailColumns.map(column => column.label)
+        ];
+        tableRows = detailRecords.map(record => {
+            const cells = [];
+            if (primaryGroup) cells.push(analyticsStudioFormatGroupValue(primaryGroup, primaryGroup.getValue(record)));
+            if (secondaryGroup) cells.push(analyticsStudioFormatGroupValue(secondaryGroup, secondaryGroup.getValue(record)));
+            detailColumns.forEach(column => {
+                cells.push(analyticsStudioFormatValue(column.getValue(record), column.format));
+            });
+            return cells;
+        });
+        outputRowsCount = tableRows.length;
     } else {
-        const primaryId = analyticsStudioText(document.getElementById('analyticsStudioGroupPrimary')?.value);
-        const secondaryId = analyticsStudioText(document.getElementById('analyticsStudioGroupSecondary')?.value);
-        primaryGroup = source.groups.find(group => group.id === primaryId) || null;
-        secondaryGroup = source.groups.find(group => group.id === secondaryId) || null;
-
         if (!primaryGroup) {
-            alert('اختر التجميع الأساسي لبناء التقرير التفصيلي.');
+            alert('اختر التجميع الأساسي لبناء التقرير التفصيلي لهذا المصدر.');
             return;
         }
 
-        const grouped = new Map();
-        filteredRows.forEach(record => {
-            const primaryValue = primaryGroup.getValue(record);
-            const secondaryValue = secondaryGroup ? secondaryGroup.getValue(record) : '';
-            const key = `${analyticsStudioText(primaryValue)}||${analyticsStudioText(secondaryValue)}`;
-
-            if (!grouped.has(key)) {
-                grouped.set(key, {
-                    primaryValue,
-                    secondaryValue,
-                    records: []
-                });
+        rows = analyticsStudioBuildGroupedMetricRows(filteredRows, metricDefs, primaryGroup, secondaryGroup);
+        chartRows = rows;
+        tableHeaders = [];
+        if (primaryGroup) tableHeaders.push(primaryGroup.label);
+        if (secondaryGroup) tableHeaders.push(secondaryGroup.label);
+        tableHeaders.push(...metricDefs.map(analyticsStudioMetricHeader));
+        tableRows = rows.map(row => {
+            const cells = [];
+            if (primaryGroup) {
+                cells.push(analyticsStudioFormatGroupValue(primaryGroup, row.primaryValue));
             }
-
-            grouped.get(key).records.push(record);
+            if (secondaryGroup) {
+                cells.push(analyticsStudioFormatGroupValue(secondaryGroup, row.secondaryValue));
+            }
+            metricDefs.forEach(metric => {
+                cells.push(metric.format(row.metricValues[metric.id]));
+            });
+            return cells;
         });
-
-        rows = Array.from(grouped.values()).map(group => ({
-            ...group,
-            metricValues: computeAnalyticsStudioMetricValues(group.records, metricDefs)
-        }));
-
-        analyticsStudioSortGroups(rows, primaryGroup, secondaryGroup);
+        outputRowsCount = rows.length;
     }
-
-    const tableHeaders = [];
-    if (mode === 'detail' && primaryGroup) tableHeaders.push(primaryGroup.label);
-    if (mode === 'detail' && secondaryGroup) tableHeaders.push(secondaryGroup.label);
-    if (mode === 'summary') tableHeaders.push('النطاق');
-    tableHeaders.push(...metricDefs.map(analyticsStudioMetricHeader));
-
-    const tableRows = rows.map(row => {
-        const cells = [];
-        if (mode === 'detail' && primaryGroup) {
-            cells.push(analyticsStudioFormatGroupValue(primaryGroup, row.primaryValue));
-        }
-        if (mode === 'detail' && secondaryGroup) {
-            cells.push(analyticsStudioFormatGroupValue(secondaryGroup, row.secondaryValue));
-        }
-        if (mode === 'summary') {
-            cells.push('إجمالي البيانات المطابقة');
-        }
-        metricDefs.forEach(metric => {
-            cells.push(metric.format(row.metricValues[metric.id]));
-        });
-        return cells;
-    });
 
     analyticsStudioReport = {
         source,
         mode,
         metricDefs,
         rows,
+        chartRows,
+        filteredRows,
         tableHeaders,
         tableRows,
         primaryGroup,
         secondaryGroup,
         filteredRowsCount: filteredRows.length,
-        outputRowsCount: rows.length,
+        outputRowsCount,
         yearLabel,
         activeFilters,
         searchText,
@@ -6163,14 +6331,18 @@ function buildAnalyticsStudioSummaryCards(report) {
 
     const groupingLabel = report.secondaryGroup
         ? `${report.primaryGroup.label} + ${report.secondaryGroup.label}`
-        : (report.primaryGroup?.label || '—');
+        : (report.primaryGroup?.label || 'بدون تجميع');
     return [
         { value: report.source.label, label: 'مصدر البيانات' },
         { value: analyticsStudioFormatCount(report.filteredRowsCount), label: report.source.rowLabel },
-        { value: analyticsStudioFormatCount(report.outputRowsCount), label: 'المجموعات الناتجة' },
+        { value: analyticsStudioFormatCount(report.outputRowsCount), label: 'الصفوف التفصيلية' },
         { value: report.yearLabel, label: 'الفترة الزمنية' },
         { value: groupingLabel, label: 'مستوى التفصيل' },
-        { value: analyticsStudioFormatCount(report.metricDefs.length), label: 'الإحصاءات المختارة' }
+        { value: analyticsStudioFormatCount(report.metricDefs.length), label: 'الإحصاءات المختارة' },
+        ...report.metricDefs.slice(0, 2).map(metric => ({
+            value: metric.format(metric.compute(report.filteredRows || report.rows[0]?.records || [])),
+            label: metric.label
+        }))
     ];
 }
 
@@ -6222,6 +6394,12 @@ function renderAnalyticsStudioChart() {
     const firstMetric = analyticsStudioReport.metricDefs[0];
     if (!firstMetric) {
         wrap.innerHTML = '<div class="analytics-studio-empty">لا توجد إحصاءات مختارة للرسم.</div>';
+        return;
+    }
+
+    if (analyticsStudioReport.mode === 'detail' && !analyticsStudioReport.primaryGroup) {
+        wrap.innerHTML = '<div class="analytics-studio-empty">في التقرير التفصيلي يظهر الرسم البياني عند اختيار تجميع أساسي.</div>';
+        if (title) title.textContent = 'التمثيل البياني';
         return;
     }
 
@@ -6279,7 +6457,13 @@ function renderAnalyticsStudioChart() {
     }
 
     const maxGroups = 20;
-    const chartRows = analyticsStudioReport.rows.slice(0, maxGroups);
+    const sourceRows = Array.isArray(analyticsStudioReport.chartRows) ? analyticsStudioReport.chartRows : analyticsStudioReport.rows;
+    const chartRows = sourceRows.slice(0, maxGroups);
+    if (!chartRows.length) {
+        wrap.innerHTML = '<div class="analytics-studio-empty">لا توجد مجموعات مناسبة للرسم البياني.</div>';
+        if (title) title.textContent = 'التمثيل البياني';
+        return;
+    }
 
     if (analyticsStudioReport.secondaryGroup) {
         const primaryLabels = Array.from(new Set(chartRows.map(row => analyticsStudioFormatGroupValue(analyticsStudioReport.primaryGroup, row.primaryValue))));
