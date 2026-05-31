@@ -3402,15 +3402,225 @@ button.stats-detail-item {
     white-space: nowrap;
 }
 
+/* ========================================
+   استوديو السير الذاتية
+======================================== */
+.cv-studio-intro {
+    margin: -4px 0 18px;
+    color: var(--gray-300);
+    font-size: 0.95rem;
+    line-height: 1.9;
+}
+
+.cv-studio-builder {
+    margin-bottom: 18px;
+}
+
+.cv-studio-members-field {
+    grid-column: 1 / -1;
+}
+
+.cv-studio-field-note {
+    margin: 8px 0 0;
+    color: var(--gray-400);
+    font-size: 0.8rem;
+    line-height: 1.7;
+}
+
+.cv-studio-results.hidden {
+    display: none;
+}
+
+.cv-studio-results {
+    display: grid;
+    gap: 16px;
+}
+
+.cv-studio-member-panel-head {
+    margin-bottom: 8px;
+}
+
+.cv-studio-member-search {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    padding: 10px 12px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+}
+
+.cv-studio-member-search:focus {
+    outline: none;
+    border-color: rgba(198, 169, 98, 0.55);
+    box-shadow: 0 0 0 3px rgba(198, 169, 98, 0.12);
+}
+
+.cv-studio-member-options .cv-studio-member-option span {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cv-studio-member-options .cv-studio-member-option strong {
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.cv-studio-member-options .cv-studio-member-option small {
+    color: var(--gray-400);
+    font-size: 0.75rem;
+}
+
+.cv-studio-member-option.hidden {
+    display: none;
+}
+
+.cv-studio-empty-note {
+    text-align: center;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px dashed rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--gray-400);
+    font-size: 0.85rem;
+}
+
+.cv-studio-members-container {
+    display: grid;
+    gap: 16px;
+}
+
+.cv-studio-member-card {
+    display: grid;
+    gap: 16px;
+}
+
+.cv-studio-member-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.cv-studio-member-header h3 {
+    margin: 0 0 6px;
+    color: #fff;
+    font-size: 1.15rem;
+}
+
+.cv-studio-member-header p {
+    margin: 0;
+    color: var(--gray-400);
+    font-size: 0.88rem;
+    line-height: 1.8;
+}
+
+.cv-studio-member-points {
+    min-width: 92px;
+    text-align: center;
+    background: linear-gradient(135deg, rgba(198, 169, 98, 0.14), rgba(14, 165, 233, 0.12));
+    border: 1px solid rgba(198, 169, 98, 0.28);
+    border-radius: 16px;
+    padding: 12px 16px;
+}
+
+.cv-studio-member-points strong {
+    display: block;
+    color: #fff;
+    font-size: 1.4rem;
+    line-height: 1.1;
+}
+
+.cv-studio-member-points span {
+    display: block;
+    margin-top: 4px;
+    color: var(--gray-300);
+    font-size: 0.78rem;
+}
+
+.cv-studio-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.cv-studio-profile-item,
+.cv-studio-summary-chip {
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.045);
+    padding: 12px 14px;
+}
+
+.cv-studio-profile-label {
+    display: block;
+    color: var(--gray-400);
+    font-size: 0.78rem;
+    margin-bottom: 4px;
+}
+
+.cv-studio-profile-value {
+    display: block;
+    color: #fff;
+    font-size: 0.92rem;
+    font-weight: 700;
+    line-height: 1.7;
+}
+
+.cv-studio-summary-strip,
+.cv-studio-teaching-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+}
+
+.cv-studio-summary-chip strong {
+    display: block;
+    color: #fff;
+    font-size: 1.05rem;
+    margin-bottom: 4px;
+}
+
+.cv-studio-summary-chip span {
+    color: var(--gray-400);
+    font-size: 0.78rem;
+}
+
+.cv-studio-section {
+    display: grid;
+    gap: 10px;
+}
+
+.cv-studio-section h4 {
+    margin: 0;
+    color: var(--gold-400);
+    font-size: 0.98rem;
+}
+
+.cv-studio-data-table th,
+.cv-studio-data-table td {
+    white-space: normal;
+    min-width: 110px;
+    line-height: 1.7;
+}
+
 @media (max-width: 900px) {
     .analytics-studio-grid,
     .analytics-studio-metrics-grid,
-    .analytics-studio-summary-grid {
+    .analytics-studio-summary-grid,
+    .cv-studio-profile-grid,
+    .cv-studio-summary-strip,
+    .cv-studio-teaching-summary {
         grid-template-columns: 1fr;
     }
 
     .analytics-studio-results-head,
-    .analytics-studio-shell-head {
+    .analytics-studio-shell-head,
+    .cv-studio-member-header {
         flex-direction: column;
         align-items: stretch;
     }

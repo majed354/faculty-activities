@@ -138,6 +138,10 @@
                 <span class="nav-icon">🧭</span>
                 <span class="nav-text">الاستوديو الإحصائي</span>
             </button>
+            <button class="nav-btn" data-tab="cvs" title="السير الذاتية">
+                <span class="nav-icon">🗂️</span>
+                <span class="nav-text">السير الذاتية</span>
+            </button>
         </div>
     </nav>
 
@@ -826,6 +830,57 @@
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== السير الذاتية ===== -->
+        <section id="cvs" class="tab-content">
+            <div class="section-header">
+                <h2>🗂️ السير الذاتية</h2>
+            </div>
+            <p class="cv-studio-intro">مساحة موحّدة لجمع بيانات العضو الأساسية، وأنشطته البحثية، وفعالياته العلمية والمجتمعية، ونشاطه التدريسي، والمهمات المشابهة، مع اختيار دقيق للسنة والقسم والأعضاء، ثم إخراج النتيجة بصيغة قابلة للطباعة والتصدير.</p>
+
+            <div class="analytics-studio-card cv-studio-builder">
+                <div class="analytics-studio-grid">
+                    <div class="analytics-studio-field">
+                        <label for="cvStudioYearFilter">السنة</label>
+                        <select id="cvStudioYearFilter"></select>
+                    </div>
+                    <div class="analytics-studio-field">
+                        <label for="cvStudioDepartmentFilter">القسم</label>
+                        <select id="cvStudioDepartmentFilter"></select>
+                    </div>
+                    <div class="analytics-studio-field cv-studio-members-field">
+                        <label>الأعضاء</label>
+                        <div class="analytics-studio-multi-select" id="cvStudioMemberSelect"></div>
+                        <p class="cv-studio-field-note">يمكنك اختيار جميع أعضاء النطاق أو تحديد بعضهم فقط من داخل القائمة.</p>
+                    </div>
+                </div>
+
+                <div class="analytics-studio-actions">
+                    <button class="analytics-studio-primary-btn" id="cvStudioRunBtn" type="button">جمع السير الذاتية</button>
+                    <button class="analytics-studio-secondary-btn" id="cvStudioResetBtn" type="button">إعادة الضبط</button>
+                </div>
+            </div>
+
+            <div class="cv-studio-results hidden" id="cvStudioResults">
+                <div id="cvStudioExportArea">
+                    <div class="analytics-studio-card">
+                        <div class="analytics-studio-results-head">
+                            <div>
+                                <h3>نتائج السير الذاتية</h3>
+                                <p id="cvStudioCaption" class="analytics-studio-caption"></p>
+                            </div>
+                            <div class="analytics-studio-export-btns">
+                                <button class="analytics-studio-secondary-btn" id="cvStudioExportPdfBtn" type="button">PDF</button>
+                                <button class="analytics-studio-secondary-btn" id="cvStudioExportCsvBtn" type="button">CSV</button>
+                            </div>
+                        </div>
+                        <div class="analytics-studio-summary-grid" id="cvStudioSummary"></div>
+                    </div>
+
+                    <div class="cv-studio-members-container" id="cvStudioMembersContainer"></div>
                 </div>
             </div>
         </section>

@@ -44,6 +44,8 @@ let analyticsStudioReport = null;
 let analyticsStudioChart = null;
 let analyticsStudioTeachingRowsCache = null;
 let analyticsStudioInitialized = false;
+let cvStudioReport = null;
+let cvStudioInitialized = false;
 let memberModalState = { memberId: null, selectedYear: 'all', token: 0 };
 
 // بيانات الخطط الدراسية والبرامج
@@ -6833,6 +6835,828 @@ function setupAnalyticsStudio() {
 }
 
 // ========================================
+// استوديو السير الذاتية
+// ========================================
+function cvStudioClearReport() {
+    cvStudioReport = null;
+    document.getElementById('cvStudioResults')?.classList.add('hidden');
+}
+
+function getCvStudioSelectedYearValue() {
+    const value = document.getElementById('cvStudioYearFilter')?.value || 'all';
+    if (value === 'all') return 'all';
+    return parseCustomStatsYear(value) ?? 'all';
+}
+
+function getCvStudioSelectedDepartmentValue() {
+    return analyticsStudioText(document.getElementById('cvStudioDepartmentFilter')?.value, 'all') || 'all';
+}
+
+function getCvStudioYearLabel(year) {
+    return year === 'all' ? 'كل السنوات' : formatCustomStatsYearLabel(year);
+}
+
+function getCvStudioDepartmentLabel(department) {
+    return department === 'all' ? 'جميع الأقسام' : `قسم ${department}`;
+}
+
+function getCvStudioAvailableYears() {
+    const years = new Set();
+    [allData.faculty, allData.publications, allData.theses, allData.participations].forEach(collection => {
+        (collection || []).forEach(record => {
+            const year = parseCustomStatsYear(record?.year);
+            if (year !== null) years.add(year);
+        });
+    });
+    if (teachingData && Array.isArray(teachingData.years)) {
+        teachingData.years.forEach(year => {
+            const parsedYear = parseCustomStatsYear(year);
+            if (parsedYear !== null) years.add(parsedYear);
+        });
+    }
+    return Array.from(years).sort((a, b) => b - a);
+}
+
+function getCvStudioAvailableDepartments() {
+    const departments = new Set(config.departments || []);
+    (allData.faculty || []).forEach(member => {
+        const department = analyticsStudioText(member?.department);
+        if (department) departments.add(department);
+    });
+    return Array.from(departments).sort((a, b) => a.localeCompare(b, 'ar'));
+}
+
+function getCvStudioFacultyRowsInScope(selectedYear = 'all', selectedDepartment = 'all') {
+    const normalizedYear = normalizeMemberYearFilter(selectedYear);
+    const rows = (allData.faculty || []).filter(member => {
+        const year = parseCustomStatsYear(member?.year);
+        if (year === null) return false;
+        if (normalizedYear !== 'all' && year !== normalizedYear) return false;
+        if (selectedDepartment !== 'all' && analyticsStudioText(member?.department) !== selectedDepartment) return false;
+        return true;
+    });
+
+    const byId = new Map();
+    rows
+        .sort((left, right) => analyticsStudioNumber(parseCustomStatsYear(right?.year)) - analyticsStudioNumber(parseCustomStatsYear(left?.year)))
+        .forEach(member => {
+            const id = analyticsStudioText(member?.id);
+            if (!id || byId.has(id)) return;
+            byId.set(id, member);
+        });
+
+    return Array.from(byId.values()).sort((left, right) => {
+        return analyticsStudioText(left?.name).localeCompare(analyticsStudioText(right?.name), 'ar');
+    });
+}
+
+function getCvStudioMemberRecord(memberId, selectedYear = 'all') {
+    const idStr = analyticsStudioText(memberId);
+    if (!idStr) return null;
+
+    const allRows = (allData.faculty || [])
+        .filter(member => analyticsStudioText(member?.id) === idStr)
+        .sort((left, right) => analyticsStudioNumber(parseCustomStatsYear(right?.year)) - analyticsStudioNumber(parseCustomStatsYear(left?.year)));
+
+    if (!allRows.length) return null;
+
+    const normalizedYear = normalizeMemberYearFilter(selectedYear);
+    const row = normalizedYear === 'all'
+        ? allRows[0]
+        : (allRows.find(item => parseCustomStatsYear(item?.year) === normalizedYear) || allRows[0]);
+
+    const member = { ...row };
+    member.activeLabel = analyticsStudioFormatEmploymentStatus(member.active);
+    member.yearLabel = getCvStudioYearLabel(parseCustomStatsYear(member.year) ?? 'all');
+    return member;
+}
+
+function buildCvStudioMemberSummaryText(memberRows, selectedIds) {
+    if (!memberRows.length) return 'لا يوجد أعضاء مطابقون';
+    if (!selectedIds.length || selectedIds.length === memberRows.length) {
+        return `جميع الأعضاء (${formatArabicDigits(memberRows.length)})`;
+    }
+    if (selectedIds.length === 1) {
+        const selected = memberRows.find(member => analyticsStudioText(member.id) === selectedIds[0]);
+        return selected ? analyticsStudioText(selected.name, 'عضو واحد') : 'عضو واحد';
+    }
+    return `تم اختيار ${formatArabicDigits(selectedIds.length)} من ${formatArabicDigits(memberRows.length)}`;
+}
+
+function getCvStudioSelectedMemberIds() {
+    const wrapper = document.getElementById('cvStudioMemberSelect');
+    if (!wrapper) return [];
+    return Array.from(wrapper.querySelectorAll('.cv-studio-member-options input[type="checkbox"]:checked'))
+        .map(input => analyticsStudioText(input.value))
+        .filter(Boolean);
+}
+
+function filterCvStudioMemberOptions(query) {
+    const wrapper = document.getElementById('cvStudioMemberSelect');
+    if (!wrapper) return;
+
+    const normalizedQuery = normalizeSearchText(query || '');
+    wrapper.querySelectorAll('.cv-studio-member-option').forEach(option => {
+        const matches = !normalizedQuery || String(option.dataset.search || '').includes(normalizedQuery);
+        option.classList.toggle('hidden', !matches);
+    });
+}
+
+function renderCvStudioMemberPicker(resetSelections = false) {
+    const wrapper = document.getElementById('cvStudioMemberSelect');
+    if (!wrapper) return;
+
+    const selectedYear = getCvStudioSelectedYearValue();
+    const selectedDepartment = getCvStudioSelectedDepartmentValue();
+    const memberRows = getCvStudioFacultyRowsInScope(selectedYear, selectedDepartment);
+    const previousIds = !resetSelections ? getCvStudioSelectedMemberIds() : [];
+    const memberIds = memberRows.map(member => analyticsStudioText(member.id)).filter(Boolean);
+    const selectedIds = previousIds.length
+        ? previousIds.filter(id => memberIds.includes(id))
+        : [...memberIds];
+    const effectiveSelectedIds = selectedIds.length ? selectedIds : [...memberIds];
+    const summaryText = buildCvStudioMemberSummaryText(memberRows, effectiveSelectedIds);
+
+    wrapper.innerHTML = `
+        <button type="button" class="analytics-studio-multi-trigger cv-studio-member-trigger" aria-expanded="false" ${memberRows.length ? '' : 'disabled'}>
+            <span class="analytics-studio-multi-trigger-text">${escapeHtml(summaryText)}</span>
+            <span class="analytics-studio-multi-trigger-icon">▾</span>
+        </button>
+        <div class="analytics-studio-multi-panel hidden cv-studio-member-panel">
+            <div class="cv-studio-member-panel-head">
+                <input type="text" class="cv-studio-member-search" id="cvStudioMemberSearch" placeholder="اكتب لتصفية الأعضاء">
+            </div>
+            <label class="analytics-studio-multi-option analytics-studio-multi-option-all">
+                <input type="checkbox" id="cvStudioSelectAllMembers" ${memberRows.length && effectiveSelectedIds.length === memberRows.length ? 'checked' : ''}>
+                <span>الكل</span>
+            </label>
+            <div class="analytics-studio-multi-options-list cv-studio-member-options">
+                ${memberRows.length ? memberRows.map(member => {
+                    const id = analyticsStudioText(member.id);
+                    const label = `${analyticsStudioText(member.name)} - ${analyticsStudioText(member.rank, 'بدون رتبة')}`;
+                    const meta = [analyticsStudioText(member.department), analyticsStudioText(member.email)].filter(Boolean).join(' | ');
+                    const searchText = normalizeSearchText(`${member.name || ''} ${member.id || ''} ${member.rank || ''} ${member.department || ''} ${member.email || ''}`);
+                    return `
+                        <label class="analytics-studio-multi-option cv-studio-member-option" data-search="${escapeHtml(searchText)}">
+                            <input type="checkbox" value="${escapeHtml(id)}" ${effectiveSelectedIds.includes(id) ? 'checked' : ''}>
+                            <span>
+                                <strong>${escapeHtml(label)}</strong>
+                                <small>${escapeHtml(meta || id)}</small>
+                            </span>
+                        </label>
+                    `;
+                }).join('') : '<div class="cv-studio-empty-note">لا يوجد أعضاء مطابقون للنطاق المختار.</div>'}
+            </div>
+        </div>
+    `;
+
+    const trigger = wrapper.querySelector('.cv-studio-member-trigger');
+    const panel = wrapper.querySelector('.cv-studio-member-panel');
+    const searchInput = wrapper.querySelector('#cvStudioMemberSearch');
+    const allCheckbox = wrapper.querySelector('#cvStudioSelectAllMembers');
+    const checkboxes = Array.from(wrapper.querySelectorAll('.cv-studio-member-options input[type="checkbox"]'));
+
+    const syncState = (clearReport = false) => {
+        const checkedIds = checkboxes.filter(input => input.checked).map(input => input.value);
+        if (allCheckbox) allCheckbox.checked = memberRows.length > 0 && checkedIds.length === memberRows.length;
+        const label = wrapper.querySelector('.analytics-studio-multi-trigger-text');
+        if (label) label.textContent = buildCvStudioMemberSummaryText(memberRows, checkedIds);
+        if (clearReport) cvStudioClearReport();
+    };
+
+    trigger?.addEventListener('click', event => {
+        event.preventDefault();
+        if (!memberRows.length) return;
+        const isOpen = !panel.classList.contains('hidden');
+        panel.classList.toggle('hidden', isOpen);
+        trigger.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+        if (!isOpen) searchInput?.focus();
+    });
+
+    allCheckbox?.addEventListener('change', () => {
+        checkboxes.forEach(input => {
+            input.checked = allCheckbox.checked;
+        });
+        syncState(true);
+    });
+
+    checkboxes.forEach(input => {
+        input.addEventListener('change', () => {
+            syncState(true);
+        });
+    });
+
+    searchInput?.addEventListener('input', () => {
+        filterCvStudioMemberOptions(searchInput.value);
+    });
+
+    syncState(false);
+}
+
+function renderCvStudioYearOptions(resetSelections = false) {
+    const select = document.getElementById('cvStudioYearFilter');
+    if (!select) return;
+
+    const years = getCvStudioAvailableYears();
+    const fallback = currentYear !== 'all' && currentYear !== null ? String(currentYear) : 'all';
+    const selectedValue = !resetSelections ? analyticsStudioText(select.value, fallback) : fallback;
+    select.innerHTML = '<option value="all">كل السنوات</option>' +
+        years.map(year => `<option value="${year}">${formatCustomStatsYearLabel(year)}</option>`).join('');
+    const validValues = new Set(['all', ...years.map(year => String(year))]);
+    select.value = validValues.has(selectedValue) ? selectedValue : 'all';
+}
+
+function renderCvStudioDepartmentOptions(resetSelections = false) {
+    const select = document.getElementById('cvStudioDepartmentFilter');
+    if (!select) return;
+
+    const departments = getCvStudioAvailableDepartments();
+    const fallback = currentDepartment && currentDepartment !== 'all' ? currentDepartment : 'all';
+    const selectedValue = !resetSelections ? analyticsStudioText(select.value, fallback) : fallback;
+    select.innerHTML = '<option value="all">جميع الأقسام</option>' +
+        departments.map(department => `<option value="${escapeHtml(department)}">قسم ${escapeHtml(department)}</option>`).join('');
+    const validValues = new Set(['all', ...departments]);
+    select.value = validValues.has(selectedValue) ? selectedValue : 'all';
+}
+
+function getCvStudioMemberParticipations(memberId, selectedYear = 'all') {
+    const memberIdStr = analyticsStudioText(memberId);
+    return sortByDateDesc(
+        getScopedDataCollection('participations', normalizeMemberYearFilter(selectedYear)).filter(item => {
+            const participantIds = splitIds(item.participant_ids || '');
+            return participantIds.includes(memberIdStr);
+        }),
+        item => item.date
+    );
+}
+
+function getCvStudioTeachingDetails(memberId, selectedYear = 'all') {
+    if (!teachingData || !Array.isArray(teachingData.records)) return [];
+    const memberIdStr = analyticsStudioText(memberId);
+    const normalizedYear = normalizeMemberYearFilter(selectedYear);
+
+    return analyticsStudioBuildTeachingRows()
+        .filter(row => {
+            if (analyticsStudioText(row.facultyId) !== memberIdStr) return false;
+            if (normalizedYear === 'all') return true;
+            return analyticsStudioNumber(row.year) === analyticsStudioNumber(normalizedYear);
+        })
+        .sort((left, right) => {
+            const yearDiff = analyticsStudioNumber(right.year) - analyticsStudioNumber(left.year);
+            if (yearDiff !== 0) return yearDiff;
+            return analyticsStudioText(left.courseName).localeCompare(analyticsStudioText(right.courseName), 'ar');
+        });
+}
+
+function isCvStudioMonitoringItem(item) {
+    const haystack = normalizeSearchText(`${item?.category || ''} ${item?.title || ''} ${item?.notes || ''} ${item?.participation_type || ''}`);
+    return /مراقب|مراقبه|اختبار|اختبارات|كنترول|رصد/.test(haystack);
+}
+
+function isCvStudioCommunityItem(item) {
+    const haystack = normalizeSearchText(`${item?.category || ''} ${item?.title || ''} ${item?.notes || ''}`);
+    return /مجتمع|مجتمعي|خدمه|توعيه|مبادره|تطوع/.test(haystack);
+}
+
+function buildCvStudioMemberBundle(memberId, selectedYear = 'all') {
+    const member = getCvStudioMemberRecord(memberId, selectedYear);
+    if (!member) return null;
+
+    const normalizedYear = normalizeMemberYearFilter(selectedYear);
+    const pointsData = calculateMemberPoints(memberId, { year: normalizedYear });
+    const activities = getMemberActivities(memberId, { year: normalizedYear });
+    const teachingSummary = computeMemberTeachingSummary(memberId, { year: normalizedYear });
+    const teachingDetails = getCvStudioTeachingDetails(memberId, normalizedYear);
+    const participations = getCvStudioMemberParticipations(memberId, normalizedYear);
+    const knownIds = new Set([
+        ...activities.events,
+        ...activities.externalDiscussions,
+        ...activities.reviewing,
+        ...activities.books,
+        ...activities.consultings,
+        ...activities.media,
+        ...activities.studentResearch,
+        ...activities.awards
+    ].map(item => analyticsStudioText(item?.id)));
+
+    const monitoringActivities = sortByDateDesc(
+        participations.filter(item => isCvStudioMonitoringItem(item)),
+        item => item.date
+    );
+    const monitoringIds = new Set(monitoringActivities.map(item => analyticsStudioText(item?.id)));
+
+    const candidateOtherActivities = participations.filter(item => {
+        const id = analyticsStudioText(item?.id);
+        return !knownIds.has(id) && !monitoringIds.has(id);
+    });
+
+    const derivedCommunityActivities = candidateOtherActivities.filter(item => isCvStudioCommunityItem(item));
+    const derivedCommunityIds = new Set(derivedCommunityActivities.map(item => analyticsStudioText(item?.id)));
+    const communityActivities = sortByDateDesc(
+        [...activities.consultings, ...activities.media, ...activities.awards, ...derivedCommunityActivities],
+        item => item.date
+    );
+    const otherActivities = sortByDateDesc(
+        candidateOtherActivities.filter(item => !derivedCommunityIds.has(analyticsStudioText(item?.id))),
+        item => item.date
+    );
+
+    return {
+        member,
+        scopeYear: normalizedYear,
+        scopeYearLabel: getCvStudioYearLabel(normalizedYear),
+        points: pointsData.points,
+        breakdown: pointsData.breakdown,
+        publications: activities.publications,
+        theses: activities.theses,
+        researchSupport: sortByDateDesc([
+            ...activities.studentResearch.map(item => ({ ...item, _cvType: 'بحوث الطلاب' })),
+            ...activities.reviewing.map(item => ({ ...item, _cvType: 'تحكيم علمي' })),
+            ...activities.externalDiscussions.map(item => ({ ...item, _cvType: 'مناقشة خارجية' })),
+            ...activities.books.map(item => ({ ...item, _cvType: 'تأليف كتب' }))
+        ], item => item.date),
+        scientificEvents: activities.events,
+        communityActivities,
+        teachingSummary,
+        teachingDetails,
+        monitorings: monitoringActivities,
+        otherActivities,
+        totalActivities: (
+            activities.publications.length +
+            activities.theses.length +
+            activities.events.length +
+            communityActivities.length +
+            teachingDetails.length +
+            monitoringActivities.length +
+            otherActivities.length +
+            activities.reviewing.length +
+            activities.externalDiscussions.length +
+            activities.studentResearch.length +
+            activities.books.length
+        )
+    };
+}
+
+function buildCvStudioSummaryCards(report) {
+    if (!report) return [];
+    const totalPoints = report.members.reduce((sum, member) => sum + analyticsStudioNumber(member.points), 0);
+    const totalPublications = report.members.reduce((sum, member) => sum + member.publications.length, 0);
+    const totalTheses = report.members.reduce((sum, member) => sum + member.theses.length, 0);
+    const totalScientificEvents = report.members.reduce((sum, member) => sum + member.scientificEvents.length, 0);
+    const totalCommunityActivities = report.members.reduce((sum, member) => sum + member.communityActivities.length, 0);
+    const totalTeachingSections = report.members.reduce((sum, member) => sum + analyticsStudioNumber(member.teachingSummary?.totalSections), 0);
+    const totalMonitorings = report.members.reduce((sum, member) => sum + member.monitorings.length, 0);
+
+    return [
+        { value: formatArabicDigits(report.members.length), label: 'الأعضاء المختارون' },
+        { value: formatArabicDigits(totalPoints), label: 'إجمالي النقاط' },
+        { value: report.yearLabel, label: 'نطاق السنة' },
+        { value: report.departmentLabel, label: 'نطاق القسم' },
+        { value: formatArabicDigits(totalPublications), label: 'البحوث المنشورة' },
+        { value: formatArabicDigits(totalTheses), label: 'الرسائل والمشاريع' },
+        { value: formatArabicDigits(totalScientificEvents), label: 'الفعاليات العلمية' },
+        { value: formatArabicDigits(totalCommunityActivities), label: 'الأنشطة المجتمعية والمهنية' },
+        { value: formatArabicDigits(totalTeachingSections), label: 'الشعب التدريسية' },
+        { value: formatArabicDigits(totalMonitorings), label: 'المراقبات والمهام المشابهة' }
+    ];
+}
+
+function buildCvStudioTable(headers, rows) {
+    if (!rows.length) return '<div class="cv-studio-empty-note">لا توجد سجلات في هذا المحور.</div>';
+    return `
+        <div class="data-table-container">
+            <table class="data-table cv-studio-data-table">
+                <thead>
+                    <tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
+                </thead>
+                <tbody>
+                    ${rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function getCvStudioBreakdownEntries(memberData) {
+    const breakdown = memberData?.breakdown || {};
+    const entries = [
+        { key: 'phdSupervision', label: 'إشراف رسالة علمية', icon: '🎓' },
+        { key: 'phdCoSupervision', label: 'إشراف مشارك (رسالة)', icon: '🎓' },
+        { key: 'mastersSupervision', label: 'إشراف مشروع بحثي', icon: '📚' },
+        { key: 'mastersCoSupervision', label: 'إشراف مشارك (مشروع)', icon: '📚' },
+        { key: 'phdDiscussion', label: 'مناقشة رسالة علمية', icon: '📋' },
+        { key: 'mastersDiscussion', label: 'مناقشة مشروع بحثي', icon: '📋' },
+        { key: 'publications', label: 'بحوث منشورة', icon: '📄' },
+        { key: 'conferencePaper', label: 'مشاركة بورقة', icon: '🎤' },
+        { key: 'seminar', label: 'ندوات', icon: '💬' },
+        { key: 'workshop', label: 'ورش عمل', icon: '🛠️' },
+        { key: 'externalDiscussion', label: 'مناقشات خارجية', icon: '🎓' },
+        { key: 'eventOrganization', label: 'تنظيم فعاليات', icon: '📅' },
+        { key: 'eventAttendance', label: 'حضور فعاليات', icon: '👥' },
+        { key: 'reviewing', label: 'تحكيم علمي', icon: '✅' },
+        { key: 'studentResearch', label: 'بحوث طلاب (إشراف)', icon: '📝' },
+        { key: 'book', label: 'تأليف كتب', icon: '📖' },
+        { key: 'consulting', label: `استشارات (${formatArabicDigits(breakdown.consultingHours || 0)} ساعة)`, icon: '💼' },
+        { key: 'media', label: 'مشاركات إعلامية', icon: '📺' },
+        { key: 'award', label: 'جوائز', icon: '🏆' },
+        { key: 'patent', label: 'براءات اختراع', icon: '💡' }
+    ];
+
+    return entries
+        .map(entry => ({
+            ...entry,
+            count: analyticsStudioNumber(breakdown?.[entry.key])
+        }))
+        .filter(entry => entry.count > 0);
+}
+
+function buildCvStudioBreakdownHtml(memberData) {
+    const entries = getCvStudioBreakdownEntries(memberData);
+    if (!entries.length) {
+        return '<div class="cv-studio-empty-note">لا توجد بنود نقاط محتسبة ضمن النطاق المختار.</div>';
+    }
+
+    return `
+        <div class="breakdown-grid">
+            ${entries.map(entry => `
+                <div class="breakdown-item">
+                    <span class="breakdown-icon">${entry.icon}</span>
+                    <span class="breakdown-label">${escapeHtml(entry.label)}</span>
+                    <span class="breakdown-count">${formatArabicDigits(entry.count)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function buildCvStudioPublicationRows(memberData) {
+    return memberData.publications.map(publication => [
+        analyticsStudioText(publication.title, '-'),
+        analyticsStudioText(publication.journal, '-'),
+        formatDate(publication.publish_date || publication.date),
+        analyticsStudioText(publication.citations_range, '-'),
+        analyticsStudioText(publication.student_author, '-')
+    ]);
+}
+
+function buildCvStudioThesisRows(memberData) {
+    return memberData.theses.map(thesis => [
+        analyticsStudioText(thesis.role, '-'),
+        getThesisTypeName(thesis.type || 'رسالة', thesis),
+        analyticsStudioText(thesis.student_name, '-'),
+        analyticsStudioText(thesis.title, '-'),
+        analyticsStudioText(thesis.status, '-'),
+        formatDate(thesis.defense_date)
+    ]);
+}
+
+function buildCvStudioResearchSupportRows(memberData) {
+    return memberData.researchSupport.map(item => [
+        analyticsStudioText(item._cvType, analyticsStudioText(item.category, '-')),
+        analyticsStudioText(item.title, '-'),
+        analyticsStudioText(item.location, '-'),
+        analyticsStudioText(item.participation_type, '-'),
+        formatDate(item.date)
+    ]);
+}
+
+function buildCvStudioParticipationRows(items) {
+    return items.map(item => [
+        analyticsStudioText(item.category, '-'),
+        analyticsStudioText(item.participation_type, '-'),
+        analyticsStudioText(item.title, '-'),
+        analyticsStudioText(item.location, '-'),
+        formatDate(item.date),
+        analyticsStudioText(item.notes || item.student_details, '-')
+    ]);
+}
+
+function buildCvStudioTeachingRows(memberData) {
+    return memberData.teachingDetails.map(row => [
+        getCvStudioYearLabel(row.year),
+        analyticsStudioText(row.term, '-'),
+        analyticsStudioText(row.courseCode, '-'),
+        analyticsStudioText(row.courseName, '-'),
+        analyticsStudioText(row.programLabel, '-'),
+        analyticsStudioText(row.degree, '-'),
+        analyticsStudioText(row.mode, '-'),
+        formatArabicDigits(row.students || 0),
+        formatArabicDigits(row.hours || 0)
+    ]);
+}
+
+function buildCvStudioMemberCardHtml(memberData) {
+    const member = memberData.member;
+    const teachingSummary = memberData.teachingSummary;
+    const profileItems = [
+        ['الاسم', analyticsStudioText(member.name, '-')],
+        ['الرقم', analyticsStudioText(member.id, '-')],
+        ['القسم', analyticsStudioText(member.department, '-')],
+        ['الرتبة', analyticsStudioText(member.rank, '-')],
+        ['البريد', analyticsStudioText(member.email, '-')],
+        ['الحالة', analyticsStudioText(member.activeLabel, '-')],
+        ['سجل العضوية', analyticsStudioText(member.yearLabel, '-')],
+        ['نطاق التقرير', memberData.scopeYearLabel]
+    ];
+
+    return `
+        <div class="analytics-studio-card cv-studio-member-card">
+            <div class="cv-studio-member-header">
+                <div>
+                    <h3>${escapeHtml(member.name || '-') }</h3>
+                    <p>${escapeHtml([member.rank, member.department, member.id].filter(Boolean).join(' | '))}</p>
+                </div>
+                <div class="cv-studio-member-points">
+                    <strong>${formatArabicDigits(memberData.points)}</strong>
+                    <span>نقطة</span>
+                </div>
+            </div>
+
+            <div class="cv-studio-profile-grid">
+                ${profileItems.map(([label, value]) => `
+                    <div class="cv-studio-profile-item">
+                        <span class="cv-studio-profile-label">${escapeHtml(label)}</span>
+                        <span class="cv-studio-profile-value">${escapeHtml(value || '-')}</span>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="cv-studio-summary-strip">
+                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.publications.length)}</strong><span>بحوث</span></div>
+                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.theses.length)}</strong><span>رسائل ومشاريع</span></div>
+                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.scientificEvents.length)}</strong><span>فعاليات علمية</span></div>
+                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.communityActivities.length)}</strong><span>أنشطة مجتمعية</span></div>
+                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalSections || 0)}</strong><span>شعب تدريسية</span></div>
+                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.monitorings.length)}</strong><span>مراقبات</span></div>
+            </div>
+
+            <div class="cv-studio-section member-breakdown">
+                <h4>تفصيل النقاط</h4>
+                ${buildCvStudioBreakdownHtml(memberData)}
+            </div>
+
+            <div class="cv-studio-section">
+                <h4>البحوث المنشورة</h4>
+                ${buildCvStudioTable(['العنوان', 'وعاء النشر', 'تاريخ النشر', 'نطاق الاقتباسات', 'طالب مشارك'], buildCvStudioPublicationRows(memberData))}
+            </div>
+
+            <div class="cv-studio-section">
+                <h4>الإشراف والمناقشات</h4>
+                ${buildCvStudioTable(['الدور', 'النوع', 'الطالب', 'العنوان', 'الحالة', 'التاريخ'], buildCvStudioThesisRows(memberData))}
+            </div>
+
+            <div class="cv-studio-section">
+                <h4>الأنشطة البحثية المساندة</h4>
+                ${buildCvStudioTable(['التصنيف', 'العنوان', 'المكان', 'نوع المشاركة', 'التاريخ'], buildCvStudioResearchSupportRows(memberData))}
+            </div>
+
+            <div class="cv-studio-section">
+                <h4>الفعاليات العلمية</h4>
+                ${buildCvStudioTable(['التصنيف', 'نوع المشاركة', 'العنوان', 'المكان', 'التاريخ', 'تفاصيل إضافية'], buildCvStudioParticipationRows(memberData.scientificEvents))}
+            </div>
+
+            <div class="cv-studio-section">
+                <h4>الأنشطة المجتمعية والمهنية</h4>
+                ${buildCvStudioTable(['التصنيف', 'نوع المشاركة', 'العنوان', 'المكان', 'التاريخ', 'تفاصيل إضافية'], buildCvStudioParticipationRows(memberData.communityActivities))}
+            </div>
+
+            <div class="cv-studio-section">
+                <h4>النشاط التدريسي</h4>
+                <div class="cv-studio-teaching-summary">
+                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalCourses || 0)}</strong><span>مقررات</span></div>
+                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalSections || 0)}</strong><span>شعب</span></div>
+                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalStudents || 0)}</strong><span>طلاب</span></div>
+                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalHours || 0)}</strong><span>ساعات</span></div>
+                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.avgStudents || 0)}</strong><span>متوسط الطلاب/شعبة</span></div>
+                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalYears || 0)}</strong><span>سنوات التغطية</span></div>
+                </div>
+                ${buildCvStudioTable(['السنة', 'الفصل', 'الرمز', 'المقرر', 'البرنامج', 'الدرجة', 'النمط', 'الطلاب', 'الساعات'], buildCvStudioTeachingRows(memberData))}
+            </div>
+
+            <div class="cv-studio-section">
+                <h4>المراقبات والمهام المشابهة</h4>
+                ${buildCvStudioTable(['التصنيف', 'نوع المشاركة', 'العنوان', 'المكان', 'التاريخ', 'تفاصيل إضافية'], buildCvStudioParticipationRows(memberData.monitorings))}
+            </div>
+
+            <div class="cv-studio-section">
+                <h4>أنشطة أخرى</h4>
+                ${buildCvStudioTable(['التصنيف', 'نوع المشاركة', 'العنوان', 'المكان', 'التاريخ', 'تفاصيل إضافية'], buildCvStudioParticipationRows(memberData.otherActivities))}
+            </div>
+        </div>
+    `;
+}
+
+function buildCvStudioExportMatrix() {
+    if (!cvStudioReport) return [];
+
+    const headers = ['رقم العضو', 'اسم العضو', 'القسم', 'الرتبة', 'البريد', 'الحالة', 'نطاق السنة', 'المحور', 'التصنيف', 'العنوان/الوصف', 'الجهة/المكان', 'التاريخ', 'تفاصيل إضافية'];
+    const rows = [];
+
+    cvStudioReport.members.forEach(memberData => {
+        const member = memberData.member;
+        const base = [
+            analyticsStudioText(member.id, '-'),
+            analyticsStudioText(member.name, '-'),
+            analyticsStudioText(member.department, '-'),
+            analyticsStudioText(member.rank, '-'),
+            analyticsStudioText(member.email, '-'),
+            analyticsStudioText(member.activeLabel, '-'),
+            memberData.scopeYearLabel
+        ];
+
+        rows.push([...base, 'البيانات الأساسية', 'العضو', analyticsStudioText(member.name, '-'), analyticsStudioText(member.department, '-'), '-', `النقاط: ${formatArabicDigits(memberData.points)}`]);
+        rows.push([...base, 'النشاط التدريسي', 'ملخص', `المقررات: ${formatArabicDigits(memberData.teachingSummary?.totalCourses || 0)} | الشعب: ${formatArabicDigits(memberData.teachingSummary?.totalSections || 0)}`, '-', '-', `الطلاب: ${formatArabicDigits(memberData.teachingSummary?.totalStudents || 0)} | الساعات: ${formatArabicDigits(memberData.teachingSummary?.totalHours || 0)}`]);
+        getCvStudioBreakdownEntries(memberData).forEach(entry => rows.push([...base, 'تفصيل النقاط', entry.label, entry.label, '-', '-', `العدد: ${formatArabicDigits(entry.count)}`]));
+
+        buildCvStudioPublicationRows(memberData).forEach(row => rows.push([...base, 'البحوث المنشورة', row[0], row[0], row[1], row[2], `الاقتباسات: ${row[3]} | طالب مشارك: ${row[4]}`]));
+        buildCvStudioThesisRows(memberData).forEach(row => rows.push([...base, 'الإشراف والمناقشات', row[0], row[3], row[2], row[5], `النوع: ${row[1]} | الحالة: ${row[4]}`]));
+        buildCvStudioResearchSupportRows(memberData).forEach(row => rows.push([...base, 'الأنشطة البحثية المساندة', row[0], row[1], row[2], row[4], row[3]]));
+        buildCvStudioParticipationRows(memberData.scientificEvents).forEach(row => rows.push([...base, 'الفعاليات العلمية', row[0], row[2], row[3], row[4], `${row[1]} | ${row[5]}`]));
+        buildCvStudioParticipationRows(memberData.communityActivities).forEach(row => rows.push([...base, 'الأنشطة المجتمعية والمهنية', row[0], row[2], row[3], row[4], `${row[1]} | ${row[5]}`]));
+        buildCvStudioTeachingRows(memberData).forEach(row => rows.push([...base, 'النشاط التدريسي', row[2], row[3], row[4], row[0], `الفصل: ${row[1]} | الدرجة: ${row[5]} | النمط: ${row[6]} | الطلاب: ${row[7]} | الساعات: ${row[8]}`]));
+        buildCvStudioParticipationRows(memberData.monitorings).forEach(row => rows.push([...base, 'المراقبات والمهام المشابهة', row[0], row[2], row[3], row[4], `${row[1]} | ${row[5]}`]));
+        buildCvStudioParticipationRows(memberData.otherActivities).forEach(row => rows.push([...base, 'أنشطة أخرى', row[0], row[2], row[3], row[4], `${row[1]} | ${row[5]}`]));
+    });
+
+    return [headers, ...rows];
+}
+
+function renderCvStudioResults() {
+    if (!cvStudioReport) return;
+    const results = document.getElementById('cvStudioResults');
+    const caption = document.getElementById('cvStudioCaption');
+    const summary = document.getElementById('cvStudioSummary');
+    const container = document.getElementById('cvStudioMembersContainer');
+    if (!results || !caption || !summary || !container) return;
+
+    caption.textContent = cvStudioReport.caption;
+    summary.innerHTML = buildCvStudioSummaryCards(cvStudioReport).map(card => `
+        <div class="analytics-studio-summary-card">
+            <span class="analytics-studio-summary-value">${escapeHtml(card.value)}</span>
+            <span class="analytics-studio-summary-label">${escapeHtml(card.label)}</span>
+        </div>
+    `).join('');
+    container.innerHTML = cvStudioReport.members.map(buildCvStudioMemberCardHtml).join('');
+    results.classList.remove('hidden');
+    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function runCvStudioReport() {
+    await ensureTeachingLoaded().catch(() => null);
+
+    const selectedYear = getCvStudioSelectedYearValue();
+    const selectedDepartment = getCvStudioSelectedDepartmentValue();
+    const memberRows = getCvStudioFacultyRowsInScope(selectedYear, selectedDepartment);
+    const selectedMemberIds = getCvStudioSelectedMemberIds();
+    const effectiveMemberIds = selectedMemberIds.length
+        ? selectedMemberIds
+        : memberRows.map(member => analyticsStudioText(member.id)).filter(Boolean);
+
+    if (!memberRows.length || !effectiveMemberIds.length) {
+        cvStudioClearReport();
+        alert('لا توجد أسماء أعضاء مطابقة للنطاق الذي اخترته.');
+        return;
+    }
+
+    const members = effectiveMemberIds
+        .map(memberId => buildCvStudioMemberBundle(memberId, selectedYear))
+        .filter(Boolean);
+
+    if (!members.length) {
+        cvStudioClearReport();
+        alert('تعذر بناء السير الذاتية للأعضاء المحددين.');
+        return;
+    }
+
+    cvStudioReport = {
+        year: selectedYear,
+        yearLabel: getCvStudioYearLabel(selectedYear),
+        department: selectedDepartment,
+        departmentLabel: getCvStudioDepartmentLabel(selectedDepartment),
+        members,
+        generatedAt: new Date().toISOString(),
+        caption: '',
+        filenameBase: analyticsStudioSafeFileName(`السير-الذاتية-${getCvStudioDepartmentLabel(selectedDepartment)}-${getCvStudioYearLabel(selectedYear)}`)
+    };
+    cvStudioReport.caption = `السير الذاتية | ${cvStudioReport.departmentLabel} | ${cvStudioReport.yearLabel} | عدد الأعضاء: ${formatArabicDigits(members.length)}`;
+    renderCvStudioResults();
+}
+
+function exportCvStudioCSV() {
+    if (!cvStudioReport) return;
+    const csvText = convertMatrixToDelimitedText(buildCvStudioExportMatrix());
+    downloadCSV(csvText, `${cvStudioReport.filenameBase}.csv`);
+}
+
+function exportCvStudioPDF() {
+    if (!cvStudioReport) return;
+
+    const summaryCards = buildCvStudioSummaryCards(cvStudioReport).map(card => `
+        <div class="summary-item">
+            <strong>${escapeHtml(card.value)}</strong>
+            <span>${escapeHtml(card.label)}</span>
+        </div>
+    `).join('');
+
+    const membersHtml = cvStudioReport.members.map(memberData => `
+        <section class="member-card">
+            ${buildCvStudioMemberCardHtml(memberData)}
+        </section>
+    `).join('');
+
+    const printContent = `
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>السير الذاتية</title>
+            <style>
+                body { font-family: "Cairo", Tahoma, Arial, sans-serif; margin: 24px; color: #111827; direction: rtl; }
+                h1, h2, h3, h4 { margin: 0 0 8px; }
+                p { color: #374151; line-height: 1.8; }
+                .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 24px; }
+                .summary-item { border: 1px solid #d1d5db; border-radius: 12px; padding: 12px; text-align: center; }
+                .summary-item strong { display: block; font-size: 1.2rem; margin-bottom: 4px; }
+                .member-card { page-break-inside: avoid; margin: 18px 0 28px; }
+                .analytics-studio-card { border: 1px solid #d1d5db; border-radius: 18px; padding: 18px; }
+                .cv-studio-member-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+                .cv-studio-member-header p { margin: 0; font-size: 0.95rem; }
+                .cv-studio-member-points { text-align: center; min-width: 90px; }
+                .cv-studio-member-points strong { display: block; font-size: 1.4rem; }
+                .cv-studio-profile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+                .cv-studio-profile-item, .cv-studio-summary-chip { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; }
+                .cv-studio-profile-label { display: block; color: #6b7280; font-size: 0.8rem; margin-bottom: 4px; }
+                .cv-studio-profile-value { display: block; font-weight: 700; }
+                .cv-studio-summary-strip, .cv-studio-teaching-summary { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+                .cv-studio-summary-chip strong { display: block; font-size: 1.05rem; margin-bottom: 4px; }
+                .cv-studio-section { margin-top: 16px; }
+                .cv-studio-empty-note { border: 1px dashed #d1d5db; border-radius: 12px; padding: 10px 12px; color: #6b7280; }
+                table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: right; vertical-align: top; }
+                th { background: #f3f4f6; }
+                @media print { body { margin: 10mm; } .member-card { page-break-after: always; } .member-card:last-child { page-break-after: auto; } }
+            </style>
+        </head>
+        <body>
+            <h1>السير الذاتية</h1>
+            <p>${escapeHtml(cvStudioReport.caption)}</p>
+            <div class="summary-grid">${summaryCards}</div>
+            ${membersHtml}
+            <script>window.onload = function(){ window.print(); };</script>
+        </body>
+        </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        alert('تعذر فتح نافذة الطباعة. تأكد من السماح بالنوافذ المنبثقة.');
+        return;
+    }
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+}
+
+function resetCvStudioView() {
+    renderCvStudioYearOptions(true);
+    renderCvStudioDepartmentOptions(true);
+    renderCvStudioMemberPicker(true);
+    cvStudioClearReport();
+}
+
+async function setupCvStudio() {
+    if (cvStudioInitialized) return;
+
+    await ensureTeachingLoaded().catch(() => null);
+    renderCvStudioYearOptions(true);
+    renderCvStudioDepartmentOptions(true);
+    renderCvStudioMemberPicker(true);
+
+    document.getElementById('cvStudioYearFilter')?.addEventListener('change', () => {
+        renderCvStudioMemberPicker(true);
+        cvStudioClearReport();
+    });
+    document.getElementById('cvStudioDepartmentFilter')?.addEventListener('change', () => {
+        renderCvStudioMemberPicker(true);
+        cvStudioClearReport();
+    });
+    document.getElementById('cvStudioRunBtn')?.addEventListener('click', runCvStudioReport);
+    document.getElementById('cvStudioResetBtn')?.addEventListener('click', resetCvStudioView);
+    document.getElementById('cvStudioExportCsvBtn')?.addEventListener('click', exportCvStudioCSV);
+    document.getElementById('cvStudioExportPdfBtn')?.addEventListener('click', exportCvStudioPDF);
+    document.addEventListener('click', event => {
+        if (event.target.closest('#cvStudioMemberSelect')) return;
+        const wrapper = document.getElementById('cvStudioMemberSelect');
+        const panel = wrapper?.querySelector('.cv-studio-member-panel');
+        const trigger = wrapper?.querySelector('.cv-studio-member-trigger');
+        if (panel) panel.classList.add('hidden');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    });
+
+    cvStudioInitialized = true;
+}
+
+// ========================================
 // عرض الرسائل العلمية
 // ========================================
 function renderTheses() {
@@ -8638,6 +9462,9 @@ function setupTabs() {
             }
             if (tabId === 'analytics') {
                 setupAnalyticsStudio();
+            }
+            if (tabId === 'cvs') {
+                setupCvStudio();
             }
         });
     });
