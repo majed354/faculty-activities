@@ -138,11 +138,32 @@ function getFacultyNationalityValue(row) {
     ).trim();
 }
 
+function getFacultyGenderValue(row) {
+    return String(
+        row?.gender ??
+        row?.Gender ??
+        row?.الجنس ??
+        ''
+    ).trim();
+}
+
 function normalizeFacultyMemberRow(member) {
     if (!member || typeof member !== 'object') return member;
     const nationality = getFacultyNationalityValue(member);
-    if (!nationality || member.nationality === nationality) return member;
-    return { ...member, nationality };
+    const gender = getFacultyGenderValue(member);
+    const nextMember = { ...member };
+    let changed = false;
+
+    if (nationality && member.nationality !== nationality) {
+        nextMember.nationality = nationality;
+        changed = true;
+    }
+    if (gender && member.gender !== gender) {
+        nextMember.gender = gender;
+        changed = true;
+    }
+
+    return changed ? nextMember : member;
 }
 
 function normalizeFacultyMemberCollection(rows) {
@@ -2629,11 +2650,13 @@ function buildFacultyStatDetailItems() {
         const department = String(member.department || '').trim();
         const email = String(member.email || '').trim();
         const nationality = getFacultyNationalityValue(member);
+        const gender = getFacultyGenderValue(member);
 
         const subtitleParts = [];
         if (rank) subtitleParts.push(rank);
         if (department) subtitleParts.push(department);
         if (nationality) subtitleParts.push(nationality);
+        if (gender) subtitleParts.push(gender);
 
         const metaParts = [];
         if (memberId) metaParts.push(`الرقم الوظيفي: ${memberId}`);
@@ -2645,7 +2668,7 @@ function buildFacultyStatDetailItems() {
             meta: metaParts.join(' | '),
             badge: rank || 'عضو',
             primarySearch: normalizeSearchText(`${memberName} ${memberId}`),
-            searchText: normalizeSearchText(`${memberName} ${memberId} ${rank} ${department} ${email} ${nationality}`),
+            searchText: normalizeSearchText(`${memberName} ${memberId} ${rank} ${department} ${email} ${nationality} ${gender}`),
             defaultOrder: index,
             onClick: memberId ? () => {
                 closeStatsDetailModal();
@@ -3177,7 +3200,11 @@ function showMemberDetails(memberId, selectedYear = 'all') {
                     <div class="member-info-main">
                         <h2>${member.name}</h2>
                         <span class="member-rank-badge">${member.rank}</span>
-                        <span class="member-email">${[member.email || '', member.nationality ? `الجنسية: ${member.nationality}` : ''].filter(Boolean).join(' | ')}</span>
+                        <span class="member-email">${[
+                            member.email || '',
+                            member.nationality ? `الجنسية: ${member.nationality}` : '',
+                            member.gender ? `الجنس: ${member.gender}` : ''
+                        ].filter(Boolean).join(' | ')}</span>
                     </div>
                     <div class="member-points-display">
                         <span class="points-number">${points}</span>
@@ -5630,13 +5657,14 @@ function getAnalyticsStudioSourceDefinitions() {
             rowLabel: 'سجل',
             getRows: analyticsStudioGetFacultyRows,
             getYear: row => row.year,
-            searchText: row => `${row.name || ''} ${row.id || ''} ${row.rank || ''} ${row.department || ''} ${row.email || ''} ${row.nationality || ''}`,
+            searchText: row => `${row.name || ''} ${row.id || ''} ${row.rank || ''} ${row.department || ''} ${row.email || ''} ${row.nationality || ''} ${row.gender || ''}`,
             detailColumns: [
                 { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value) },
                 { id: 'id', label: 'الرقم', getValue: row => analyticsStudioText(row.id, '-') },
                 { id: 'name', label: 'الاسم', getValue: row => analyticsStudioText(row.name, '-') },
                 { id: 'rank', label: 'الرتبة العلمية', getValue: row => analyticsStudioText(row.rank, '-') },
                 { id: 'nationality', label: 'الجنسية', getValue: row => analyticsStudioText(row.nationality, '-') },
+                { id: 'gender', label: 'الجنس', getValue: row => analyticsStudioText(row.gender, '-') },
                 { id: 'email', label: 'البريد الإلكتروني', getValue: row => analyticsStudioText(row.email, '-') },
                 { id: 'active', label: 'الحالة', getValue: row => analyticsStudioText(row.active, '-') },
                 { id: 'department', label: 'القسم', getValue: row => analyticsStudioText(row.department, '-') }
@@ -5879,6 +5907,7 @@ function analyticsStudioGetFacultyRows() {
         department: analyticsStudioText(member.department, 'غير محدد'),
         rank: analyticsStudioText(member.rank, 'غير محدد'),
         nationality: analyticsStudioText(getFacultyNationalityValue(member), ''),
+        gender: analyticsStudioText(getFacultyGenderValue(member), ''),
         activeFlag: analyticsStudioText(member.active, 'غير محدد'),
         active: analyticsStudioFormatEmploymentStatus(member.active)
     })).filter(row => row.year !== null);
@@ -7026,8 +7055,9 @@ function renderCvStudioMemberPicker(resetSelections = false) {
                     const id = analyticsStudioText(member.id);
                     const label = `${analyticsStudioText(member.name)} - ${analyticsStudioText(member.rank, 'بدون رتبة')}`;
                     const nationality = getFacultyNationalityValue(member);
-                    const meta = [analyticsStudioText(member.department), analyticsStudioText(member.email), nationality].filter(Boolean).join(' | ');
-                    const searchText = normalizeSearchText(`${member.name || ''} ${member.id || ''} ${member.rank || ''} ${member.department || ''} ${member.email || ''} ${nationality}`);
+                    const gender = getFacultyGenderValue(member);
+                    const meta = [analyticsStudioText(member.department), analyticsStudioText(member.email), nationality, gender].filter(Boolean).join(' | ');
+                    const searchText = normalizeSearchText(`${member.name || ''} ${member.id || ''} ${member.rank || ''} ${member.department || ''} ${member.email || ''} ${nationality} ${gender}`);
                     return `
                         <label class="analytics-studio-multi-option cv-studio-member-option" data-search="${escapeHtml(searchText)}">
                             <input type="checkbox" value="${escapeHtml(id)}" ${effectiveSelectedIds.includes(id) ? 'checked' : ''}>
@@ -7386,6 +7416,7 @@ function buildCvStudioMemberCardHtml(memberData) {
         ['القسم', analyticsStudioText(member.department, '-')],
         ['الرتبة', analyticsStudioText(member.rank, '-')],
         ['الجنسية', analyticsStudioText(getFacultyNationalityValue(member), '-')],
+        ['الجنس', analyticsStudioText(getFacultyGenderValue(member), '-')],
         ['البريد', analyticsStudioText(member.email, '-')],
         ['الحالة', analyticsStudioText(member.activeLabel, '-')],
         ['سجل العضوية', analyticsStudioText(member.yearLabel, '-')],
@@ -7397,7 +7428,7 @@ function buildCvStudioMemberCardHtml(memberData) {
             <div class="cv-studio-member-header">
                 <div>
                     <h3>${escapeHtml(member.name || '-') }</h3>
-                    <p>${escapeHtml([member.rank, getFacultyNationalityValue(member), member.department, member.id].filter(Boolean).join(' | '))}</p>
+                    <p>${escapeHtml([member.rank, getFacultyNationalityValue(member), getFacultyGenderValue(member), member.department, member.id].filter(Boolean).join(' | '))}</p>
                 </div>
                 <div class="cv-studio-member-points">
                     <strong>${formatArabicDigits(memberData.points)}</strong>
@@ -7482,7 +7513,7 @@ function buildCvStudioMemberCardHtml(memberData) {
 function buildCvStudioExportMatrix() {
     if (!cvStudioReport) return [];
 
-    const headers = ['رقم العضو', 'اسم العضو', 'القسم', 'الرتبة', 'الجنسية', 'البريد', 'الحالة', 'نطاق السنة', 'المحور', 'التصنيف', 'العنوان/الوصف', 'الجهة/المكان', 'التاريخ', 'تفاصيل إضافية'];
+    const headers = ['رقم العضو', 'اسم العضو', 'القسم', 'الرتبة', 'الجنسية', 'الجنس', 'البريد', 'الحالة', 'نطاق السنة', 'المحور', 'التصنيف', 'العنوان/الوصف', 'الجهة/المكان', 'التاريخ', 'تفاصيل إضافية'];
     const rows = [];
 
     cvStudioReport.members.forEach(memberData => {
@@ -7493,6 +7524,7 @@ function buildCvStudioExportMatrix() {
             analyticsStudioText(member.department, '-'),
             analyticsStudioText(member.rank, '-'),
             analyticsStudioText(getFacultyNationalityValue(member), '-'),
+            analyticsStudioText(getFacultyGenderValue(member), '-'),
             analyticsStudioText(member.email, '-'),
             analyticsStudioText(member.activeLabel, '-'),
             memberData.scopeYearLabel
