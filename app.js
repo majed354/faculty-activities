@@ -129,13 +129,33 @@ async function loadCSV(url) {
     }
 }
 
+function getFacultyNationalityValue(row) {
+    return String(
+        row?.nationality ??
+        row?.Nationality ??
+        row?.الجنسية ??
+        ''
+    ).trim();
+}
+
+function normalizeFacultyMemberRow(member) {
+    if (!member || typeof member !== 'object') return member;
+    const nationality = getFacultyNationalityValue(member);
+    if (!nationality || member.nationality === nationality) return member;
+    return { ...member, nationality };
+}
+
+function normalizeFacultyMemberCollection(rows) {
+    return (rows || []).map(normalizeFacultyMemberRow);
+}
+
 async function loadConfig() {
     const defaultHijriYear = getCurrentHijriYearNumber();
     try {
         const response = await fetch(`${DATA_BASE_URL}/config.json`);
         config = await response.json();
         const configuredYear = normalizeConfiguredYear(config.current_year);
-        currentYear = configuredYear === 'all' ? defaultHijriYear : configuredYear;
+        currentYear = configuredYear;
         currentDepartment = config.current_department || 'all';
 
         const availableYears = Array.isArray(config.available_years) ? [...config.available_years] : [];
@@ -187,7 +207,7 @@ async function loadConfig() {
         if (!config.available_years.includes(defaultHijriYear)) {
             config.available_years.push(defaultHijriYear);
         }
-        currentYear = defaultHijriYear;
+        currentYear = 'all';
         currentDepartment = 'all';
     }
 }
@@ -222,11 +242,12 @@ async function loadFromGoogleSheets() {
         if (sheetsData.faculty && sheetsData.faculty.length > 0) {
             // إضافة أعضاء جدد غير موجودين
             sheetsData.faculty.forEach(newMember => {
+                const normalizedMember = normalizeFacultyMemberRow(newMember);
                 const exists = allData.faculty.some(f =>
-                    String(f.id).trim() === String(newMember.id).trim() &&
-                    String(f.year).trim() === String(newMember.year).trim()
+                    String(f.id).trim() === String(normalizedMember.id).trim() &&
+                    String(f.year).trim() === String(normalizedMember.year).trim()
                 );
-                if (!exists) allData.faculty.push(newMember);
+                if (!exists) allData.faculty.push(normalizedMember);
             });
         }
 
@@ -459,7 +480,13 @@ async function loadAllData() {
         throw new Error('تعذر تحميل data/new_all_plans.csv أو الملف فارغ. هذا الملف أصبح المصدر المعتمد الوحيد لربط المقررات بالبرامج.');
     }
 
-    allData = { faculty, students, theses, participations, publications };
+    allData = {
+        faculty: normalizeFacultyMemberCollection(faculty),
+        students,
+        theses,
+        participations,
+        publications
+    };
     allPlansData = plans;
     buildCourseToPrograms();
 
@@ -2601,10 +2628,12 @@ function buildFacultyStatDetailItems() {
         const rank = String(member.rank || '').trim();
         const department = String(member.department || '').trim();
         const email = String(member.email || '').trim();
+        const nationality = getFacultyNationalityValue(member);
 
         const subtitleParts = [];
         if (rank) subtitleParts.push(rank);
         if (department) subtitleParts.push(department);
+        if (nationality) subtitleParts.push(nationality);
 
         const metaParts = [];
         if (memberId) metaParts.push(`الرقم الوظيفي: ${memberId}`);
@@ -2616,7 +2645,7 @@ function buildFacultyStatDetailItems() {
             meta: metaParts.join(' | '),
             badge: rank || 'عضو',
             primarySearch: normalizeSearchText(`${memberName} ${memberId}`),
-            searchText: normalizeSearchText(`${memberName} ${memberId} ${rank} ${department} ${email}`),
+            searchText: normalizeSearchText(`${memberName} ${memberId} ${rank} ${department} ${email} ${nationality}`),
             defaultOrder: index,
             onClick: memberId ? () => {
                 closeStatsDetailModal();
@@ -3148,7 +3177,7 @@ function showMemberDetails(memberId, selectedYear = 'all') {
                     <div class="member-info-main">
                         <h2>${member.name}</h2>
                         <span class="member-rank-badge">${member.rank}</span>
-                        <span class="member-email">${member.email || ''}</span>
+                        <span class="member-email">${[member.email || '', member.nationality ? `الجنسية: ${member.nationality}` : ''].filter(Boolean).join(' | ')}</span>
                     </div>
                     <div class="member-points-display">
                         <span class="points-number">${points}</span>
@@ -5601,12 +5630,13 @@ function getAnalyticsStudioSourceDefinitions() {
             rowLabel: 'سجل',
             getRows: analyticsStudioGetFacultyRows,
             getYear: row => row.year,
-            searchText: row => `${row.name || ''} ${row.id || ''} ${row.rank || ''} ${row.department || ''} ${row.email || ''}`,
+            searchText: row => `${row.name || ''} ${row.id || ''} ${row.rank || ''} ${row.department || ''} ${row.email || ''} ${row.nationality || ''}`,
             detailColumns: [
                 { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value) },
                 { id: 'id', label: 'الرقم', getValue: row => analyticsStudioText(row.id, '-') },
                 { id: 'name', label: 'الاسم', getValue: row => analyticsStudioText(row.name, '-') },
                 { id: 'rank', label: 'الرتبة العلمية', getValue: row => analyticsStudioText(row.rank, '-') },
+                { id: 'nationality', label: 'الجنسية', getValue: row => analyticsStudioText(row.nationality, '-') },
                 { id: 'email', label: 'البريد الإلكتروني', getValue: row => analyticsStudioText(row.email, '-') },
                 { id: 'active', label: 'الحالة', getValue: row => analyticsStudioText(row.active, '-') },
                 { id: 'department', label: 'القسم', getValue: row => analyticsStudioText(row.department, '-') }
@@ -5844,10 +5874,11 @@ function getAnalyticsStudioSourceDefinitions() {
 
 function analyticsStudioGetFacultyRows() {
     return (allData.faculty || []).map(member => ({
-        ...member,
+        ...normalizeFacultyMemberRow(member),
         year: parseCustomStatsYear(member.year),
         department: analyticsStudioText(member.department, 'غير محدد'),
         rank: analyticsStudioText(member.rank, 'غير محدد'),
+        nationality: analyticsStudioText(getFacultyNationalityValue(member), ''),
         activeFlag: analyticsStudioText(member.active, 'غير محدد'),
         active: analyticsStudioFormatEmploymentStatus(member.active)
     })).filter(row => row.year !== null);
@@ -6994,8 +7025,9 @@ function renderCvStudioMemberPicker(resetSelections = false) {
                 ${memberRows.length ? memberRows.map(member => {
                     const id = analyticsStudioText(member.id);
                     const label = `${analyticsStudioText(member.name)} - ${analyticsStudioText(member.rank, 'بدون رتبة')}`;
-                    const meta = [analyticsStudioText(member.department), analyticsStudioText(member.email)].filter(Boolean).join(' | ');
-                    const searchText = normalizeSearchText(`${member.name || ''} ${member.id || ''} ${member.rank || ''} ${member.department || ''} ${member.email || ''}`);
+                    const nationality = getFacultyNationalityValue(member);
+                    const meta = [analyticsStudioText(member.department), analyticsStudioText(member.email), nationality].filter(Boolean).join(' | ');
+                    const searchText = normalizeSearchText(`${member.name || ''} ${member.id || ''} ${member.rank || ''} ${member.department || ''} ${member.email || ''} ${nationality}`);
                     return `
                         <label class="analytics-studio-multi-option cv-studio-member-option" data-search="${escapeHtml(searchText)}">
                             <input type="checkbox" value="${escapeHtml(id)}" ${effectiveSelectedIds.includes(id) ? 'checked' : ''}>
@@ -7353,6 +7385,7 @@ function buildCvStudioMemberCardHtml(memberData) {
         ['الرقم', analyticsStudioText(member.id, '-')],
         ['القسم', analyticsStudioText(member.department, '-')],
         ['الرتبة', analyticsStudioText(member.rank, '-')],
+        ['الجنسية', analyticsStudioText(getFacultyNationalityValue(member), '-')],
         ['البريد', analyticsStudioText(member.email, '-')],
         ['الحالة', analyticsStudioText(member.activeLabel, '-')],
         ['سجل العضوية', analyticsStudioText(member.yearLabel, '-')],
@@ -7364,7 +7397,7 @@ function buildCvStudioMemberCardHtml(memberData) {
             <div class="cv-studio-member-header">
                 <div>
                     <h3>${escapeHtml(member.name || '-') }</h3>
-                    <p>${escapeHtml([member.rank, member.department, member.id].filter(Boolean).join(' | '))}</p>
+                    <p>${escapeHtml([member.rank, getFacultyNationalityValue(member), member.department, member.id].filter(Boolean).join(' | '))}</p>
                 </div>
                 <div class="cv-studio-member-points">
                     <strong>${formatArabicDigits(memberData.points)}</strong>
@@ -7449,7 +7482,7 @@ function buildCvStudioMemberCardHtml(memberData) {
 function buildCvStudioExportMatrix() {
     if (!cvStudioReport) return [];
 
-    const headers = ['رقم العضو', 'اسم العضو', 'القسم', 'الرتبة', 'البريد', 'الحالة', 'نطاق السنة', 'المحور', 'التصنيف', 'العنوان/الوصف', 'الجهة/المكان', 'التاريخ', 'تفاصيل إضافية'];
+    const headers = ['رقم العضو', 'اسم العضو', 'القسم', 'الرتبة', 'الجنسية', 'البريد', 'الحالة', 'نطاق السنة', 'المحور', 'التصنيف', 'العنوان/الوصف', 'الجهة/المكان', 'التاريخ', 'تفاصيل إضافية'];
     const rows = [];
 
     cvStudioReport.members.forEach(memberData => {
@@ -7459,6 +7492,7 @@ function buildCvStudioExportMatrix() {
             analyticsStudioText(member.name, '-'),
             analyticsStudioText(member.department, '-'),
             analyticsStudioText(member.rank, '-'),
+            analyticsStudioText(getFacultyNationalityValue(member), '-'),
             analyticsStudioText(member.email, '-'),
             analyticsStudioText(member.activeLabel, '-'),
             memberData.scopeYearLabel
