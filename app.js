@@ -147,13 +147,26 @@ function getFacultyGenderValue(row) {
     ).trim();
 }
 
-function getFacultyBranchValue(row) {
+function getFacultyBranchRawValue(row) {
     return String(
         row?.branch ??
         row?.Branch ??
         row?.الفرع ??
         ''
     ).trim();
+}
+
+function getFacultyBranchValues(row) {
+    return Array.from(new Set(
+        getFacultyBranchRawValue(row)
+            .split(/[|,،]/)
+            .map(value => value.trim())
+            .filter(Boolean)
+    ));
+}
+
+function getFacultyBranchValue(row) {
+    return getFacultyBranchValues(row).join('، ');
 }
 
 function normalizeFacultyMemberRow(member) {
@@ -5690,11 +5703,33 @@ function getAnalyticsStudioSourceDefinitions() {
             groups: [
                 { id: 'year', label: 'السنة', getValue: row => row.year, format: value => formatCustomStatsYearLabel(value), sort: 'numeric' },
                 { id: 'department', label: 'القسم', getValue: row => analyticsStudioText(row.department, 'غير محدد') },
+                {
+                    id: 'branch',
+                    label: 'الفرع',
+                    getValue: row => analyticsStudioText(getFacultyBranchValue(row), 'غير محدد'),
+                    getValues: row => {
+                        const branches = getFacultyBranchValues(row);
+                        return branches.length ? branches : ['غير محدد'];
+                    }
+                },
                 { id: 'rank', label: 'الرتبة العلمية', getValue: row => analyticsStudioText(row.rank, 'غير محدد') },
                 { id: 'active', label: 'الحالة', getValue: row => analyticsStudioText(row.active, 'غير محدد') }
             ],
             filters: [
                 { id: 'department', label: 'القسم', getValue: row => analyticsStudioText(row.department, 'غير محدد') },
+                {
+                    id: 'branch',
+                    label: 'الفرع',
+                    getValue: row => analyticsStudioText(row.branch, 'غير محدد'),
+                    getOptionsValues: row => {
+                        const branches = getFacultyBranchValues(row);
+                        return branches.length ? branches : ['غير محدد'];
+                    },
+                    matches: (row, selectedValue) => {
+                        const branches = getFacultyBranchValues(row);
+                        return (branches.length ? branches : ['غير محدد']).includes(selectedValue);
+                    }
+                },
                 { id: 'rank', label: 'الرتبة العلمية', getValue: row => analyticsStudioText(row.rank, 'غير محدد'), multi: true },
                 { id: 'active', label: 'الحالة', getValue: row => analyticsStudioText(row.active, 'غير محدد') }
             ],
@@ -6279,19 +6314,32 @@ function analyticsStudioBuildGroupedMetricRows(records, metricDefs, primaryGroup
 
     const grouped = new Map();
     records.forEach(record => {
-        const primaryValue = primaryGroup.getValue(record);
-        const secondaryValue = secondaryGroup ? secondaryGroup.getValue(record) : '';
-        const key = `${analyticsStudioText(primaryValue)}||${analyticsStudioText(secondaryValue)}`;
+        const getGroupValues = group => {
+            if (!group) return [''];
+            const rawValues = typeof group.getValues === 'function'
+                ? group.getValues(record)
+                : [group.getValue(record)];
+            const values = (Array.isArray(rawValues) ? rawValues : [rawValues])
+                .map(value => analyticsStudioText(value, 'غير محدد'))
+                .filter(Boolean);
+            return values.length ? Array.from(new Set(values)) : ['غير محدد'];
+        };
 
-        if (!grouped.has(key)) {
-            grouped.set(key, {
-                primaryValue,
-                secondaryValue,
-                records: []
+        const primaryValues = getGroupValues(primaryGroup);
+        const secondaryValues = secondaryGroup ? getGroupValues(secondaryGroup) : [''];
+        primaryValues.forEach(primaryValue => {
+            secondaryValues.forEach(secondaryValue => {
+                const key = `${analyticsStudioText(primaryValue)}||${analyticsStudioText(secondaryValue)}`;
+                if (!grouped.has(key)) {
+                    grouped.set(key, {
+                        primaryValue,
+                        secondaryValue,
+                        records: []
+                    });
+                }
+                grouped.get(key).records.push(record);
             });
-        }
-
-        grouped.get(key).records.push(record);
+        });
     });
 
     const rows = Array.from(grouped.values()).map(group => ({
