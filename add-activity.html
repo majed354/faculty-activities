@@ -514,7 +514,10 @@
     </div>
 
     <script>
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzbIi7bIwIZCXPtUHnUt5bS2GJAZZjfFqgKSqyEnC97KOPwx03ZGkXCFdZRTcndZOuM/exec';
+        // مصدر واحد للرابط؛ يمنع انفصال صفحة الإضافة عن صفحة العرض.
+        let SCRIPT_URL = '';
+        let scriptConfigurationPromise = null;
+        let pendingSubmissionRequest = null;
         let facultyList = [];
         let currentTargetSheet = '';
         let selectedMembersData = {};
@@ -524,6 +527,24 @@
         const JOURNAL_SUGGESTIONS_LIMIT = 300;
         const JOURNAL_CACHE_KEY = 'faculty_activities_journals_cache_v2';
         const FACULTY_DEPARTMENT_ORDER = ['القراءات', 'الشريعة', 'الأنظمة', 'الثقافة الإسلامية'];
+
+        async function ensureScriptConfiguration() {
+            if (SCRIPT_URL) return SCRIPT_URL;
+            if (!scriptConfigurationPromise) {
+                scriptConfigurationPromise = fetch('./data/config.json', { cache: 'no-store' })
+                    .then(response => {
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        return response.json();
+                    })
+                    .then(siteConfig => {
+                        const apiUrl = String(siteConfig?.google_sheets_api || '').trim();
+                        if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(apiUrl)) throw new Error('رابط Google Sheets غير صالح في data/config.json');
+                        SCRIPT_URL = apiUrl;
+                        return SCRIPT_URL;
+                    });
+            }
+            return scriptConfigurationPromise;
+        }
 
         function normalizeArabicDigits(value) {
             if (value === null || value === undefined) return '';
@@ -743,7 +764,8 @@
             const timeoutId = setTimeout(() => controller.abort(), 10000);
 
             try {
-                const liveResponse = await fetch(`${SCRIPT_URL}?action=read`, {
+                const apiUrl = await ensureScriptConfiguration();
+                const liveResponse = await fetch(`${apiUrl}?action=read&_=${Date.now()}`, {
                     method: 'GET',
                     cache: 'no-store',
                     signal: controller.signal
@@ -1379,7 +1401,7 @@
             return true;
         }
 
-        function submitData() {
+        async function submitData() {
             // التحقق من الحقول الإلزامية أولاً
             if (!validateForm()) {
                 return;
@@ -1390,7 +1412,19 @@
 
             btn.disabled = true; btn.textContent = "جاري الإرسال..."; statusMsg.textContent = "";
 
+            let apiUrl;
+            try {
+                apiUrl = await ensureScriptConfiguration();
+            } catch (error) {
+                statusMsg.style.color = 'var(--rose-500)';
+                statusMsg.textContent = `❌ تعذر تحميل إعداد الاتصال: ${error.message}`;
+                btn.disabled = false;
+                btn.textContent = "حاول مرة أخرى";
+                return;
+            }
+
             let formData = {
+                action: 'create',
                 formType: currentTargetSheet,
                 department: document.getElementById('departmentSelect').value
             };
@@ -1450,14 +1484,24 @@
                 }
             }
 
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify(formData),
-                headers: { "Content-Type": "text/plain" }
-            })
-            .then(response => response.json())
-            .then(data => {
+            const submissionFingerprint = JSON.stringify(formData);
+            if (!pendingSubmissionRequest || pendingSubmissionRequest.fingerprint !== submissionFingerprint) {
+                pendingSubmissionRequest = { fingerprint: submissionFingerprint, requestId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}` };
+            }
+            formData.request_id = pendingSubmissionRequest.requestId;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 25000);
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST', cache: 'no-store', signal: controller.signal,
+                    body: JSON.stringify(formData),
+                    headers: { "Content-Type": "text/plain;charset=utf-8" }
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
                 if (data.status === 'success') {
+                    pendingSubmissionRequest = null;
                     statusMsg.style.color = 'var(--emerald-500)';
                     statusMsg.textContent = `✅ تم الحفظ بنجاح! رقم العملية: ${data.id}`;
                     btn.disabled = false;
@@ -1467,17 +1511,27 @@
                     clearInputsAfterSuccess();
                     
                     alert("تمت إضافة النشاط بنجاح. يمكنك إضافة نشاط آخر.");
+                } else if (data.status === 'duplicate') {
+                    pendingSubmissionRequest = null;
+                    statusMsg.style.color = 'var(--gold-500)';
+                    statusMsg.textContent = `⚠️ السجل موجود مسبقاً برقم ${data.id}، ولم تتم إضافته مرة أخرى.`;
+                    btn.disabled = false;
+                    btn.textContent = "📤 حفظ وإرسال البيانات";
                 } else {
                     throw new Error(data.message || 'Unknown error');
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error('Error:', error);
                 statusMsg.style.color = 'var(--rose-500)';
-                statusMsg.textContent = "❌ حدث خطأ أثناء الإرسال.";
+                const detail = error?.name === 'AbortError'
+                    ? 'انتهت مهلة التأكيد. أعد تحميل الصفحة أو ابحث عن السجل قبل إعادة الإرسال؛ فالواجهة تمنع التكرار تلقائيًا.'
+                    : (error.message || 'حدث خطأ أثناء الإرسال');
+                statusMsg.textContent = `❌ ${detail}`;
                 btn.disabled = false;
                 btn.textContent = "حاول مرة أخرى";
-            });
+            } finally {
+                clearTimeout(timeoutId);
+            }
         }
 
         // دالة لتفريغ الحقول النصية فقط بعد الحفظ

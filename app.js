@@ -267,10 +267,15 @@ async function loadFromGoogleSheets() {
     const apiUrl = config.google_sheets_api;
     if (!apiUrl) return false;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
     try {
         console.log('📡 جاري تحميل البيانات من Google Sheets...');
-        const response = await fetch(`${apiUrl}?action=read`, {
+        const response = await fetch(`${apiUrl}?action=read&_=${Date.now()}`, {
             mode: 'cors',
+            cache: 'no-store',
+            signal: controller.signal,
             headers: { 'Accept': 'application/json' }
         });
 
@@ -278,60 +283,37 @@ async function loadFromGoogleSheets() {
 
         const sheetsData = await response.json();
 
-        if (sheetsData.error) {
-            console.warn('⚠️ خطأ من Apps Script:', sheetsData.error);
+        if (sheetsData.error || sheetsData.status === 'error') {
+            console.warn('⚠️ خطأ من Apps Script:', sheetsData.message || sheetsData.error);
             return false;
         }
 
         // تطبيع القيم القادمة من Google Sheets (خصوصًا التواريخ التي قد تصل بصيغة Date.toString)
         normalizeGoogleSheetsPayload(sheetsData);
 
-        // دمج البيانات من Google Sheets مع البيانات الحالية
-        if (sheetsData.faculty && sheetsData.faculty.length > 0) {
-            // إضافة أعضاء جدد غير موجودين
-            sheetsData.faculty.forEach(newMember => {
-                const normalizedMember = normalizeFacultyMemberRow(newMember);
-                const exists = allData.faculty.some(f =>
-                    String(f.id).trim() === String(normalizedMember.id).trim() &&
-                    String(f.year).trim() === String(normalizedMember.year).trim()
-                );
-                if (!exists) allData.faculty.push(normalizedMember);
-            });
-        }
+        // الشيت هو المصدر الوحيد للأنشطة. الاستبدال الذري يمنع رجوع سجلات
+        // محذوفة من CSV محلي أو خلط استجابة ناقصة بالحالة السابقة.
+        const requiredActivitySheets = ['publications', 'theses', 'participations'];
+        const missingSheets = requiredActivitySheets.filter(name => !Array.isArray(sheetsData[name]));
+        if (missingSheets.length > 0) throw new Error(`استجابة Google Sheets لا تتضمن: ${missingSheets.join(', ')}`);
+        const nextActivityData = {
+            publications: sheetsData.publications,
+            theses: sheetsData.theses,
+            participations: sheetsData.participations
+        };
+        allData.publications = nextActivityData.publications;
+        allData.theses = nextActivityData.theses;
+        allData.participations = nextActivityData.participations;
 
-        if (sheetsData.publications && sheetsData.publications.length > 0) {
-            sheetsData.publications.forEach(newPub => {
-                const exists = allData.publications.some(p =>
-                    p.title === newPub.title && p.authors_ids === newPub.authors_ids
-                );
-                if (!exists) allData.publications.push(newPub);
-            });
-        }
-
-        if (sheetsData.theses && sheetsData.theses.length > 0) {
-            sheetsData.theses.forEach(newThesis => {
-                const exists = allData.theses.some(t =>
-                    t.student_name === newThesis.student_name && t.title === newThesis.title
-                );
-                if (!exists) allData.theses.push(newThesis);
-            });
-        }
-
-        if (sheetsData.participations && sheetsData.participations.length > 0) {
-            sheetsData.participations.forEach(newPart => {
-                const exists = allData.participations.some(p =>
-                    p.title === newPart.title && p.participant_ids === newPart.participant_ids && p.date === newPart.date
-                );
-                if (!exists) allData.participations.push(newPart);
-            });
-        }
-
-        console.log('✅ تم تحميل البيانات من Google Sheets بنجاح');
+        console.log(`✅ تم تحميل البيانات من Google Sheets بنجاح (API ${sheetsData.meta?.api_version || 'legacy'})`);
         sheetsDataLoaded = true;
         return true;
     } catch (error) {
-        console.warn('⚠️ تعذر الاتصال بـ Google Sheets:', error.message);
+        const message = error?.name === 'AbortError' ? 'انتهت مهلة الاتصال بعد 20 ثانية' : error.message;
+        console.warn('⚠️ تعذر الاتصال بـ Google Sheets:', message);
         return false;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
@@ -2152,7 +2134,7 @@ function getEditorFieldsForContext(context) {
         theses: ['year', 'type', 'specialization', 'student_name', 'title', 'supervisor_id', 'co_supervisor_id', 'examiner1_id', 'examiner2_id', 'status', 'defense_date']
     }[context?.entity] || [];
 
-    const existingKeys = Object.keys(record).filter(key => key && key !== 'id');
+    const existingKeys = Object.keys(record).filter(key => key && key !== 'id' && !key.startsWith('_'));
     const ordered = [
         ...preferred.filter(key => existingKeys.includes(key)),
         ...existingKeys.filter(key => !preferred.includes(key))
@@ -2281,11 +2263,17 @@ async function syncRecordMutationToSheets(payload) {
         return { ok: false, skipped: true, message: 'لا يوجد رابط Google Apps Script في الإعدادات' };
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
     try {
         const response = await fetch(apiUrl, {
             method: 'POST',
             mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
+            cache: 'no-store',
+            signal: controller.signal,
+            // text/plain يتجنب طلب CORS تمهيدي لا تجيبه تطبيقات Apps Script عادةً.
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
         });
 
@@ -2300,9 +2288,17 @@ async function syncRecordMutationToSheets(payload) {
         } catch (e) {
             result = { raw: rawText };
         }
+        if (!result || result.status !== 'success') {
+            return { ok: false, result, message: result?.message || result?.error || 'لم تؤكد واجهة Google Sheets العملية' };
+        }
         return { ok: true, result };
     } catch (error) {
-        return { ok: false, message: error.message || 'Network error' };
+        const message = error?.name === 'AbortError'
+            ? 'انتهت مهلة تأكيد الحفظ بعد 25 ثانية؛ أعد تحميل البيانات قبل تكرار العملية'
+            : (error.message || 'Network error');
+        return { ok: false, message };
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
@@ -2320,10 +2316,11 @@ async function logAndSyncRecordChange(action, context, oldRecord, newRecord) {
         new_values: newRecord || null
     };
 
-    localActivityAuditTrail.push(auditEntry);
-
-    return syncRecordMutationToSheets({
+    const requestId = context.pendingRequestId || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    context.pendingRequestId = requestId;
+    const syncResult = await syncRecordMutationToSheets({
         action: 'record_mutation',
+        request_id: requestId,
         mutation: action,
         entity: context.entity,
         actor: {
@@ -2331,10 +2328,16 @@ async function logAndSyncRecordChange(action, context, oldRecord, newRecord) {
             name: auditEntry.actor_name
         },
         record_id: auditEntry.record_id,
+        expected_record_hash: oldRecord?._record_hash || '',
         old_record: oldRecord,
         new_record: newRecord,
         audit_log: auditEntry
     });
+    if (syncResult.ok) {
+        localActivityAuditTrail.push(auditEntry);
+        delete context.pendingRequestId;
+    }
+    return syncResult;
 }
 
 function rerenderAfterRecordMutation(updatedContext = null) {
@@ -2375,24 +2378,24 @@ async function submitRecordEdit() {
         updatedRecord.last_modified_at = new Date().toISOString();
     }
 
-    const entityKey = currentEditContext.entity;
-    replaceRecordInArray(allData[entityKey], currentEditContext, { ...updatedRecord });
-    replaceRecordInArray(data[entityKey], currentEditContext, { ...updatedRecord });
-
-    if (entityKey === 'theses' && currentThesis && matchRecordByContext(currentThesis, currentEditContext)) {
-        currentThesis = { ...updatedRecord };
+    const editContext = currentEditContext;
+    const saveButton = modal.querySelector('.btn-success');
+    if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'جاري التحقق والحفظ...'; }
+    const syncResult = await logAndSyncRecordChange('update', editContext, editContext.record, updatedRecord);
+    if (!syncResult.ok) {
+        if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'حفظ التعديلات'; }
+        alert(`لم يُحفظ التعديل في Google Sheets، ولذلك لم تتغير بيانات الموقع.\n${syncResult.message || 'خطأ غير معروف'}`);
+        return;
     }
-
-    const newContext = { ...currentEditContext, record: { ...updatedRecord } };
+    const entityKey = editContext.entity;
+    const confirmedRecord = syncResult.result?.record || updatedRecord;
+    replaceRecordInArray(allData[entityKey], editContext, { ...confirmedRecord });
+    replaceRecordInArray(data[entityKey], editContext, { ...confirmedRecord });
+    if (entityKey === 'theses' && currentThesis && matchRecordByContext(currentThesis, editContext)) currentThesis = { ...confirmedRecord };
+    const newContext = { ...editContext, record: { ...confirmedRecord } };
     currentDetailContext = newContext;
     closeRecordEditModal();
-
-    const syncResult = await logAndSyncRecordChange('update', currentEditContext, currentEditContext.record, updatedRecord);
     rerenderAfterRecordMutation(newContext);
-
-    if (!syncResult.ok) {
-        alert(`تم حفظ التعديل محليًا وتحديث الواجهة، لكن لم يتم تأكيد المزامنة/سجل التعديلات في Google Sheets: ${syncResult.message || 'غير معروف'}`);
-    }
 }
 
 function confirmDeleteCurrentRecord() {
@@ -2413,25 +2416,20 @@ function confirmDeleteCurrentRecord() {
             modalKind: currentDetailContext.modalKind
         };
 
+        const syncResult = await logAndSyncRecordChange('delete', deleteContext, deleteContext.record, null);
+        if (!syncResult.ok) {
+            alert(`لم يُحذف السجل من Google Sheets، ولذلك بقي ظاهرًا في الموقع.\n${syncResult.message || 'خطأ غير معروف'}`);
+            return;
+        }
         removeRecordFromArray(allData[deleteContext.entity], deleteContext);
         removeRecordFromArray(data[deleteContext.entity], deleteContext);
-
-        if (deleteContext.entity === 'theses' && currentThesis && matchRecordByContext(currentThesis, deleteContext)) {
-            currentThesis = null;
-        }
-
+        if (deleteContext.entity === 'theses' && currentThesis && matchRecordByContext(currentThesis, deleteContext)) currentThesis = null;
         const thesisModal = document.getElementById('thesisModal');
         thesisModal?.classList.remove('active');
         closeRecordDetailModal();
         closeRecordEditModal();
         currentDetailContext = null;
-
-        const syncResult = await logAndSyncRecordChange('delete', deleteContext, deleteContext.record, null);
         rerenderAfterRecordMutation(null);
-
-        if (!syncResult.ok) {
-            alert(`تم حذف السجل محليًا وتحديث الواجهة، لكن لم يتم تأكيد المزامنة/سجل التعديلات في Google Sheets: ${syncResult.message || 'غير معروف'}`);
-        }
     });
 }
 
