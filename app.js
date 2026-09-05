@@ -96,14 +96,11 @@ function getCurrentHijriYearNumber() {
     const rawYear = new Date().toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { year: 'numeric' });
     const normalizedYear = normalizeArabicDigits(rawYear).replace(/[^\d]/g, '');
     const parsedYear = parseInt(normalizedYear, 10);
-    return Number.isFinite(parsedYear) ? parsedYear : 1447;
-}
+    if (Number.isFinite(parsedYear)) return parsedYear;
 
-function normalizeConfiguredYear(value) {
-    const normalized = normalizeArabicDigits(String(value ?? '')).trim();
-    if (!normalized || normalized.toLowerCase() === 'all') return 'all';
-    const parsed = parseInt(normalized, 10);
-    return Number.isFinite(parsed) ? parsed : 'all';
+    // احتياط للمتصفحات التي لا تدعم تقويم أم القرى: تقدير السنة الهجرية
+    // من السنة الميلادية بدل تثبيت سنة ستصبح قديمة لاحقًا.
+    return Math.floor((new Date().getFullYear() - 622) * 33 / 32) + 1;
 }
 
 async function loadCSV(url) {
@@ -202,8 +199,10 @@ async function loadConfig() {
     try {
         const response = await fetch(`${DATA_BASE_URL}/config.json`);
         config = await response.json();
-        const configuredYear = normalizeConfiguredYear(config.current_year);
-        currentYear = configuredYear;
+        // يبدأ الموقع دائمًا بالسنة الهجرية الحالية، مع بقاء خيار "الكل"
+        // متاحًا للمستخدم بعد التحميل.
+        currentYear = defaultHijriYear;
+        config.current_year = defaultHijriYear;
         currentDepartment = config.current_department || 'all';
 
         const availableYears = Array.isArray(config.available_years) ? [...config.available_years] : [];
@@ -255,7 +254,7 @@ async function loadConfig() {
         if (!config.available_years.includes(defaultHijriYear)) {
             config.available_years.push(defaultHijriYear);
         }
-        currentYear = 'all';
+        currentYear = defaultHijriYear;
         currentDepartment = 'all';
     }
 }
@@ -2456,6 +2455,10 @@ function populateYearSelector() {
         if (year === currentYear) option.selected = true;
         select.appendChild(option);
     });
+
+    // تثبيت القيمة بعد اكتمال بناء الخيارات؛ بعض المتصفحات تُبقي أول خيار
+    // (الكل) محددًا إذا أضيفت الخيارات ديناميكيًا.
+    select.value = String(currentYear);
 }
 
 function populateDepartmentSelector() {
