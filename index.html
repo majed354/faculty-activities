@@ -17,7 +17,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     
     <!-- Styles -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260907-live-data-v1">
     <link rel="stylesheet" href="style-additions.css">
     <link rel="stylesheet" href="teaching-styles.css">
 </head>
@@ -905,10 +905,13 @@
     <!-- مؤشر التحميل -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-spinner">
-            <div class="spinner-ring"></div>
-            <div class="spinner-ring"></div>
-            <div class="spinner-ring"></div>
-            <span>جارٍ التحميل...</span>
+            <div class="loading-rings" aria-hidden="true">
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+            </div>
+            <span id="loadingMessage" role="status" aria-live="polite">جارٍ تحميل البيانات المحدثة...</span>
+            <button type="button" id="loadingRetryButton" class="loading-retry-button" onclick="window.location.reload()" hidden>إعادة المحاولة</button>
         </div>
     </div>
 
@@ -1025,7 +1028,7 @@
         });
     });
     </script>
-    <script src="app.js?v=20260905-current-hijri-year"></script>
+    <script src="app.js?v=20260907-live-data-v1"></script>
     <script src="teaching.js"></script>
 
     <!-- Modal تفاصيل الرسالة -->

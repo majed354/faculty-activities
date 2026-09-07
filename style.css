@@ -1280,7 +1280,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    /* يجب أن يبقى فوق شاشة الدخول حتى لا يرى المستخدم أصفارًا مؤقتة. */
+    z-index: 20000;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease;
@@ -1298,9 +1299,46 @@ body {
     gap: 1.5rem;
 }
 
+.loading-rings {
+    position: relative;
+    width: 50px;
+    height: 50px;
+}
+
+.loading-rings[hidden] {
+    display: none;
+}
+
 .loading-spinner span {
     color: var(--gold-400);
     font-size: 1rem;
+}
+
+.loading-overlay.has-error .loading-spinner {
+    width: min(520px, calc(100vw - 32px));
+    padding: 28px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(212, 175, 55, 0.45);
+    border-radius: var(--radius-lg);
+}
+
+.loading-retry-button {
+    min-height: 44px;
+    padding: 10px 22px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--gold-400);
+    color: var(--primary-900);
+    font: 700 1rem var(--font-body);
+    cursor: pointer;
+}
+
+.loading-retry-button:hover,
+.loading-retry-button:focus-visible {
+    background: #e4c55e;
+    outline: 3px solid rgba(212, 175, 55, 0.35);
+    outline-offset: 3px;
 }
 
 .spinner-ring {

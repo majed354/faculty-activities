@@ -56,6 +56,12 @@ let programExclusiveCodes = {};  // "برنامج - درجة" → Set من رم�
 let programNonSharedCodes = {};  // "برنامج - درجة" → Set من رموز المقررات غير المشتركة (غير متطلبات جامعية)
 let programAvgLoad = {};         // "برنامج - درجة" → متوسط عدد المقررات غير المشتركة التي يأخذها الطالب في السنة
 let teachingProgramAggregatesCache = null; // cache لتجميع إحصائيات البرامج من بيانات التدريس
+let lastSheetsSyncAt = 0;
+let sheetsRefreshPromise = null;
+
+const SHEETS_REQUEST_TIMEOUT_MS = 35000;
+const SHEETS_REQUEST_ATTEMPTS = 2;
+const SHEETS_BACKGROUND_REFRESH_MS = 5 * 60 * 1000;
 
 // تحديد مسار البيانات (محلي دائماً - المستودع خاص)
 const DATA_BASE_URL = './data';
@@ -63,12 +69,31 @@ const DATA_BASE_URL = './data';
 // ========================================
 // دوال التحميل
 // ========================================
-function showLoading() {
-    document.getElementById('loadingOverlay').classList.add('active');
+function setLoadingState(message, allowRetry = false) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (!overlay) return;
+
+    const messageElement = overlay.querySelector('#loadingMessage');
+    const retryButton = overlay.querySelector('#loadingRetryButton');
+    const spinner = overlay.querySelector('.loading-rings');
+    if (messageElement) messageElement.textContent = message;
+    if (retryButton) retryButton.hidden = !allowRetry;
+    if (spinner) spinner.hidden = allowRetry;
+    overlay.classList.toggle('has-error', allowRetry);
+}
+
+function showLoading(message = 'جارٍ تحميل البيانات المحدثة...') {
+    setLoadingState(message, false);
+    document.getElementById('loadingOverlay')?.classList.add('active');
 }
 
 function hideLoading() {
-    document.getElementById('loadingOverlay').classList.remove('active');
+    document.getElementById('loadingOverlay')?.classList.remove('active');
+}
+
+function showLoadingError(message) {
+    setLoadingState(message, true);
+    document.getElementById('loadingOverlay')?.classList.add('active');
 }
 
 // ========================================
@@ -197,7 +222,11 @@ function normalizeFacultyMemberCollection(rows) {
 async function loadConfig() {
     const defaultHijriYear = getCurrentHijriYearNumber();
     try {
-        const response = await fetch(`${DATA_BASE_URL}/config.json`);
+        const response = await fetch(`${DATA_BASE_URL}/config.json?_=${Date.now()}`, {
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         config = await response.json();
         // يبدأ الموقع دائمًا بالسنة الهجرية الحالية، مع بقاء خيار "الكل"
         // متاحًا للمستخدم بعد التحميل.
@@ -264,56 +293,65 @@ async function loadConfig() {
 // ========================================
 async function loadFromGoogleSheets() {
     const apiUrl = config.google_sheets_api;
-    if (!apiUrl) return false;
+    if (!apiUrl) throw new Error('رابط Google Sheets غير موجود في إعدادات الموقع.');
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    let lastError = null;
+    for (let attempt = 1; attempt <= SHEETS_REQUEST_ATTEMPTS; attempt += 1) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), SHEETS_REQUEST_TIMEOUT_MS);
+        try {
+            console.log(`📡 جاري تحميل البيانات من Google Sheets (المحاولة ${attempt}/${SHEETS_REQUEST_ATTEMPTS})...`);
+            const separator = apiUrl.includes('?') ? '&' : '?';
+            const requestUrl = `${apiUrl}${separator}action=read&_=${Date.now()}-${attempt}`;
+            const response = await fetch(requestUrl, {
+                mode: 'cors',
+                cache: 'no-store',
+                redirect: 'follow',
+                signal: controller.signal,
+                // لا نضيف ترويسات مخصصة هنا حتى يبقى الطلب CORS بسيطًا
+                // ولا يرسل Chrome طلب OPTIONS لا تدعمه واجهة Apps Script.
+                headers: { 'Accept': 'application/json' }
+            });
 
-    try {
-        console.log('📡 جاري تحميل البيانات من Google Sheets...');
-        const response = await fetch(`${apiUrl}?action=read&_=${Date.now()}`, {
-            mode: 'cors',
-            cache: 'no-store',
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' }
-        });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const sheetsData = await response.json();
+            if (sheetsData.error || sheetsData.status === 'error') {
+                throw new Error(sheetsData.message || sheetsData.error || 'استجابة غير ناجحة من Google Sheets');
+            }
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const requiredActivitySheets = ['publications', 'theses', 'participations'];
+            const missingSheets = requiredActivitySheets.filter(name => !Array.isArray(sheetsData[name]));
+            if (missingSheets.length > 0) {
+                throw new Error(`استجابة Google Sheets لا تتضمن: ${missingSheets.join(', ')}`);
+            }
 
-        const sheetsData = await response.json();
-
-        if (sheetsData.error || sheetsData.status === 'error') {
-            console.warn('⚠️ خطأ من Apps Script:', sheetsData.message || sheetsData.error);
-            return false;
+            normalizeGoogleSheetsPayload(sheetsData);
+            allData.publications = sheetsData.publications;
+            allData.theses = sheetsData.theses;
+            allData.participations = sheetsData.participations;
+            sheetsDataLoaded = true;
+            lastSheetsSyncAt = Date.now();
+            console.log(`✅ تم تحميل البيانات من Google Sheets بنجاح (API ${sheetsData.meta?.api_version || 'legacy'})`);
+            return true;
+        } catch (error) {
+            lastError = error;
+            const message = error?.name === 'AbortError'
+                ? `انتهت مهلة الاتصال بعد ${SHEETS_REQUEST_TIMEOUT_MS / 1000} ثانية`
+                : (error?.message || 'خطأ اتصال غير معروف');
+            console.warn(`⚠️ تعذر تحميل Google Sheets في المحاولة ${attempt}:`, message);
+            if (attempt < SHEETS_REQUEST_ATTEMPTS) {
+                setLoadingState('الاتصال بالشيت بطيء؛ جارٍ إعادة المحاولة تلقائيًا...', false);
+                await new Promise(resolve => setTimeout(resolve, 800));
+            }
+        } finally {
+            clearTimeout(timeoutId);
         }
-
-        // تطبيع القيم القادمة من Google Sheets (خصوصًا التواريخ التي قد تصل بصيغة Date.toString)
-        normalizeGoogleSheetsPayload(sheetsData);
-
-        // الشيت هو المصدر الوحيد للأنشطة. الاستبدال الذري يمنع رجوع سجلات
-        // محذوفة من CSV محلي أو خلط استجابة ناقصة بالحالة السابقة.
-        const requiredActivitySheets = ['publications', 'theses', 'participations'];
-        const missingSheets = requiredActivitySheets.filter(name => !Array.isArray(sheetsData[name]));
-        if (missingSheets.length > 0) throw new Error(`استجابة Google Sheets لا تتضمن: ${missingSheets.join(', ')}`);
-        const nextActivityData = {
-            publications: sheetsData.publications,
-            theses: sheetsData.theses,
-            participations: sheetsData.participations
-        };
-        allData.publications = nextActivityData.publications;
-        allData.theses = nextActivityData.theses;
-        allData.participations = nextActivityData.participations;
-
-        console.log(`✅ تم تحميل البيانات من Google Sheets بنجاح (API ${sheetsData.meta?.api_version || 'legacy'})`);
-        sheetsDataLoaded = true;
-        return true;
-    } catch (error) {
-        const message = error?.name === 'AbortError' ? 'انتهت مهلة الاتصال بعد 20 ثانية' : error.message;
-        console.warn('⚠️ تعذر الاتصال بـ Google Sheets:', message);
-        return false;
-    } finally {
-        clearTimeout(timeoutId);
     }
+
+    sheetsDataLoaded = false;
+    throw new Error(lastError?.name === 'AbortError'
+        ? 'انتهت مهلة الاتصال بالشيت بعد محاولتين.'
+        : (lastError?.message || 'تعذر الاتصال بالشيت بعد محاولتين.'));
 }
 
 function normalizeGoogleSheetsPayload(payload) {
@@ -494,14 +532,13 @@ function buildCourseToPrograms() {
 }
 
 async function loadAllData() {
-    showLoading();
+    showLoading('جارٍ تحميل البيانات المحدثة...');
 
-    const [faculty, students, theses, participations, publications] = await Promise.all([
+    // بيانات الأعضاء والطلاب محلية، أما النشاط العلمي فمصدره الوحيد الشيت الحي.
+    // لا نحمّل CSV قديمًا كبديل؛ لأن ذلك يحول فشل الاتصال إلى أرقام صفرية مضللة.
+    const [faculty, students] = await Promise.all([
         loadCSV(`${DATA_BASE_URL}/faculty.csv`),
-        loadCSV(`${DATA_BASE_URL}/students_count.csv`),
-        loadCSV(`${DATA_BASE_URL}/theses.csv`),
-        loadCSV(`${DATA_BASE_URL}/participations.csv`),
-        loadCSV(`${DATA_BASE_URL}/publications.csv`)
+        loadCSV(`${DATA_BASE_URL}/students_count.csv`)
     ]);
 
     const plans = await loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`);
@@ -512,14 +549,14 @@ async function loadAllData() {
     allData = {
         faculty: normalizeFacultyMemberCollection(faculty),
         students,
-        theses,
-        participations,
-        publications
+        theses: [],
+        participations: [],
+        publications: []
     };
     allPlansData = plans;
     buildCourseToPrograms();
 
-    // محاولة تحميل البيانات الحية من Google Sheets ودمجها
+    // يجب أن ينجح المصدر الحي قبل عرض أي رقم للنشاط العلمي.
     await loadFromGoogleSheets();
 
     await loadYearData(currentYear);
@@ -9656,26 +9693,27 @@ async function init() {
     const hijriYear = getCurrentHijriYearNumber();
     document.getElementById('currentYear').textContent = formatArabicDigits(hijriYear);
 
-    await loadConfig();
-    populateYearSelector();
-    populateDepartmentSelector();
-    populateProgramSelector();
-    setupTabs();
-    setupFilters();
-    setupYearSelector();
-    setupDepartmentSelector();
-    setupProgramSelector();
-    syncMainNavOffset();
-    window.addEventListener('resize', syncMainNavOffset);
-    if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', syncMainNavOffset);
-    }
-    await loadAllData();
-    setupAnalyticsStudio();
-
-    // مؤشر حالة البيانات الحية
-    if (sheetsDataLoaded) {
+    try {
+        await loadConfig();
+        populateYearSelector();
+        populateDepartmentSelector();
+        populateProgramSelector();
+        setupTabs();
+        setupFilters();
+        setupYearSelector();
+        setupDepartmentSelector();
+        setupProgramSelector();
+        syncMainNavOffset();
+        window.addEventListener('resize', syncMainNavOffset);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', syncMainNavOffset);
+        }
+        await loadAllData();
+        setupAnalyticsStudio();
         console.log('🟢 البيانات محدثة من Google Sheets');
+    } catch (error) {
+        console.error('❌ تعذر بدء الموقع ببيانات موثوقة:', error);
+        showLoadingError('تعذر تحميل بيانات النشاط العلمي. لن تُعرض أرقام قديمة أو صفرية. تحقق من الاتصال ثم أعد المحاولة.');
     }
 
     // إنشاء واجهة إضافة الأنشطة
@@ -9683,3 +9721,27 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+async function refreshLiveActivityData() {
+    if (!sheetsDataLoaded || sheetsRefreshPromise) return sheetsRefreshPromise;
+    sheetsRefreshPromise = (async () => {
+        try {
+            await loadFromGoogleSheets();
+            await loadYearData(currentYear);
+        } catch (error) {
+            console.warn('⚠️ تعذر التحديث الخلفي؛ ستبقى آخر بيانات مؤكدة ظاهرة:', error?.message || error);
+        } finally {
+            sheetsRefreshPromise = null;
+        }
+    })();
+    return sheetsRefreshPromise;
+}
+
+window.addEventListener('pageshow', event => {
+    if (event.persisted) refreshLiveActivityData();
+});
+
+document.addEventListener('visibilitychange', () => {
+    const dataIsStale = Date.now() - lastSheetsSyncAt >= SHEETS_BACKGROUND_REFRESH_MS;
+    if (document.visibilityState === 'visible' && dataIsStale) refreshLiveActivityData();
+});
