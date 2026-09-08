@@ -6,9 +6,6 @@
     <title>إضافة نشاط علمي جديد</title>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-hijri/2.1.2/moment-hijri.min.js"></script>
 
     <link rel="stylesheet" href="style.css">
     
@@ -885,11 +882,61 @@
             });
         });
 
-        // دالة تحويل التاريخ من ميلادي إلى هجري (YYYY-MM-DD)
-        function convertToHijri(gregorianDate) {
-            if (!gregorianDate) return "";
-            // تحويل باستخدام Moment-Hijri
-            return moment(gregorianDate, 'YYYY-MM-DD').format('iYYYY-iMM-iDD');
+        // تحويل مركزي إلى تقويم أم القرى المدمج في المتصفح. لا نعتمد على
+        // مكتبة CDN خارجية حتى لا يتحول iYYYY إلى نص حرفي عند تعذر تحميلها.
+        function convertToHijri(gregorianDate, expectedHijriYear = '') {
+            const rawDate = normalizeArabicDigits(gregorianDate).trim();
+            const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!match) throw new Error('صيغة التاريخ الميلادي غير صحيحة.');
+
+            const year = Number(match[1]);
+            const month = Number(match[2]);
+            const day = Number(match[3]);
+            const safeDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+            if (
+                safeDate.getUTCFullYear() !== year ||
+                safeDate.getUTCMonth() !== month - 1 ||
+                safeDate.getUTCDate() !== day
+            ) {
+                throw new Error('قيمة التاريخ الميلادي غير صحيحة.');
+            }
+
+            let formatter;
+            try {
+                formatter = new Intl.DateTimeFormat('en-SA-u-ca-islamic-umalqura-nu-latn', {
+                    calendar: 'islamic-umalqura',
+                    numberingSystem: 'latn',
+                    timeZone: 'Asia/Riyadh',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+            } catch (error) {
+                throw new Error('هذا المتصفح لا يدعم تقويم أم القرى. حدّث المتصفح ثم أعد المحاولة.');
+            }
+
+            if (formatter.resolvedOptions().calendar !== 'islamic-umalqura') {
+                throw new Error('تعذر تفعيل تقويم أم القرى في هذا المتصفح.');
+            }
+
+            const parts = formatter.formatToParts(safeDate);
+            const getNumber = type => normalizeArabicDigits(parts.find(part => part.type === type)?.value || '')
+                .replace(/\D/g, '');
+            const hijriYear = getNumber('year');
+            const hijriMonth = getNumber('month').padStart(2, '0');
+            const hijriDay = getNumber('day').padStart(2, '0');
+            const hijriDate = `${hijriYear}-${hijriMonth}-${hijriDay}`;
+
+            if (!/^1[3-5]\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|30)$/.test(hijriDate)) {
+                throw new Error('تعذر التحقق من ناتج تحويل التاريخ إلى الهجري.');
+            }
+
+            const selectedYear = normalizeArabicDigits(expectedHijriYear).trim();
+            if (selectedYear && selectedYear !== hijriYear) {
+                throw new Error(`التاريخ المختار يقع في سنة ${hijriYear}هـ، بينما السنة المحددة هي ${selectedYear}هـ.`);
+            }
+
+            return hijriDate;
         }
 
         async function attemptLogin() {
@@ -1429,13 +1476,14 @@
                 department: document.getElementById('departmentSelect').value
             };
 
-            // 1. جمع البيانات (مع تحويل التاريخ للهجري)
+            // 1. جمع البيانات مع تحويل أم القرى والتحقق من توافق السنة.
+            try {
             if (currentTargetSheet === 'publications') {
                 formData.year = document.getElementById('pub_year').value;
                 formData.title = document.getElementById('pub_title').value;
                 formData.authors_ids = document.getElementById('pub_authors_hidden').value;
                 formData.journal = document.getElementById('pub_journal').value;
-                formData.publish_date = convertToHijri(document.getElementById('pub_date').value); // تحويل
+                formData.publish_date = convertToHijri(document.getElementById('pub_date').value, formData.year);
                 formData.citations_range = document.getElementById('pub_citations').value;
                 formData.student_author = document.getElementById('pub_student').value;
             }
@@ -1450,7 +1498,7 @@
                 formData.examiner1_id = getMemberValue('thesis_exam1');
                 formData.examiner2_id = getMemberValue('thesis_exam2');
                 formData.status = document.getElementById('thesis_status').value;
-                formData.defense_date = convertToHijri(document.getElementById('thesis_date').value); // تحويل
+                formData.defense_date = convertToHijri(document.getElementById('thesis_date').value, formData.year);
             }
             else if (currentTargetSheet === 'participations') {
                 formData.year = document.getElementById('part_year').value;
@@ -1471,7 +1519,7 @@
 
                 formData.title = finalTitle;
                 formData.location = document.getElementById('part_location').value;
-                formData.date = convertToHijri(document.getElementById('part_date').value);
+                formData.date = convertToHijri(document.getElementById('part_date').value, formData.year);
                 formData.participant_ids = document.getElementById('part_ids_hidden').value;
                 formData.organized_by_department = document.getElementById('part_org')?.value || 'لا';
                 formData.student_details = studentDetails; 
@@ -1482,6 +1530,13 @@
                     const hoursEl = document.getElementById('part_consulting_hours');
                     formData.consulting_hours = hoursEl ? parseFloat(hoursEl.value) || 0 : 0;
                 }
+            }
+            } catch (error) {
+                statusMsg.style.color = 'var(--rose-500)';
+                statusMsg.textContent = `❌ ${error.message}`;
+                btn.disabled = false;
+                btn.textContent = "حاول مرة أخرى";
+                return;
             }
 
             const submissionFingerprint = JSON.stringify(formData);
