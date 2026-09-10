@@ -36,7 +36,7 @@ function readAllData() {
   var result = {};
 
   // قراءة كل ورقة من الأوراق الموجودة
-  var sheetNames = ['faculty', 'publications', 'theses', 'participations', 'students_count'];
+  var sheetNames = ['faculty', 'publications', 'theses', 'participations', 'academic_promotions', 'students_count'];
 
   sheetNames.forEach(function(sheetName) {
     var sheet = ss.getSheetByName(sheetName);
@@ -78,6 +78,7 @@ function readAllData() {
 - `publications` - البحوث المنشورة
 - `theses` - الرسائل العلمية
 - `participations` - المشاركات والفعاليات
+- `academic_promotions` - الترقيات الأكاديمية الفعلية
 - `students_count` - أعداد الطلاب
 
 ### 4. تأكد من أن رؤوس الأعمدة (Headers) تتطابق مع ملفات CSV

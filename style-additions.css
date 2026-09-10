@@ -184,6 +184,34 @@
 }
 .event-card.student-research { border-color: rgba(6, 182, 212, 0.3); }
 
+/* الترقيات الأكاديمية — قسم مستقل لا يدخل في النشاط العلمي المحتسب */
+.event-card.promotion {
+    border-color: rgba(198, 169, 98, 0.45);
+}
+
+.event-card.promotion .event-header {
+    background: linear-gradient(135deg, rgba(198, 169, 98, 0.38), rgba(16, 185, 129, 0.22));
+}
+
+.promotion-rank {
+    margin: 0.8rem 0;
+    color: var(--gold-400);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.promotions-note {
+    margin: 0.45rem 0 0;
+    color: var(--gray-400);
+    font-size: 0.9rem;
+    line-height: 1.8;
+}
+
+.activity-badge.promotion {
+    background: linear-gradient(135deg, rgba(198, 169, 98, 0.95), rgba(16, 185, 129, 0.85));
+    color: #101827;
+}
+
 /* تحسينات على بطاقة الفعالية */
 .event-card .event-participation {
     display: inline-block;

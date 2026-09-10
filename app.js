@@ -22,6 +22,7 @@ let allData = {
     students: [],
     theses: [],
     participations: [],
+    academicPromotions: [],
     publications: []  // ملف البحوث المنفصل
 };
 let data = {
@@ -29,6 +30,7 @@ let data = {
     students: [],
     theses: [],
     participations: [],
+    academicPromotions: [],
     publications: []  // ملف البحوث المنفصل
 };
 let charts = {};
@@ -329,6 +331,9 @@ async function loadFromGoogleSheets() {
             allData.publications = sheetsData.publications;
             allData.theses = sheetsData.theses;
             allData.participations = sheetsData.participations;
+            if (Array.isArray(sheetsData.academic_promotions)) {
+                allData.academicPromotions = normalizeAcademicPromotionRows(sheetsData.academic_promotions);
+            }
             sheetsDataLoaded = true;
             lastSheetsSyncAt = Date.now();
             console.log(`✅ تم تحميل البيانات من Google Sheets بنجاح (API ${sheetsData.meta?.api_version || 'legacy'})`);
@@ -372,6 +377,22 @@ function normalizeGoogleSheetsPayload(payload) {
     normalizeRows(payload.publications, ['publish_date', 'date']);
     normalizeRows(payload.participations, ['date']);
     normalizeRows(payload.theses, ['defense_date']);
+    normalizeRows(payload.academic_promotions, ['date']);
+}
+
+function normalizeAcademicPromotionRows(rows) {
+    return (rows || [])
+        .filter(row => row && typeof row === 'object')
+        .map(row => {
+            const date = normalizeIncomingDateValue(row.date || '');
+            const normalizedDate = normalizeArabicDigits(String(date || ''));
+            const yearMatch = normalizedDate.match(/\d{4}/);
+            return {
+                ...row,
+                date,
+                year: row.year || (yearMatch ? yearMatch[0] : '')
+            };
+        });
 }
 
 // ========================================
@@ -535,10 +556,11 @@ async function loadAllData() {
     showLoading('جارٍ تحميل البيانات المحدثة...');
 
     // بيانات الأعضاء والطلاب محلية، أما النشاط العلمي فمصدره الوحيد الشيت الحي.
-    // لا نحمّل CSV قديمًا كبديل؛ لأن ذلك يحول فشل الاتصال إلى أرقام صفرية مضللة.
-    const [faculty, students] = await Promise.all([
+    // ملف الترقيات نسخة احتياطية صغيرة إلى أن تضيف واجهة Apps Script التبويب الجديد.
+    const [faculty, students, academicPromotions] = await Promise.all([
         loadCSV(`${DATA_BASE_URL}/faculty.csv`),
-        loadCSV(`${DATA_BASE_URL}/students_count.csv`)
+        loadCSV(`${DATA_BASE_URL}/students_count.csv`),
+        loadCSV(`${DATA_BASE_URL}/academic_promotions.csv`)
     ]);
 
     const plans = await loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`);
@@ -551,6 +573,7 @@ async function loadAllData() {
         students,
         theses: [],
         participations: [],
+        academicPromotions: normalizeAcademicPromotionRows(academicPromotions),
         publications: []
     };
     allPlansData = plans;
@@ -569,6 +592,7 @@ async function loadYearData(year) {
         data.students = [...allData.students];
         data.theses = [...allData.theses];
         data.participations = [...allData.participations];
+        data.academicPromotions = [...allData.academicPromotions];
         data.publications = [...allData.publications];
 
         // إزالة التكرارات من أعضاء هيئة التدريس (نفس العضو قد يظهر في سنوات متعددة)
@@ -594,6 +618,7 @@ async function loadYearData(year) {
         data.students = allData.students.filter(s => parseInt(s.year) === year);
         data.theses = allData.theses.filter(t => parseInt(t.year) === year);
         data.participations = allData.participations.filter(p => parseInt(p.year) === year);
+        data.academicPromotions = allData.academicPromotions.filter(p => parseInt(p.year) === year);
         data.publications = allData.publications.filter(p => parseInt(p.year) === year);
     }
 
@@ -607,6 +632,10 @@ async function loadYearData(year) {
             return ids.some(id => deptIds.has(id));
         });
         data.participations = data.participations.filter(p => {
+            const ids = (p.participant_ids || '').split('|').map(id => id.trim());
+            return ids.some(id => deptIds.has(id));
+        });
+        data.academicPromotions = data.academicPromotions.filter(p => {
             const ids = (p.participant_ids || '').split('|').map(id => id.trim());
             return ids.some(id => deptIds.has(id));
         });
@@ -773,6 +802,13 @@ function getMemberAvailableYears(memberId) {
             .split('|')
             .map(id => id.trim());
         if (participants.includes(memberIdStr)) addYear(participation.year);
+    });
+
+    (allData.academicPromotions || []).forEach(promotion => {
+        const participants = (promotion.participant_ids || '')
+            .split('|')
+            .map(id => id.trim());
+        if (participants.includes(memberIdStr)) addYear(promotion.year);
     });
 
     if (typeof teachingData !== 'undefined' && teachingData && Array.isArray(teachingData.records)) {
@@ -3245,6 +3281,7 @@ function showMemberDetails(memberId, selectedYear = 'all') {
     const shouldLoadTeachingSummary = !teachingSummary && typeof ensureTeachingLoaded === 'function';
     const scopeLabel = getMemberScopeLabel(resolvedSelectedYear);
     const hasDetailedActivities = [
+        memberActivities.academicPromotions,
         memberActivities.theses,
         memberActivities.publications,
         memberActivities.events,
@@ -3291,7 +3328,7 @@ function showMemberDetails(memberId, selectedYear = 'all') {
                             `).join('')}
                         </select>
                     </div>
-                    <div class="member-modal-scope-note">يتم تحديث البحوث والفعاليات والتفاصيل وفق السنة المختارة.</div>
+                    <div class="member-modal-scope-note">يتم تحديث البحوث والفعاليات والترقيات وفق السنة المختارة.</div>
                 </div>
 
                 <div class="member-breakdown">
@@ -3425,6 +3462,20 @@ function showMemberDetails(memberId, selectedYear = 'all') {
                     <div id="memberTeachingSummaryContainer">
                         ${buildMemberTeachingSummaryHtml(teachingSummary, { loading: shouldLoadTeachingSummary })}
                     </div>
+
+                    ${memberActivities.academicPromotions.length > 0 ? `
+                    <div class="activity-group">
+                        <h4>🎖️ الترقيات الأكاديمية (${memberActivities.academicPromotions.length})</h4>
+                        <div class="activity-list">
+                            ${memberActivities.academicPromotions.map(promotion => `
+                                <div class="activity-item-detail">
+                                    <span class="activity-badge promotion">ترقية</span>
+                                    <span class="activity-title">${promotion.promotion_rank ? `الترقية إلى ${promotion.promotion_rank}` : 'ترقية أكاديمية — الرتبة غير محددة'}</span>
+                                    <span class="activity-meta">${[promotion.department, formatDate(promotion.date)].filter(Boolean).join(' - ')}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>` : ''}
 
                     ${memberActivities.theses.length > 0 ? `
                     <div class="activity-group">
@@ -3597,6 +3648,7 @@ function getMemberActivities(memberId, options = {}) {
     const scopedTheses = getScopedDataCollection('theses', selectedYear);
     const scopedPublications = getScopedDataCollection('publications', selectedYear);
     const scopedParticipations = getScopedDataCollection('participations', selectedYear);
+    const scopedAcademicPromotions = getScopedDataCollection('academicPromotions', selectedYear);
     
     // الرسائل العلمية
     const theses = [];
@@ -3672,7 +3724,13 @@ function getMemberActivities(memberId, options = {}) {
         return participants.includes(memberIdStr);
     });
 
+    const academicPromotions = scopedAcademicPromotions.filter(promotion => {
+        const participants = (promotion.participant_ids || '').split('|').map(id => id.trim());
+        return participants.includes(memberIdStr);
+    });
+
     return {
+        academicPromotions: sortByDateDesc(academicPromotions, item => item.date),
         theses: sortByDateDesc(theses, thesis => thesis.defense_date),
         publications: sortByDateDesc(publications, publication => publication.publish_date || publication.date),
         studentResearch: sortByDateDesc(studentResearch, item => item.date),
@@ -8672,6 +8730,61 @@ function renderStudentResearch() {
 }
 
 // ========================================
+// عرض الترقيات الأكاديمية
+// ========================================
+function renderAcademicPromotions() {
+    const container = document.getElementById('academicPromotionsGrid');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const promotions = sortByDateDesc(data.academicPromotions || [], promotion => promotion.date);
+    if (promotions.length === 0) {
+        container.innerHTML = '<div class="empty-state">لا توجد ترقيات أكاديمية مسجلة لهذه السنة</div>';
+        return;
+    }
+
+    promotions.forEach(promotion => {
+        const dateInfo = formatDateShort(promotion.date);
+        const memberIds = (promotion.participant_ids || '')
+            .split('|')
+            .map(id => id.trim())
+            .filter(Boolean);
+        const memberNames = memberIds.map(getMemberName).filter(name => name && name !== '-');
+        const rankLabel = promotion.promotion_rank || 'الرتبة غير محددة في المصدر';
+
+        const card = document.createElement('div');
+        card.className = `event-card promotion${memberIds.length ? ' clickable' : ''}`;
+        card.innerHTML = `
+            <div class="event-header">
+                <span class="event-type">ترقية أكاديمية</span>
+                <div class="event-date-box">
+                    <div class="event-day">${dateInfo.day}</div>
+                    <div class="event-month">${dateInfo.month}</div>
+                </div>
+            </div>
+            <div class="event-body">
+                <div class="event-name">${memberNames.join('، ') || 'عضو هيئة تدريس'}</div>
+                <div class="promotion-rank">🎖️ ${rankLabel}</div>
+                <div class="event-location">القسم: ${promotion.department || 'غير محدد'}</div>
+                <div class="event-participation">${formatDate(promotion.date)}</div>
+            </div>
+        `;
+        if (memberIds.length) {
+            card.setAttribute('role', 'button');
+            card.tabIndex = 0;
+            card.onclick = () => showMemberDetails(memberIds[0], promotion.year || 'all');
+            card.onkeydown = event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    showMemberDetails(memberIds[0], promotion.year || 'all');
+                }
+            };
+        }
+        container.appendChild(card);
+    });
+}
+
+// ========================================
 // عرض الفعاليات العلمية
 // ========================================
 function renderEvents() {
@@ -8819,6 +8932,7 @@ function renderAll() {
     renderDashboard();
     renderPublications();
     renderTheses();
+    renderAcademicPromotions();
     renderEvents();
     renderQualityIndicators();
     // مؤشرات إحصائيات الشعب تعتمد على بيانات التدريس (lazy load)

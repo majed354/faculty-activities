@@ -17,8 +17,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     
     <!-- Styles -->
-    <link rel="stylesheet" href="style.css?v=20260907-live-data-v1">
-    <link rel="stylesheet" href="style-additions.css">
+    <link rel="stylesheet" href="style.css?v=20260910-promotions-v1">
+    <link rel="stylesheet" href="style-additions.css?v=20260910-promotions-v1">
     <link rel="stylesheet" href="teaching-styles.css">
 </head>
 <body>
@@ -121,6 +121,10 @@
             <button class="nav-btn" data-tab="theses" title="الإشراف والمناقشة">
                 <span class="nav-icon">📚</span>
                 <span class="nav-text">الإشراف والمناقشة</span>
+            </button>
+            <button class="nav-btn" data-tab="promotions" title="الترقيات الأكاديمية">
+                <span class="nav-icon">🎖️</span>
+                <span class="nav-text">الترقيات الأكاديمية</span>
             </button>
             <button class="nav-btn" data-tab="events" title="الفعاليات العلمية">
                 <span class="nav-icon">🎯</span>
@@ -339,6 +343,19 @@
                     <tbody id="thesesTableBody">
                     </tbody>
                 </table>
+            </div>
+        </section>
+
+        <!-- ===== الترقيات الأكاديمية ===== -->
+        <section id="promotions" class="tab-content">
+            <div class="section-header">
+                <div>
+                    <h2>🎖️ الترقيات الأكاديمية</h2>
+                    <p class="promotions-note">الترقيات الفعلية لأعضاء هيئة التدريس، مستقلة عن التهاني والنشاط العلمي المحتسب.</p>
+                </div>
+            </div>
+            <div class="events-grid" id="academicPromotionsGrid">
+                <!-- يُملأ بـ JavaScript -->
             </div>
         </section>
 
@@ -1028,7 +1045,7 @@
         });
     });
     </script>
-    <script src="app.js?v=20260907-live-data-v1"></script>
+    <script src="app.js?v=20260910-promotions-v1"></script>
     <script src="teaching.js"></script>
 
     <!-- Modal تفاصيل الرسالة -->

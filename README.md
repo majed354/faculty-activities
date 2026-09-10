@@ -22,6 +22,7 @@ faculty-activities/
     ├── students_count.csv  # أعداد الطلاب (مع year)
     ├── theses.csv          # الرسائل العلمية (مع year)
     ├── publications.csv    # البحوث المنشورة (مع year)
+    ├── academic_promotions.csv # الترقيات الأكاديمية الفعلية
     ├── events.csv          # الفعاليات (مع year)
     └── awards.csv          # الجوائز (مع year)
 ```
