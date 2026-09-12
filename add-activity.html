@@ -513,6 +513,7 @@
     <script>
         // مصدر واحد للرابط؛ يمنع انفصال صفحة الإضافة عن صفحة العرض.
         let SCRIPT_URL = '';
+        let siteConfigCache = null;
         let scriptConfigurationPromise = null;
         let pendingSubmissionRequest = null;
         let facultyList = [];
@@ -536,11 +537,22 @@
                     .then(siteConfig => {
                         const apiUrl = String(siteConfig?.google_sheets_api || '').trim();
                         if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(apiUrl)) throw new Error('رابط Google Sheets غير صالح في data/config.json');
+                        siteConfigCache = siteConfig;
                         SCRIPT_URL = apiUrl;
+                        applyCurrentYearDefaults(siteConfig);
                         return SCRIPT_URL;
                     });
             }
             return scriptConfigurationPromise;
+        }
+
+        function applyCurrentYearDefaults(siteConfig = siteConfigCache) {
+            const currentYear = normalizeArabicDigits(siteConfig?.current_year || '').trim();
+            if (!/^1[3-5]\d{2}$/.test(currentYear)) return;
+            ['pub_year', 'thesis_year', 'part_year'].forEach(id => {
+                const field = document.getElementById(id);
+                if (field) field.value = currentYear;
+            });
         }
 
         function normalizeArabicDigits(value) {
@@ -870,6 +882,9 @@
             setupFacultySearchInputs();
             setupJournalAutocomplete();
             loadJournalSuggestions();
+            ensureScriptConfiguration().catch(error => {
+                console.warn('تعذر ضبط السنة الحالية من الإعدادات:', error.message);
+            });
             
             // إزالة تنسيق الخطأ عند الكتابة في أي حقل
             document.querySelectorAll('input, select, textarea').forEach(el => {
@@ -1006,20 +1021,26 @@
         checkSessionAndInit();
 
         function populateFacultyDropdowns() {
-            const uniqueFaculty = [];
-            const map = new Map();
+            const latestFacultyById = new Map();
             for (const item of facultyList) {
                 const memberId = String(item.id || '').trim();
                 const memberName = String(item.name || '').trim();
-                if (!memberId || !memberName || map.has(memberId)) continue;
-                map.set(memberId, true);
-                uniqueFaculty.push({
+                if (!memberId || !memberName) continue;
+                const itemYear = Number(normalizeArabicDigits(item.year || '0')) || 0;
+                const previous = latestFacultyById.get(memberId);
+                const previousYear = Number(normalizeArabicDigits(previous?.year || '0')) || 0;
+                if (!previous || itemYear >= previousYear) latestFacultyById.set(memberId, item);
+            }
+            const uniqueFaculty = Array.from(latestFacultyById.values()).map(item => {
+                const memberId = String(item.id || '').trim();
+                const memberName = String(item.name || '').trim();
+                return {
                     id: memberId,
                     name: memberName,
                     department: String(item.department || '').trim() || 'غير محدد',
                     searchBlob: normalizeSearchText(`${memberName} ${memberId} ${String(item.department || '')}`)
-                });
-            }
+                };
+            });
             uniqueFaculty.sort((a, b) => {
                 const deptCompare = compareDepartmentNames(a.department, b.department);
                 if (deptCompare !== 0) return deptCompare;
@@ -1033,6 +1054,40 @@
                 const query = searchInput ? searchInput.value : '';
                 renderFacultyOptionsForSelect(select, facultyMembersCache, query);
             });
+            applyLoggedInMemberDefaults();
+        }
+
+        function applyLoggedInMemberDefaults() {
+            const employeeId = normalizeArabicDigits(sessionStorage.getItem('employeeId') || '').trim();
+            const member = facultyMembersCache.find(item => item.id === employeeId);
+            if (!member) return;
+
+            const departmentSelect = document.getElementById('departmentSelect');
+            if (departmentSelect && Array.from(departmentSelect.options).some(option => option.value === member.department)) {
+                departmentSelect.value = member.department;
+            }
+            preselectLoggedInMemberForCurrentForm();
+        }
+
+        function preselectLoggedInMemberForCurrentForm() {
+            const employeeId = normalizeArabicDigits(sessionStorage.getItem('employeeId') || '').trim();
+            const member = facultyMembersCache.find(item => item.id === employeeId);
+            if (!member || !currentTargetSheet) return;
+
+            if (currentTargetSheet === 'publications' || currentTargetSheet === 'participations') {
+                const hiddenInputId = currentTargetSheet === 'publications' ? 'pub_authors_hidden' : 'part_ids_hidden';
+                const listId = currentTargetSheet === 'publications' ? 'pub_authors_list' : 'part_ids_list';
+                if (!selectedMembersData[hiddenInputId]) selectedMembersData[hiddenInputId] = [];
+                if (!selectedMembersData[hiddenInputId].some(item => item.id === employeeId)) {
+                    selectedMembersData[hiddenInputId].push({ id: employeeId, name: member.name });
+                    renderMembersList(hiddenInputId, listId);
+                }
+            } else if (currentTargetSheet === 'theses') {
+                const supervisor = document.getElementById('thesis_supervisor');
+                if (supervisor && !supervisor.value && Array.from(supervisor.options).some(option => option.value === employeeId)) {
+                    supervisor.value = employeeId;
+                }
+            }
         }
 
         function clearSearchForSelect(selectId) {
@@ -1126,6 +1181,8 @@
 
         function handleActivityChange() {
             const selection = document.getElementById('mainActivitySelect').value;
+            const statusMsg = document.getElementById('statusMsg');
+            if (statusMsg) statusMsg.textContent = '';
             
             document.querySelectorAll('.form-section').forEach(el => el.classList.remove('active'));
             document.getElementById('submitBtn').style.display = 'none';
@@ -1252,7 +1309,8 @@
                     document.getElementById('part_ids_label').innerHTML = '👤 المشارك (اختر اسمك) <span style="color: var(--rose-500);">*</span>';
                 }
             }
-            
+            applyCurrentYearDefaults();
+            preselectLoggedInMemberForCurrentForm();
             document.getElementById('submitBtn').style.display = 'block';
         }
 
@@ -1448,6 +1506,82 @@
             return true;
         }
 
+        function comparableText(value) {
+            return normalizeArabicSearchBase(value).replace(/[^\p{L}\p{N}]+/gu, '');
+        }
+
+        function comparableIdList(value) {
+            return normalizeArabicDigits(value || '')
+                .split('|')
+                .map(item => item.trim())
+                .filter(Boolean)
+                .sort()
+                .join('|');
+        }
+
+        function findSubmittedRecord(payload, formData) {
+            if (!payload || !formData?.formType) return null;
+            const rows = Array.isArray(payload?.[formData.formType])
+                ? payload[formData.formType]
+                : (payload.record && typeof payload.record === 'object' ? [payload.record] : []);
+
+            return rows.find(row => {
+                if (formData.formType === 'publications') {
+                    return comparableText(row.title) === comparableText(formData.title)
+                        && comparableIdList(row.authors_ids) === comparableIdList(formData.authors_ids);
+                }
+                if (formData.formType === 'theses') {
+                    return comparableText(row.student_name) === comparableText(formData.student_name)
+                        && comparableText(row.title) === comparableText(formData.title);
+                }
+                return comparableText(row.title) === comparableText(formData.title)
+                    && comparableIdList(row.participant_ids) === comparableIdList(formData.participant_ids)
+                    && normalizeArabicDigits(row.date || '').trim() === normalizeArabicDigits(formData.date || '').trim();
+            }) || null;
+        }
+
+        async function readLiveDataForConfirmation(apiUrl, attempts = 3) {
+            for (let attempt = 1; attempt <= attempts; attempt += 1) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+                try {
+                    const response = await fetch(`${apiUrl}?action=read&_=${Date.now()}`, {
+                        method: 'GET',
+                        cache: 'no-store',
+                        signal: controller.signal
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const payload = await response.json();
+                    if (payload?.meta?.status === 'ok') return payload;
+                } catch (error) {
+                    console.warn(`تعذر التحقق من الشيت (المحاولة ${attempt}):`, error.message);
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+                if (attempt < attempts) await new Promise(resolve => setTimeout(resolve, attempt * 800));
+            }
+            return null;
+        }
+
+        async function confirmSubmission(apiUrl, formData, responsePayload = null) {
+            const recordFromResponse = findSubmittedRecord(responsePayload, formData);
+            if (recordFromResponse) return recordFromResponse;
+            const livePayload = await readLiveDataForConfirmation(apiUrl);
+            return findSubmittedRecord(livePayload, formData);
+        }
+
+        function finishSuccessfulSubmission(record, statusMsg, btn, wasVerified = false) {
+            pendingSubmissionRequest = null;
+            statusMsg.style.color = 'var(--emerald-500)';
+            const recordId = record?.id ? ` رقم السجل: ${record.id}` : '';
+            statusMsg.textContent = wasVerified
+                ? `✅ تم الحفظ والتأكد من وجود السجل في الشيت.${recordId}`
+                : `✅ تم الحفظ بنجاح!${recordId}`;
+            btn.disabled = false;
+            btn.textContent = '📤 حفظ وإرسال البيانات';
+            clearInputsAfterSuccess();
+        }
+
         async function submitData() {
             // التحقق من الحقول الإلزامية أولاً
             if (!validateForm()) {
@@ -1546,7 +1680,9 @@
             formData.request_id = pendingSubmissionRequest.requestId;
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 25000);
+            const timeoutId = setTimeout(() => controller.abort(), 45000);
+            let responseData = null;
+            let submissionError = null;
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST', cache: 'no-store', signal: controller.signal,
@@ -1554,39 +1690,43 @@
                     headers: { "Content-Type": "text/plain;charset=utf-8" }
                 });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-                if (data.status === 'success') {
-                    pendingSubmissionRequest = null;
-                    statusMsg.style.color = 'var(--emerald-500)';
-                    statusMsg.textContent = `✅ تم الحفظ بنجاح! رقم العملية: ${data.id}`;
-                    btn.disabled = false;
-                    btn.textContent = "📤 حفظ وإرسال البيانات";
-                    
-                    // تنظيف الحقول النصية فقط لتسهيل الإضافة التالية
-                    clearInputsAfterSuccess();
-                    
-                    alert("تمت إضافة النشاط بنجاح. يمكنك إضافة نشاط آخر.");
-                } else if (data.status === 'duplicate') {
-                    pendingSubmissionRequest = null;
-                    statusMsg.style.color = 'var(--gold-500)';
-                    statusMsg.textContent = `⚠️ السجل موجود مسبقاً برقم ${data.id}، ولم تتم إضافته مرة أخرى.`;
-                    btn.disabled = false;
-                    btn.textContent = "📤 حفظ وإرسال البيانات";
-                } else {
-                    throw new Error(data.message || 'Unknown error');
-                }
+                responseData = await response.json();
             } catch (error) {
                 console.error('Error:', error);
-                statusMsg.style.color = 'var(--rose-500)';
-                const detail = error?.name === 'AbortError'
-                    ? 'انتهت مهلة التأكيد. أعد تحميل الصفحة أو ابحث عن السجل قبل إعادة الإرسال؛ فالواجهة تمنع التكرار تلقائيًا.'
-                    : (error.message || 'حدث خطأ أثناء الإرسال');
-                statusMsg.textContent = `❌ ${detail}`;
-                btn.disabled = false;
-                btn.textContent = "حاول مرة أخرى";
+                submissionError = error;
             } finally {
                 clearTimeout(timeoutId);
             }
+
+            if (responseData?.status === 'success') {
+                finishSuccessfulSubmission(responseData.record || { id: responseData.id }, statusMsg, btn, false);
+                return;
+            }
+            if (responseData?.status === 'duplicate') {
+                pendingSubmissionRequest = null;
+                statusMsg.style.color = 'var(--gold-500)';
+                statusMsg.textContent = `⚠️ السجل موجود مسبقاً برقم ${responseData.id}، ولم تتم إضافته مرة أخرى.`;
+                btn.disabled = false;
+                btn.textContent = '📤 حفظ وإرسال البيانات';
+                return;
+            }
+
+            statusMsg.style.color = 'var(--gold-500)';
+            statusMsg.textContent = '⏳ تم إرسال البيانات، وجارٍ التأكد من وجود السجل في الشيت...';
+            const confirmedRecord = await confirmSubmission(apiUrl, formData, responseData);
+            if (confirmedRecord) {
+                finishSuccessfulSubmission(confirmedRecord, statusMsg, btn, true);
+                return;
+            }
+
+            statusMsg.style.color = 'var(--rose-500)';
+            const detail = responseData?.message
+                || (submissionError?.name === 'AbortError'
+                    ? 'انتهت مهلة الاتصال ولم نستطع تأكيد الحفظ. لم يُعثر على السجل في الشيت؛ يمكنك المحاولة مرة أخرى بأمان.'
+                    : (submissionError?.message || 'تعذر تأكيد الحفظ من الشيت. حاول مرة أخرى.'));
+            statusMsg.textContent = `❌ ${detail}`;
+            btn.disabled = false;
+            btn.textContent = 'حاول مرة أخرى';
         }
 
         // دالة لتفريغ الحقول النصية فقط بعد الحفظ
