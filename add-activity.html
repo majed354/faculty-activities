@@ -773,8 +773,7 @@
             const timeoutId = setTimeout(() => controller.abort(), 10000);
 
             try {
-                const apiUrl = await ensureScriptConfiguration();
-                const liveResponse = await fetch(`${apiUrl}?action=read&_=${Date.now()}`, {
+                const liveResponse = await fetch('/.netlify/functions/sheets-data', {
                     method: 'GET',
                     cache: 'no-store',
                     signal: controller.signal
@@ -1571,6 +1570,7 @@
         }
 
         function finishSuccessfulSubmission(record, statusMsg, btn, wasVerified = false) {
+            fetch('/.netlify/functions/sheets-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refresh' }) }).catch(error => console.warn('تعذر طلب تحديث نسخة العرض:', error.message));
             pendingSubmissionRequest = null;
             statusMsg.style.color = 'var(--emerald-500)';
             const recordId = record?.id ? ` رقم السجل: ${record.id}` : '';

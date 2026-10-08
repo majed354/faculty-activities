@@ -3662,3 +3662,11 @@ button.stats-detail-item {
         width: 100%;
     }
 }
+/* Provenance stays visible while a slow Sheet refresh runs independently. */
+.sheets-sync-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; margin-bottom: 20px; border: 1px solid rgba(94,234,212,.3); border-radius: 12px; background: rgba(20,184,166,.08); color: #99f6e4; }
+.sheets-sync-bar[hidden] { display: none; }
+.sheets-sync-bar p { margin: 0; font-size: .82rem; line-height: 1.8; }
+.sheets-sync-bar button { flex-shrink: 0; padding: 7px 12px; border: 1px solid currentColor; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: .8rem; cursor: pointer; }
+.sheets-sync-bar button:disabled { opacity: .6; cursor: wait; }
+.sheets-sync-bar.is-stale { color: #fcd34d; border-color: rgba(252,211,77,.3); background: rgba(234,179,8,.08); }
+@media (max-width: 600px) { .sheets-sync-bar { align-items: flex-start; } .sheets-sync-bar p { font-size: .74rem; } }

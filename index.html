@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>كلية الشريعة | لوحة الأنشطة العلمية</title>
+    <script>if (location.protocol === 'file:') location.replace('https://faculty-activities.netlify.app/');</script>
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,7 +19,7 @@
     
     <!-- Styles -->
     <link rel="stylesheet" href="style.css?v=20260910-promotions-v1">
-    <link rel="stylesheet" href="style-additions.css?v=20260910-promotions-v1">
+    <link rel="stylesheet" href="style-additions.css?v=20261008-sheet-cache-v1">
     <link rel="stylesheet" href="teaching-styles.css">
     <link rel="stylesheet" href="cv-studio.css?v=20261008-cv-choices-v2">
 </head>
@@ -152,6 +153,10 @@
 
     <!-- المحتوى الرئيسي -->
     <main class="main-content">
+        <div id="sheetsSyncBar" class="sheets-sync-bar" hidden>
+            <p id="sheetsSyncText" role="status" aria-live="polite"></p>
+            <button id="sheetsRefreshButton" type="button" onclick="refreshLiveActivityData({ force: true })">تحديث الآن</button>
+        </div>
         
         <!-- ===== الإحصائيات ===== -->
         <section id="dashboard" class="tab-content active">
@@ -1057,7 +1062,7 @@
         });
     });
     </script>
-    <script src="app.js?v=20261008-academic-cv-v1"></script>
+    <script src="app.js?v=20261008-sheet-cache-v1"></script>
     <script src="assets/cv-studio.js?v=20261008-cv-choices-v2"></script>
     <script src="teaching.js"></script>
 
