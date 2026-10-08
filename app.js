@@ -48,6 +48,7 @@ let analyticsStudioTeachingRowsCache = null;
 let analyticsStudioInitialized = false;
 let cvStudioReport = null;
 let cvStudioInitialized = false;
+let cvStudioSetupPromise = null;
 let memberModalState = { memberId: null, selectedYear: 'all', token: 0 };
 
 // بيانات الخطط الدراسية والبرامج
@@ -7701,8 +7702,15 @@ function resetCvStudioView() {
     cvStudioClearReport();
 }
 
-async function setupCvStudio() {
-    if (cvStudioInitialized) return;
+function setupCvStudio() {
+    if (cvStudioInitialized) return Promise.resolve();
+    if (!cvStudioSetupPromise) {
+        cvStudioSetupPromise = initializeCvStudio().finally(() => { cvStudioSetupPromise = null; });
+    }
+    return cvStudioSetupPromise;
+}
+
+async function initializeCvStudio() {
 
     await ensureTeachingLoaded().catch(() => null);
     renderCvStudioYearOptions(true);
@@ -7732,6 +7740,11 @@ async function setupCvStudio() {
     });
 
     cvStudioInitialized = true;
+    ['cvStudioRunBtn', 'cvStudioEditProfile', 'cvStudioResetBtn'].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = false;
+    });
+    document.getElementById('cvStudioRunBtn').textContent = 'عرض السير الذاتية';
 }
 
 // ========================================
