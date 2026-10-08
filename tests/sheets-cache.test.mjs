@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSheetsCache, createSheetsDataHandler, validateActivityPayload, SYNC_INTERVAL_MS, MAX_SNAPSHOT_AGE_MS } from '../src/sheets-cache.mjs';
+import scheduledRefresh from '../netlify/functions/sheets-schedule.mjs';
 
 const payload = { meta: { status: 'ok', api_version: '3' }, publications: [{ id: '1', title: 'بحث مثبت' }], theses: [{ id: '2' }], participations: [{ id: '3' }] };
 function fixture(fetchSource = async () => structuredClone(payload)) {
@@ -79,4 +80,22 @@ test('missing cache returns an explicit unavailable response, never synthetic ze
   assert.equal(response.status, 503); assert.equal(response.headers.get('retry-after'), '5');
   const result = await response.json(); assert.equal(result.publications, undefined); assert.equal(result.sync.state, 'missing');
   await Promise.all(pending);
+});
+
+test('scheduled refresh does not skip alternate runs when previous reads completed late', async () => {
+  let calls = 0;
+  const f = fixture(async () => { calls++; return payload; });
+  await f.cache.refresh(); f.advance(SYNC_INTERVAL_MS - 10_000);
+  const originalFetch = globalThis.fetch, originalNetlify = globalThis.Netlify;
+  globalThis.Netlify = { env: { get: () => 'test-only-internal-secret' } };
+  globalThis.fetch = async (url, options) => {
+    assert.equal(String(url), 'https://site.example/.netlify/functions/sheets-refresh');
+    assert.equal(JSON.parse(options.body).force, true);
+    await f.cache.refresh(JSON.parse(options.body));
+    return new Response('', { status: 202 });
+  };
+  try {
+    await scheduledRefresh(new Request('https://site.example'), { site: { url: 'http://site.example' } });
+    assert.equal(calls, 2);
+  } finally { globalThis.fetch = originalFetch; if (originalNetlify === undefined) delete globalThis.Netlify; else globalThis.Netlify = originalNetlify; }
 });
