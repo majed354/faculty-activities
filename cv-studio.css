@@ -42,7 +42,7 @@
 .cv-doc-footer p { margin: 3px 0; }
 .cv-editor-open { overflow: hidden; }
 #cvProfileModal, #cvSessionModal { z-index: 1300; }
-.cv-profile-dialog { width: min(1080px, 96vw) !important; max-width: 1080px !important; max-height: 92vh; overflow-y: auto; color: #243638 !important; background: #f8fbfa !important; padding: 0 !important; border-radius: 18px !important; }
+.cv-profile-dialog { width: min(1080px, 96vw) !important; max-width: 1080px !important; height: 92vh; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden !important; color: #243638 !important; background: #f8fbfa !important; padding: 0 !important; border-radius: 18px !important; }
 .cv-editor-header { display: flex; justify-content: space-between; padding: 24px 28px; background: #176b68; color: white; gap: 20px; }
 .cv-editor-header h3 { margin: 2px 0 5px; font-size: 1.4rem; color: white; }
 .cv-editor-header p { font-size: .85rem; margin: 0; color: #e6f3ed; }
@@ -51,13 +51,55 @@
 .cv-editor-import p { flex-basis: 100%; font-size: .8rem; margin: 0; color: #63787c; }
 .cv-file-label { position: relative; overflow: hidden; }
 .cv-file-label input { width: 1px; height: 1px; position: absolute; opacity: 0; }
-#cvProfileForm { padding: 24px 28px 0; }
+#cvProfileForm { padding: 18px 28px 0; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.cv-editor-header, .cv-import-tools, .cv-step-nav, .cv-editor-footer, .cv-privilege-field { flex-shrink: 0; }
 .cv-basic-fields, .cv-entry-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
 .cv-field-wide { grid-column: 1 / -1; }
 .cv-profile-dialog label { display: grid; gap: 7px; font-size: .86rem; color: #344e52; }
 .cv-profile-dialog input, .cv-profile-dialog textarea, .cv-session-dialog input { color: #233638 !important; background: white !important; border: 1px solid #c9d7d3 !important; border-radius: 8px; padding: 10px 12px; font: inherit; width: 100%; box-sizing: border-box; }
 .cv-profile-dialog textarea { resize: vertical; min-height: 65px; }
 .cv-profile-dialog input[type=url] { direction: ltr; text-align: left; }
+.cv-profile-dialog select { color: #233638; background: white; border: 1px solid #c9d7d3; border-radius: 8px; padding: 10px 12px; font: inherit; width: 100%; box-sizing: border-box; }
+.cv-profile-dialog [hidden] { display: none !important; }
+.cv-import-tools { padding: 12px 28px; font-size: .85rem; border-bottom: 1px solid #dce6e3; }
+.cv-import-tools > summary { cursor: pointer; color: #176b68; }
+.cv-import-tools .cv-editor-import { padding: 15px 0 0; border: 0; }
+.cv-step-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 22px; }
+.cv-step-nav button, .cv-step-controls button, .cv-bio-tools button, .cv-certificate-domain button { font: inherit; padding: 10px; border: 1px solid #c9d7d3; border-radius: 8px; background: white; color: #176b68; cursor: pointer; }
+.cv-step-nav button { font-size: .8rem; text-align: right; }
+.cv-step-short { display: none; }
+.cv-step-nav button[aria-current=step] { background: #176b68; color: white; border-color: #176b68; }
+.cv-step-nav b { display: inline-flex; align-items: center; justify-content: center; width: 23px; height: 23px; border: 1px solid currentColor; border-radius: 50%; margin-left: 5px; }
+.cv-step-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 0 4px; }
+.cv-step-panel h4 { color: #176b68; margin: 10px 0 18px; }
+.cv-choice-picker { margin-top: 16px; }
+.cv-choice-search-label { max-width: 480px; }
+.cv-choice-help { color: #63787c; font-size: .82rem; line-height: 1.7; margin: 12px 0; }
+.cv-choice-group { border: 1px solid #e0e8e4; border-radius: 8px; margin: 8px 0; padding: 10px; background: #fbfdfc; }
+.cv-choice-group > summary { font-size: .86rem; }
+.cv-choice-options, .cv-interest-choices { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-top: 12px; }
+[data-choice-section=expertise] .cv-choice-options { grid-template-columns: 1fr; }
+.cv-choice-option { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 9px 10px; border: 1px solid #e0e8e4; background: white; border-radius: 8px; }
+.cv-profile-dialog .cv-choice-check { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
+.cv-profile-dialog input[type=checkbox] { width: 18px; height: 18px; padding: 0; flex-shrink: 0; accent-color: #176b68; }
+.cv-profile-dialog .cv-choice-duration { display: flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: .8rem; }
+.cv-choice-duration input { max-width: 100px; text-align: center; }
+.cv-choice-duration input:disabled { background: #f0f4f2 !important; color: #63787c !important; }
+.cv-choice-empty { color: #63787c; font-size: .85rem; }
+.cv-entry-detail { margin: 15px 0; }
+.cv-entry-detail > summary { font-size: .82rem; font-weight: normal; }
+.cv-certificate-domain { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding-top: 15px; }
+.cv-certificate-domain label { flex: 1; min-width: 200px; }
+.cv-bio-tools { margin-top: 15px; }
+.cv-bio-tools textarea { margin: 5px 0 12px; }
+.cv-step-controls { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.cv-step-controls button:disabled { opacity: .4; cursor: default; }
+.cv-generation-options { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.cv-generation-options label { font-size: .78rem; }
+.cv-generation-settings { width: 100%; }
+.cv-generation-settings > summary { color: #176b68; font-size: .8rem; cursor: pointer; }
+.cv-generation-settings .cv-generation-options { margin-top: 10px; }
+.cv-save-status { width: 100%; }
 .cv-profile-dialog input:focus, .cv-profile-dialog textarea:focus { outline: 2px solid #78bba7; outline-offset: 1px; }
 .cv-editor-section { border: 1px solid #d2ded9; border-radius: 10px; margin: 18px 0; padding: 14px; background: white; }
 .cv-editor-section summary { cursor: pointer; font-weight: bold; color: #176b68; padding: 3px 2px; }
@@ -72,7 +114,7 @@
 .cv-add-entry { margin-top: 12px; }
 .cv-internal-notes, .cv-privilege-field { margin: 22px 0; }
 .cv-privilege-field { max-width: 400px; }
-.cv-editor-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding: 18px 0 22px; border-top: 1px solid #dce6e3; background: #f8fbfa; }
+.cv-editor-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px 0; border-top: 1px solid #dce6e3; background: #f8fbfa; }
 .cv-editor-footer p { font-size: .8rem; margin: 4px 0; }
 .cv-dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cv-dialog-actions .cv-primary { color: white; background: #176b68; border-color: #176b68; }
@@ -95,8 +137,27 @@
   .cv-output-options > label:first-child { min-width: 0; width: 100%; }
   .cv-storage-bar { align-items: flex-start; }
   .cv-editor-header, .cv-editor-import { padding: 20px; }
-  #cvProfileForm { padding: 20px 16px 0; }
+  .cv-editor-header { padding: 14px 16px; }
+  .cv-editor-header h3 { font-size: 1.15rem; }
+  .cv-editor-header p { font-size: .75rem; }
+  .cv-editor-header p:last-child { display: none; }
+  #cvProfileForm { padding: 12px 16px 0; }
   .cv-editor-footer { flex-direction: column; }
+  .cv-step-nav { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; }
+  .cv-step-nav button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 3px; font-size: .7rem; }
+  .cv-step-nav b { width: 20px; height: 20px; margin: 0; }
+  .cv-step-full { display: none; }
+  .cv-step-short { display: inline; }
+  .cv-choice-options, .cv-interest-choices { grid-template-columns: 1fr; }
+  .cv-choice-option { gap: 8px; padding: 8px; }
+  .cv-profile-dialog .cv-choice-duration { flex-direction: column; gap: 4px; }
+  .cv-choice-duration input { max-width: 78px; }
+  .cv-profile-dialog .cv-choice-check { font-size: .8rem; }
+  .cv-import-tools { padding: 12px 20px; }
+  .cv-editor-footer { padding: 8px 0 10px; }
+  .cv-editor-footer .cv-dialog-actions { width: 100%; justify-content: space-between; gap: 6px; }
+  .cv-editor-footer .cv-dialog-actions button { padding: 8px 9px; font-size: .76rem; }
+  .cv-step-nav { margin-bottom: 10px; }
 }
 @page { size: A4; margin: 16mm 17mm 18mm; @bottom-center { content: "صفحة " counter(page); font-family: Arial, sans-serif; font-size: 9pt; color: #63787c; } }
 @media print {

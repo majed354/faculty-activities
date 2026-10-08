@@ -1,5 +1,7 @@
-import { PROFILE_FIELDS, PROFILE_SECTIONS, normalizeProfile, profileChecklist } from './cv-schema.mjs';
+import { PROFILE_SECTIONS, normalizeProfile, profileChecklist } from './cv-schema.mjs';
 import { buildCvDocument, renderCvDocument, html } from './cv-document.mjs';
+import { CERTIFICATE_CHOICES, chooseEntry, chooseInterest, draftBiography } from './cv-choices.mjs';
+import { EDITOR_STEPS, CHOICE_IDENTITIES, entryHtml, editorStepsHtml, syncChoices, filterChoices } from './cv-editor.mjs';
 import printStyles from '../cv-studio.css';
 
 const ENDPOINT = '/.netlify/functions/cv-profiles';
@@ -108,10 +110,10 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
-function exportPdf(id) {
+function exportPdf(id, preparedPopup) {
   const documents = selectedDocuments(id);
   if (!documents.length) return;
-  const popup = window.open('', '_blank');
+  const popup = preparedPopup || window.open('', '_blank');
   if (!popup) { alert('اسمح بفتح نافذة الطباعة لتنزيل PDF.'); return; }
   popup.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(fileName(documents))}</title><style>${printStyles}</style></head><body class="cv-print-body"><div class="cv-print-hint">اختر «حفظ بصيغة PDF» من نافذة الطباعة. النص والروابط قابلان للنسخ والبحث.</div>${documents.map(renderCvDocument).join('')}</body></html>`);
   popup.addEventListener('load', async () => {
@@ -122,7 +124,7 @@ function exportPdf(id) {
   popup.document.close();
 }
 
-async function exportWord(id) {
+async function exportWord(id, propagateError = false) {
   const documents = selectedDocuments(id);
   if (!documents.length) return;
   try {
@@ -130,7 +132,7 @@ async function exportWord(id) {
     const { createWordBlob } = await import('/assets/cv-word.js');
     download(await createWordBlob(documents), `${fileName(documents)}.docx`);
     message('تم إعداد Word بالبيانات الظاهرة في المعاينة.');
-  } catch (error) { message(`تعذر إعداد Word: ${error.message}`, true); }
+  } catch (error) { message(`تعذر إعداد Word: ${error.message}`, true); if (propagateError) throw error; }
 }
 
 function exportCsv() {
@@ -188,20 +190,14 @@ function storeDraft() {
   byId('cvRestoreDraft')?.classList.remove('hidden');
 }
 
-function entryHtml(section, entry = {}) {
-  return `<div class="cv-edit-entry"><div class="cv-entry-fields">${[...section.fields, ['source', 'المصدر أو مرجع الإثبات (داخلي)', 1200]].map(([key, label, max]) => `<label><span>${html(label)}${section.required.includes(key) ? ' <b class="cv-required">*</b>' : ''}</span><${max > 900 ? 'textarea' : 'input'} ${max > 900 ? 'rows="2"' : `type="${key === 'url' ? 'url' : 'text'}" value="${html(entry[key] || '')}"`} data-entry-field="${key}" maxlength="${max}" ${section.required.includes(key) ? 'required' : ''}>${max > 900 ? html(entry[key] || '') : ''}${max > 900 ? '</textarea>' : ''}</label>`).join('')}</div><div class="cv-entry-actions"><button type="button" data-move-entry="up" aria-label="نقل السجل لأعلى">نقل لأعلى</button><button type="button" data-move-entry="down" aria-label="نقل السجل لأسفل">نقل لأسفل</button><button type="button" class="cv-remove-entry" data-remove-entry aria-label="حذف هذا السجل من المسودة">حذف السجل</button></div></div>`;
-}
-
 function editorHtml(member, profile) {
   return `<div class="modal-content cv-profile-dialog" role="dialog" aria-modal="true" aria-labelledby="cvEditorTitle">
-    <div class="cv-editor-header"><div><p>الملف الأكاديمي الدائم</p><h3 id="cvEditorTitle">${html(member.name)}</h3><p>المعلومات هنا مرتبطة بالعضو. أضف البيانات المثبتة واترك ما يحتاج إلى تحقق فارغًا. رتّب السجلات من الأحدث إلى الأقدم؛ ترتيبها هنا هو ترتيبها في السيرة.</p></div><button type="button" data-close-editor aria-label="إغلاق محرر السيرة">×</button></div>
-    <div class="cv-editor-import"><button type="button" id="cvRestoreDraft" class="hidden">استعادة مسودة هذا الجهاز</button><button type="button" id="cvProfileBackup">تنزيل نسخة من البيانات</button><label class="cv-file-label">استيراد نسخة بيانات<input type="file" id="cvProfileImport" accept=".json,application/json"></label><p>نسخة البيانات تحفظ الحقول بصيغة JSON لاستعادتها أو نقلها. تنزيل السيرة للنشر متاح بصيغتي PDF وWord.</p></div>
-    <form id="cvProfileForm">
-      <div class="cv-basic-fields">${PROFILE_FIELDS.map(([key, label, max, type]) => `<label class="${max > 900 ? 'cv-field-wide' : ''}">${html(label)}${max > 900 ? `<textarea rows="4" maxlength="${max}" data-profile-field="${key}">${html(profile[key])}</textarea>` : `<input type="${type || 'text'}" maxlength="${max}" data-profile-field="${key}" value="${html(profile[key])}">`}</label>`).join('')}</div>
-      ${PROFILE_SECTIONS.map(section => `<details class="cv-editor-section" data-profile-section="${section.key}" ${section.key === 'education' || profile[section.key].length ? 'open' : ''}><summary>${html(section.title)} <span>(${profile[section.key].length})</span></summary>${section.key === 'publications' ? '<p>الأنشطة المسجلة تُضاف تلقائيًا. لاستكمال بيانات عمل موجود، استخدم عنوانه نفسه وسنته ووعاء نشره؛ تُدمج بياناته دون تكرار. هذه الإضافات لا تغيّر سجلات النشاط أو نقاطها.</p>' : ''}<div class="cv-edit-entries">${profile[section.key].map(entry => entryHtml(section, entry)).join('')}</div><button type="button" class="cv-add-entry" data-add-entry="${section.key}">إضافة سجل</button></details>`).join('')}
-      <label class="cv-field-wide cv-internal-notes">ملاحظات المصادر (داخلية)<textarea rows="3" data-profile-field="notes" maxlength="4000">${html(profile.notes)}</textarea></label>
+    <div class="cv-editor-header"><div><p>استكمال السيرة بخطوات سهلة</p><h3 id="cvEditorTitle">${html(member.name)}</h3><p>حدد خبرتك ومدتها، ثم اختر مهاراتك وشهاداتك. الحفظ دائم، والتوليد يشمل جميع سنوات النشاط.</p></div><button type="button" data-close-editor aria-label="إغلاق محرر السيرة">×</button></div>
+    <details class="cv-import-tools"><summary>نسخ البيانات واستعادة المسودة</summary><div class="cv-editor-import"><button type="button" id="cvRestoreDraft" class="hidden">استعادة مسودة هذا الجهاز</button><button type="button" id="cvProfileBackup">تنزيل نسخة من البيانات</button><label class="cv-file-label">استيراد نسخة بيانات<input type="file" id="cvProfileImport" accept=".json,application/json"></label><p>النسخة هنا لاستعادة الحقول. استخدم «حفظ وتوليد الملف» لتنزيل السيرة بصيغة Word أو PDF.</p></div></details>
+    <form id="cvProfileForm" novalidate>
+      ${editorStepsHtml(member, profile)}
       ${editing.id !== getLoggedInEmployeeId() ? '<label class="cv-privilege-field">كلمة مرور الصلاحيات لحفظ سيرة عضو آخر<input type="password" id="cvEditorPrivilege" autocomplete="off" required></label>' : ''}
-      <div class="cv-editor-footer"><div><p id="cvEditorSaveState">${profile.updatedAt ? 'تعرض النسخة المحفوظة. التعديلات تُعتمد بعد الضغط على حفظ.' : 'لم تُضف بيانات تعريفية لهذه السيرة بعد.'}</p><p class="cv-form-error" id="cvEditorError" role="alert"></p></div><div class="cv-dialog-actions"><button type="button" id="cvReloadProfile">تحميل النسخة المحفوظة</button><button type="button" data-close-editor>إغلاق</button><button type="submit" id="cvProfileSave" class="cv-primary">حفظ السيرة</button></div></div>
+      <div class="cv-editor-footer"><div class="cv-step-controls"><button type="button" data-step-back disabled>السابق</button><p id="cvStepStatus" role="status">الخطوة ١ من ٤</p><button type="button" data-step-next>التالي</button></div><div class="cv-save-status"><p id="cvEditorSaveState">${profile.updatedAt ? 'التعديلات تُعتمد عند الحفظ.' : 'أكمل ما ينطبق عليك فقط.'}</p><p class="cv-form-error" id="cvEditorError" role="alert"></p></div><details class="cv-generation-settings"><summary id="cvEditorOutputLabel">إعدادات الملف: Word</summary><div class="cv-generation-options"><label>نوع السيرة<select id="cvEditorMode"><option value="public">كاملة للنشر</option><option value="short">مختصرة</option><option value="internal">تقرير داخلي</option></select></label><label>الملف بعد الحفظ<select id="cvEditorOutput"><option value="word">Word قابل للتحرير</option><option value="pdf">PDF عبر الطباعة</option><option value="preview">معاينة فقط</option></select></label></div></details><div class="cv-dialog-actions"><button type="button" id="cvReloadProfile">النسخة المحفوظة</button><button type="submit" id="cvProfileSave">حفظ</button><button type="submit" id="cvProfileSaveGenerate" data-save-generate class="cv-primary">حفظ وتوليد Word</button></div></div>
     </form></div>`;
 }
 
@@ -211,9 +207,30 @@ function fillEditor(profile) {
   PROFILE_SECTIONS.forEach(section => {
     const element = form.querySelector(`[data-profile-section="${section.key}"]`);
     element.querySelector('.cv-edit-entries').innerHTML = (profile[section.key] || []).map(entry => entryHtml(section, entry)).join('');
-    element.querySelector('summary span').textContent = `(${(profile[section.key] || []).length})`;
+    element.querySelector('[data-section-count]').textContent = `(${(profile[section.key] || []).length})`;
     if (profile[section.key]?.length) element.open = true;
   });
+  syncChoices(form, profile);
+}
+
+function showStep(index, scroll = true) {
+  if (!editing) return;
+  editing.step = Math.max(0, Math.min(EDITOR_STEPS.length - 1, index));
+  const form = byId('cvProfileForm');
+  form.querySelectorAll('[data-editor-panel]').forEach(panel => { panel.hidden = Number(panel.dataset.editorPanel) !== editing.step; });
+  form.querySelectorAll('[data-editor-step]').forEach(button => { if (Number(button.dataset.editorStep) === editing.step) button.setAttribute('aria-current', 'step'); else button.removeAttribute('aria-current'); });
+  form.querySelector('[data-step-back]').disabled = editing.step === 0;
+  form.querySelector('[data-step-next]').disabled = editing.step === EDITOR_STEPS.length - 1;
+  byId('cvStepStatus').textContent = `الخطوة ${String(editing.step + 1).replace(/\d/g, digit => '٠١٢٣٤٥٦٧٨٩'[digit])} من ٤`;
+  if (scroll) form.querySelector(`[data-editor-panel="${editing.step}"]`).scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function replaceEntries(key, rows) {
+  const section = PROFILE_SECTIONS.find(section => section.key === key);
+  const wrapper = byId('cvProfileForm').querySelector(`[data-profile-section="${key}"]`);
+  wrapper.querySelector('.cv-edit-entries').innerHTML = rows.map(row => entryHtml(section, row)).join('');
+  wrapper.querySelector('[data-section-count]').textContent = `(${rows.length})`;
+  syncChoices(byId('cvProfileForm'), rawForm());
 }
 
 async function openEditor(id) {
@@ -226,21 +243,75 @@ async function openEditor(id) {
   try { await load([target], true); } catch (error) { message(error.message, true); if (error.status === 401) { sessionReady = false; openSession(); } return; }
   if (editing) closeEditor();
   returnFocus = document.activeElement;
-  editing = { id: target, etag: profiles.get(target)?.etag || '', saving: false };
+  editing = { id: target, member, etag: profiles.get(target)?.etag || '', saving: false, step: 0, removedChoices: new Map() };
   const modal = document.createElement('div'); modal.id = 'cvProfileModal'; modal.className = 'modal active';
   modal.innerHTML = editorHtml(member, getProfile(target)); document.body.appendChild(modal);
   document.body.classList.add('cv-editor-open');
+  byId('cvEditorMode').value = options().mode;
+  byId('cvEditorOutput').onchange = () => {
+    const label = { word: 'Word', pdf: 'PDF', preview: 'المعاينة' }[byId('cvEditorOutput').value];
+    byId('cvEditorOutputLabel').textContent = `إعدادات الملف: ${label}`;
+    byId('cvProfileSaveGenerate').textContent = `حفظ وتوليد ${label}`;
+  };
+  syncChoices(byId('cvProfileForm'), getProfile(target));
   try { if (localStorage.getItem(draftKey(target))) byId('cvRestoreDraft').classList.remove('hidden'); } catch { /* Optional local draft. */ }
-  modal.addEventListener('input', event => { if (event.target.closest('#cvProfileForm') && event.target.type !== 'password') storeDraft(); });
+  modal.addEventListener('input', event => {
+    const input = event.target;
+    if (input.matches('[data-choice-search]')) { filterChoices(input.closest('[data-choice-section]'), input.value); return; }
+    if (input.matches('[data-choice-years]')) {
+      const section = input.closest('[data-choice-section]').dataset.choiceSection;
+      const rows = byId('cvProfileForm').querySelector(`[data-profile-section="${section}"] .cv-edit-entries`);
+      const row = [...rows.children].find(row => row.querySelector('[data-entry-field="domain"]').value === input.dataset.choiceYears);
+      if (row) row.querySelector('[data-entry-field="years"]').value = input.value;
+      storeDraft(); return;
+    }
+    if (input.matches('[data-profile-field],[data-entry-field]')) { syncChoices(byId('cvProfileForm'), rawForm()); storeDraft(); }
+  });
+  modal.addEventListener('change', event => {
+    const input = event.target;
+    if (input.matches('[data-choice-value]')) {
+      const section = input.closest('[data-choice-section]').dataset.choiceSection;
+      const value = input.dataset.choiceValue, identity = CHOICE_IDENTITIES[section];
+      const current = rawForm()[section], cacheKey = `${section}:${value}`;
+      if (!input.checked) editing.removedChoices.set(cacheKey, current.filter(row => row[identity] === value));
+      const certificate = CERTIFICATE_CHOICES.find(row => row.title === value);
+      const cached = editing.removedChoices.get(cacheKey);
+      const rows = input.checked && cached?.length && !current.some(row => row[identity] === value)
+        ? [...current, ...cached]
+        : chooseEntry(current, identity, value, input.checked, section === 'certifications' ? { domain: certificate.domain, kind: certificate.kind } : {});
+      if (rows.length > 100) { input.checked = false; byId('cvEditorError').textContent = 'الحد الأعلى ١٠٠ سجل في المحور.'; return; }
+      replaceEntries(section, rows); storeDraft();
+    }
+    if (input.matches('[data-interest-choice]')) {
+      const textarea = modal.querySelector('[data-profile-field="researchInterests"]');
+      textarea.value = chooseInterest(textarea.value, input.dataset.interestChoice, input.checked);
+      storeDraft();
+    }
+  });
   modal.addEventListener('click', event => {
     if (event.target.closest('[data-close-editor]')) closeEditor();
+    const step = event.target.closest('[data-editor-step]');
+    if (step) showStep(Number(step.dataset.editorStep));
+    if (event.target.closest('[data-step-back]')) showStep(editing.step - 1);
+    if (event.target.closest('[data-step-next]')) showStep(editing.step + 1);
+    if (event.target.closest('[data-add-certificate]')) {
+      const domain = byId('cvCertificateDomain').value;
+      if (!domain) { byId('cvEditorError').textContent = 'اختر مجال الشهادة أولًا، ثم أكمل اسمها كما في الوثيقة.'; return; }
+      const rows = rawForm().certifications;
+      if (rows.length >= 100) { byId('cvEditorError').textContent = 'الحد الأعلى ١٠٠ شهادة.'; return; }
+      replaceEntries('certifications', [...rows, { domain }]);
+      const wrapper = modal.querySelector('[data-profile-section="certifications"]');
+      wrapper.querySelector('.cv-entry-detail').open = true;
+      wrapper.querySelector('.cv-edit-entry:last-child input').focus(); storeDraft();
+    }
     const add = event.target.closest('[data-add-entry]');
     if (add) {
       const section = PROFILE_SECTIONS.find(section => section.key === add.dataset.addEntry);
-      const wrapper = add.closest('details');
+      const wrapper = add.closest('[data-profile-section]');
       if (wrapper.querySelectorAll('.cv-edit-entry').length >= 100) { byId('cvEditorError').textContent = 'الحد الأعلى ١٠٠ سجل في المحور.'; return; }
       wrapper.querySelector('.cv-edit-entries').insertAdjacentHTML('beforeend', entryHtml(section));
-      wrapper.querySelector('summary span').textContent = `(${wrapper.querySelectorAll('.cv-edit-entry').length})`;
+      wrapper.querySelector('[data-section-count]').textContent = `(${wrapper.querySelectorAll('.cv-edit-entry').length})`;
+      const detail = wrapper.querySelector('.cv-entry-detail'); if (detail) detail.open = true;
       wrapper.querySelector('.cv-edit-entry:last-child input')?.focus(); storeDraft();
     }
     const move = event.target.closest('[data-move-entry]');
@@ -251,8 +322,17 @@ async function openEditor(id) {
       storeDraft();
     }
     const remove = event.target.closest('[data-remove-entry]');
-    if (remove) { const wrapper = remove.closest('details'); remove.closest('.cv-edit-entry').remove(); wrapper.querySelector('summary span').textContent = `(${wrapper.querySelectorAll('.cv-edit-entry').length})`; storeDraft(); }
+    if (remove) { const wrapper = remove.closest('[data-profile-section]'); remove.closest('.cv-edit-entry').remove(); wrapper.querySelector('[data-section-count]').textContent = `(${wrapper.querySelectorAll('.cv-edit-entry').length})`; syncChoices(byId('cvProfileForm'), rawForm()); storeDraft(); }
   });
+  byId('cvSuggestBiography').onclick = () => {
+    byId('cvBiographyDraft').value = draftBiography(rawForm(), editing.member, context().university);
+    byId('cvBiographySuggestion').hidden = false;
+    byId('cvBiographyDraft').focus();
+  };
+  byId('cvApplyBiography').onclick = () => {
+    modal.querySelector('[data-profile-field="biography"]').value = byId('cvBiographyDraft').value;
+    byId('cvBiographySuggestion').hidden = true; storeDraft();
+  };
   byId('cvRestoreDraft').onclick = () => {
     try {
       const draft = JSON.parse(localStorage.getItem(draftKey(target)));
@@ -290,7 +370,7 @@ async function openEditor(id) {
   modal.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); closeEditor(); }
     if (event.key === 'Tab') {
-      const focusable = [...modal.querySelectorAll('button,input,textarea,summary')].filter(element => !element.disabled && element.getClientRects().length);
+      const focusable = [...modal.querySelectorAll('button,input,textarea,select,summary')].filter(element => !element.disabled && element.getClientRects().length);
       const first = focusable[0], last = focusable[focusable.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
@@ -305,29 +385,81 @@ function closeEditor() {
   document.body.classList.remove('cv-editor-open'); returnFocus?.focus();
 }
 
+function showSavedMember(id, mode) {
+  const bundle = buildCvStudioMemberBundle(id, 'all');
+  if (!bundle) throw new Error('تعذر جمع سجلات العضو للتوليد. بياناتك محفوظة ويمكن إعادة المحاولة.');
+  byId('cvStudioMode').value = mode;
+  byId('cvStudioYearFilter').value = 'all';
+  byId('cvStudioDepartmentFilter').value = 'all';
+  renderCvStudioMemberPicker(true);
+  const checkboxes = [...byId('cvStudioMemberSelect').querySelectorAll('.cv-studio-member-options input[type="checkbox"]')];
+  checkboxes.forEach(checkbox => { checkbox.checked = checkbox.value === String(id); });
+  checkboxes.find(checkbox => checkbox.checked)?.dispatchEvent(new Event('change', { bubbles: true }));
+  const yearLabel = getCvStudioYearLabel('all');
+  cvStudioReport = {
+    year: 'all', yearLabel, department: 'all', departmentLabel: bundle.member.department || 'الأعضاء', members: [bundle],
+    generatedAt: new Date().toISOString(), caption: `السيرة الذاتية | ${bundle.member.name} | ${yearLabel}`,
+    filenameBase: analyticsStudioSafeFileName(`السيرة-الذاتية-${bundle.member.name}`)
+  };
+  renderCvStudioResults();
+}
+
+function validateEditor() {
+  const invalid = [...byId('cvProfileForm').querySelectorAll('input,textarea,select')].find(input => !input.disabled && !input.checkValidity());
+  if (!invalid) return true;
+  const panel = invalid.closest('[data-editor-panel]');
+  if (panel) showStep(Number(panel.dataset.editorPanel));
+  let ancestor = invalid.parentElement;
+  while (ancestor && ancestor !== byId('cvProfileForm')) { if (ancestor.tagName === 'DETAILS') ancestor.open = true; ancestor = ancestor.parentElement; }
+  byId('cvEditorError').textContent = 'أكمل الحقل المحدد قبل الحفظ. باقي حقول السيرة اختيارية.';
+  invalid.reportValidity(); invalid.focus(); return false;
+}
+
 async function saveEditor(event) {
   event.preventDefault();
   if (editing?.saving) return;
+  if (!validateEditor()) return;
   const state = editing;
   const button = byId('cvProfileSave'), errorLabel = byId('cvEditorError');
+  const generate = !!event.submitter?.hasAttribute('data-save-generate');
+  const output = byId('cvEditorOutput').value, mode = byId('cvEditorMode').value;
+  let confirmed = false, preparedPopup;
   try {
     const profile = normalizeProfile(rawForm(), { strict: true });
+    // Open during the user gesture; opening after the save request would be
+    // blocked by browsers. It remains blank until the server confirms saving.
+    if (generate && output === 'pdf') preparedPopup = window.open('', '_blank');
     state.saving = true;
-    byId('cvProfileModal').querySelectorAll('input,textarea,button').forEach(element => { element.disabled = true; });
+    byId('cvProfileModal').querySelectorAll('input,textarea,select,button').forEach(element => { element.disabled = true; });
     button.disabled = true; button.textContent = 'جارٍ الحفظ…'; errorLabel.textContent = '';
     const result = await api('', { action: 'save', employeeId: state.id, profile, expectedEtag: state.etag, privilegePassword: byId('cvEditorPrivilege')?.value || '' });
     profiles.set(state.id, result); state.etag = result.etag;
+    confirmed = true;
     try { localStorage.removeItem(draftKey(state.id)); } catch { /* Optional local draft. */ }
     byId('cvRestoreDraft').classList.add('hidden');
     byId('cvEditorSaveState').textContent = 'تم حفظ السيرة على الموقع. ستظهر من الأجهزة الأخرى بعد تسجيل الدخول.';
     byId('cvEditorPrivilege') && (byId('cvEditorPrivilege').value = '');
     if (cvStudioReport) renderCvStudioResults();
     message('تم حفظ البيانات الأكاديمية وتحديث المعاينة.');
-  } catch (error) { errorLabel.textContent = error.message; storeDraft(); }
+  } catch (error) { preparedPopup?.close(); errorLabel.textContent = error.message; storeDraft(); }
   finally {
     state.saving = false;
-    byId('cvProfileModal').querySelectorAll('input,textarea,button').forEach(element => { element.disabled = false; });
-    button.textContent = 'حفظ السيرة';
+    byId('cvProfileModal').querySelectorAll('input,textarea,select,button').forEach(element => { element.disabled = false; });
+    syncChoices(byId('cvProfileForm'), rawForm()); showStep(state.step, false);
+    button.textContent = 'حفظ';
+  }
+  if (confirmed && generate) {
+    try {
+      showSavedMember(state.id, mode);
+      closeEditor();
+      byId('cvStudioResults').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (output === 'word') await exportWord(state.id, true);
+      if (output === 'pdf') {
+        if (!preparedPopup) throw new Error('اسمح بفتح نافذة الطباعة، ثم اضغط PDF بجوار السيرة.');
+        exportPdf(state.id, preparedPopup);
+      }
+      if (output === 'preview') message('تم الحفظ الدائم وتوليد معاينة السيرة من جميع سنوات النشاط.');
+    } catch (error) { preparedPopup?.close(); message(`تم حفظ البيانات، لكن تعذر توليد الملف: ${error.message}`, true); }
   }
 }
 

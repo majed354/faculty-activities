@@ -5,6 +5,7 @@ import { createCvHandler } from '../src/cv-api.mjs';
 import { normalizeProfile } from '../src/cv-schema.mjs';
 import { buildCvDocument, renderCvDocument, mergePublications, groupTeaching } from '../src/cv-document.mjs';
 import { createWordBlob } from '../src/cv-word.mjs';
+import { chooseEntry, chooseInterest, draftBiography, EXPERIENCE_AREAS, searchKey } from '../src/cv-choices.mjs';
 
 function fixture() {
   const objects = new Map();
@@ -117,4 +118,42 @@ test('Word output is a real editable DOCX with Arabic direction, page numbers an
   const footer = await zip.file('word/footer1.xml').async('string');
   assert.match(xml, /w:bidi/); assert.match(xml, /دكتوراه/); assert.match(xml, /نبذة علمية/);
   assert.ok(!xml.includes('ملاحظة داخلية لا تنشر')); assert.match(relations, /https:\/\/example.com\/profile/); assert.match(footer, /PAGE/);
+});
+
+test('experience years, skills and certificates persist in fresh sessions and older CVs retain their fields', async () => {
+  const old = normalizeProfile({ version: 1, biography: 'نبذة سابقة', service: [{ role: 'عضو', organization: 'جهة سابقة' }] });
+  assert.equal(old.biography, 'نبذة سابقة'); assert.equal(old.service[0].organization, 'جهة سابقة'); assert.deepEqual(old.expertise, []);
+  const profile = { ...old, expertise: [{ domain: 'الجودة والاعتماد الأكاديمي', years: '٥٫٥', description: 'مساهمة موثقة' }], skills: [{ name: 'مهارة مخصصة', level: 'متقدم' }], certifications: [{ title: 'شهادة خاصة', domain: 'الجودة والاعتماد الأكاديمي', credentialId: 'private-credential' }] };
+  const { request, login } = fixture();
+  const response = await request({ action: 'save', employeeId: '100', profile }, await login('100'));
+  assert.equal(response.status, 200);
+  const read = await request(null, await login('100'), '?ids=100');
+  const saved = (await read.json()).records[0].profile;
+  assert.equal(saved.expertise[0].years, '5.5'); assert.equal(saved.skills[0].name, 'مهارة مخصصة'); assert.equal(saved.certifications[0].credentialId, 'private-credential');
+  for (const years of ['-1', '0', '81', 'خمسة', 'Infinity']) assert.throws(() => normalizeProfile({ expertise: [{ domain: 'مجال', years }] }, { strict: true }), /سنوات الخبرة/);
+  assert.throws(() => normalizeProfile({ expertise: [{ domain: 'مجال' }] }, { strict: true }), /أكمل/);
+});
+
+test('choices preserve custom text and existing details and biography drafts only use provided facts', () => {
+  const entries = [{ domain: 'الجودة والاعتماد الأكاديمي', years: '6', description: 'تفاصيل لا تفقد' }, { domain: 'مجال خاص', years: '2' }];
+  assert.deepEqual(chooseEntry(entries, 'domain', entries[0].domain, true), entries);
+  assert.equal(chooseEntry(entries, 'domain', entries[0].domain, false)[0].domain, 'مجال خاص');
+  assert.equal(chooseInterest('موضوع مخصص\nالتجويد', 'التجويد', true), 'موضوع مخصص\nالتجويد');
+  assert.equal(chooseInterest('موضوع مخصص\nالتجويد', 'التجويد', false), 'موضوع مخصص');
+  assert.equal(searchKey('الجودة'), searchKey('الجوده')); assert.ok(EXPERIENCE_AREAS.includes('إعداد الدراسة الذاتية'));
+  const draft = draftBiography({ expertise: entries, education: [], researchInterests: '' }, bundle.member, 'جامعة اختبار');
+  assert.match(draft, /6 سنة/); assert.ok(!draft.includes('دكتوراه')); assert.ok(!draft.includes('شهادة'));
+});
+
+test('public HTML and Word include experience durations and selected certificates while hiding credential IDs', async () => {
+  const selected = { ...bundle, profile: { expertise: [{ domain: 'إعداد الدراسة الذاتية', years: '4' }], skills: [{ name: 'Microsoft Excel' }], certifications: [{ title: 'شهادة موثقة', domain: 'المهارات الرقمية', credentialId: 'secret-id', url: 'https://example.com/verify' }] } };
+  const doc = buildCvDocument(selected, { mode: 'public' });
+  const markup = renderCvDocument(doc);
+  for (const text of ['إعداد الدراسة الذاتية', 'مدة الخبرة:', 'Microsoft Excel', 'شهادة موثقة', 'https://example.com/verify']) assert.ok(markup.includes(text), text);
+  assert.ok(!markup.includes('secret-id'));
+  assert.ok(!markup.includes('false'));
+  assert.ok(renderCvDocument(buildCvDocument(selected, { mode: 'internal' })).includes('secret-id'));
+  const zip = await JSZip.loadAsync(await (await createWordBlob([doc])).arrayBuffer());
+  const xml = await zip.file('word/document.xml').async('string');
+  assert.match(xml, /إعداد الدراسة الذاتية/); assert.match(xml, /مدة الخبرة:/); assert.match(xml, /شهادة موثقة/); assert.ok(!xml.includes('secret-id'));
 });

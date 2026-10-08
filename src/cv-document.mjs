@@ -61,6 +61,8 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   const entry = (title, details = '', row = {}) => ({ title: clean(title), details: clean(details), url: safeUrl(row.url), source: internal ? clean(row.source) : '' });
 
   if (profile.biography) sections.push({ title: 'النبذة العلمية', text: short && profile.biography.length > 800 ? `${profile.biography.slice(0, 800)}…` : profile.biography });
+  add('مجالات الخبرة الأكاديمية والإدارية', profile.expertise.map(row => entry(row.domain, join([row.years && `مدة الخبرة: ${Number(row.years).toLocaleString('ar-SA')} سنة`, row.description]), row)));
+  add('المهارات', profile.skills.map(row => entry(row.name, join([row.level, row.details]), row)));
   add('المؤهلات العلمية', profile.education.map(row => entry(join([row.degree, row.specialization]), join([row.institution, row.country, row.year, row.thesisTitle && `عنوان الرسالة: ${row.thesisTitle}`]), row)));
   add('المسار الوظيفي', profile.appointments.map(row => entry(row.role, join([row.institution, period(row)]), row)));
   add('الترقيات الأكاديمية المسجلة', (bundle.academicPromotions || []).map(row => entry(row.title, join([row.location, formatDate(row.date)]), row)));
@@ -108,6 +110,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     ...profile.service.map(row => entry(row.role, join([row.organization, period(row), row.description]), row)),
     ...(bundle.researchSupport || []).filter(row => row._cvType === 'تحكيم علمي').map(row => entry(row.title, join([row.location, formatDate(row.date)]), row))
   ]);
+  add('العمل في اللجان', profile.committees.map(row => entry(row.name, join([row.role, row.organization, period(row), row.description]), row)));
   add('المنح والمشروعات البحثية', profile.grants.map(row => entry(row.title, join([row.role, row.funder, period(row), row.description]), row)));
   const awards = (bundle.communityActivities || []).filter(row => row.category === 'جائزة' || row.category === 'براءة اختراع');
   add('الجوائز والتكريم والابتكارات', [
@@ -116,6 +119,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   ]);
   add('خدمة المجتمع والاستشارات والمشاركات المهنية', (bundle.communityActivities || []).filter(row => !awards.includes(row)).map(row => entry(row.title, join([row.category, row.participation_type, row.location, formatDate(row.date)]), row)));
   add('الدورات والشهادات المهنية', profile.training.map(row => entry(row.title, join([row.organization, row.year, row.hours && `${row.hours} ساعة`]), row)));
+  add('الشهادات المهنية والتخصصية واختبارات الكفاءة', profile.certifications.map(row => entry(row.title, join([row.domain, row.kind, row.issuer, row.year, row.expires && `الانتهاء: ${row.expires}`, row.score && `النتيجة: ${row.score}`, internal && row.credentialId ? `رقم الشهادة: ${row.credentialId}` : '']), row)));
   add('الإجازات العلمية', profile.licenses.map(row => entry(row.title, join([row.issuer, row.year, row.details]), row)));
   add('اللغات', profile.languages.map(row => entry(row.name, row.level, row)));
   if (internal) {

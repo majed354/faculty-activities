@@ -15,6 +15,10 @@ export const PROFILE_FIELDS = [
 
 const f = (key, label, max = 400) => [key, label, max];
 export const PROFILE_SECTIONS = [
+  { key: 'expertise', title: 'مجالات الخبرة الأكاديمية والإدارية', required: ['domain', 'years'], fields: [f('domain', 'مجال الخبرة'), f('years', 'عدد سنوات الخبرة', 80), f('description', 'مساهمات أو تفاصيل (اختياري)', 1200)] },
+  { key: 'skills', title: 'المهارات', required: ['name'], fields: [f('name', 'المهارة'), f('level', 'مستوى الإتقان (اختياري)'), f('details', 'تفاصيل أو أدوات مستخدمة (اختياري)', 1200)] },
+  { key: 'committees', title: 'تفاصيل اللجان (اختياري)', required: ['name'], fields: [f('name', 'اسم اللجنة'), f('role', 'الدور'), f('organization', 'الجهة'), f('start', 'من', 80), f('end', 'إلى', 80), f('description', 'تفاصيل المساهمة', 1200)] },
+  { key: 'certifications', title: 'الشهادات المهنية والتخصصية واختبارات الكفاءة', required: ['title'], fields: [f('title', 'اسم الشهادة كما في الوثيقة'), f('domain', 'مجال الشهادة'), f('kind', 'نوع الشهادة'), f('issuer', 'الجهة المانحة'), f('year', 'سنة الحصول عليها', 80), f('expires', 'تاريخ الانتهاء (إن وجد)', 80), f('credentialId', 'رقم الشهادة (داخلي)', 180), f('score', 'الدرجة أو النتيجة (إن وجدت)', 180), f('url', 'رابط التحقق', 800)] },
   { key: 'education', title: 'المؤهلات العلمية', required: ['degree', 'institution'], fields: [f('degree', 'الدرجة العلمية'), f('specialization', 'التخصص'), f('institution', 'الجامعة'), f('country', 'البلد'), f('year', 'سنة الحصول عليها', 80), f('thesisTitle', 'عنوان الرسالة', 1000)] },
   { key: 'appointments', title: 'المسار الوظيفي والترقيات', required: ['role', 'institution'], fields: [f('role', 'الوظيفة أو الرتبة'), f('institution', 'الجهة'), f('start', 'من', 80), f('end', 'إلى (أو حتى الآن)', 80)] },
   { key: 'administration', title: 'المناصب الإدارية', required: ['role', 'institution'], fields: [f('role', 'المنصب'), f('institution', 'الجهة'), f('start', 'من', 80), f('end', 'إلى', 80)] },
@@ -25,7 +29,7 @@ export const PROFILE_SECTIONS = [
   { key: 'awards', title: 'الجوائز والتكريم', required: ['title'], fields: [f('title', 'الجائزة أو التكريم'), f('organization', 'الجهة المانحة'), f('year', 'السنة', 80), f('description', 'تفاصيل', 1200)] },
   { key: 'training', title: 'الدورات والشهادات المهنية', required: ['title'], fields: [f('title', 'الدورة أو الشهادة'), f('organization', 'الجهة'), f('year', 'السنة', 80), f('hours', 'عدد الساعات', 80)] },
   { key: 'licenses', title: 'الإجازات العلمية', required: ['title'], fields: [f('title', 'الإجازة'), f('issuer', 'الجهة أو المجيز'), f('year', 'السنة', 80), f('details', 'تفاصيل الإجازة', 1200)] },
-  { key: 'languages', title: 'اللغات', required: ['name', 'level'], fields: [f('name', 'اللغة'), f('level', 'مستوى الإتقان')] }
+  { key: 'languages', title: 'اللغات', required: ['name'], fields: [f('name', 'اللغة'), f('level', 'مستوى الإتقان (اختياري)')] }
 ];
 
 export function safeUrl(value) {
@@ -37,7 +41,7 @@ export function safeUrl(value) {
 
 export function normalizeProfile(raw = {}, { strict = false } = {}) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('بيانات السيرة غير صالحة.');
-  const result = { version: 1 };
+  const result = { version: 2 };
   const text = (value, label, max, isUrl = false) => {
     const valueText = String(value ?? '').trim();
     if (valueText.length > max) throw new Error(`${label}: الحد الأعلى ${max} حرف.`);
@@ -54,6 +58,11 @@ export function normalizeProfile(raw = {}, { strict = false } = {}) {
       [...section.fields, f('source', 'المصدر أو مرجع الإثبات', 1200)].forEach(([key, label, max]) => {
         row[key] = text(entry[key], label, max, key === 'url');
       });
+      if (section.key === 'expertise' && row.years) {
+        const digits = row.years.replace(/[٠-٩]/g, digit => '٠١٢٣٤٥٦٧٨٩'.indexOf(digit)).replace(/[۰-۹]/g, digit => '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)).replace(/٫/g, '.');
+        if (!/^\d+(\.\d+)?$/.test(digits) || Number(digits) <= 0 || Number(digits) > 80) throw new Error('سنوات الخبرة: أدخل عددًا أكبر من صفر وحتى ٨٠ سنة، ويمكن استخدام كسور السنة.');
+        row.years = String(Number(digits));
+      }
       const hasData = Object.values(row).some(Boolean);
       if (strict && hasData && section.required.some(key => !row[key])) {
         const missing = section.required.filter(key => !row[key]).map(key => section.fields.find(field => field[0] === key)[1]);
