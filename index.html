@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="style.css?v=20260910-promotions-v1">
     <link rel="stylesheet" href="style-additions.css?v=20260910-promotions-v1">
     <link rel="stylesheet" href="teaching-styles.css">
+    <link rel="stylesheet" href="cv-studio.css?v=20261008-academic-cv-v1">
 </head>
 <body>
     <!-- ===== شاشة تسجيل الدخول ===== -->
@@ -856,12 +857,12 @@
             <div class="section-header">
                 <h2>🗂️ السير الذاتية</h2>
             </div>
-            <p class="cv-studio-intro">مساحة موحّدة لجمع بيانات العضو الأساسية، وأنشطته البحثية، وفعالياته العلمية والمجتمعية، ونشاطه التدريسي، والمهمات المشابهة، مع اختيار دقيق للسنة والقسم والأعضاء، ثم إخراج النتيجة بصيغة قابلة للطباعة والتصدير.</p>
+            <p class="cv-studio-intro">ملف أكاديمي دائم يجمع المؤهلات والخبرات والإنتاج العلمي مع الأنشطة المسجلة. اختر سيرة كاملة للنشر أو نسخة مختصرة أو تقريرًا داخليًا، ثم نزّلها بصيغة PDF أو Word.</p>
 
             <div class="analytics-studio-card cv-studio-builder">
                 <div class="analytics-studio-grid">
                     <div class="analytics-studio-field">
-                        <label for="cvStudioYearFilter">السنة</label>
+                        <label for="cvStudioYearFilter">نطاق سجلات النشاط</label>
                         <select id="cvStudioYearFilter"></select>
                     </div>
                     <div class="analytics-studio-field">
@@ -875,8 +876,15 @@
                     </div>
                 </div>
 
+                <div class="cv-output-options">
+                    <label for="cvStudioMode">نوع الملف<select id="cvStudioMode"><option value="public">سيرة كاملة للنشر</option><option value="short">سيرة مختصرة — مختارات من الإنجازات</option><option value="internal">تقرير أكاديمي داخلي</option></select></label>
+                    <label class="cv-checkbox-label"><input type="checkbox" id="cvStudioPersonal">إظهار الجنسية والجنس في نسخة النشر</label>
+                    <p>المؤهلات والخبرات ثابتة مع العضو. السنة تحدد الأنشطة المضمّنة، والأقسام الفارغة تظهر في التقرير الداخلي وتُخفى في نسخة النشر.</p>
+                </div>
+                <div class="cv-storage-bar"><p id="cvStudioStorageStatus" role="status" aria-live="polite">جارٍ الاتصال ببيانات السير المحفوظة…</p><button type="button" id="cvStudioActivate" class="hidden">تفعيل حفظ السير</button></div>
                 <div class="analytics-studio-actions">
-                    <button class="analytics-studio-primary-btn" id="cvStudioRunBtn" type="button">جمع السير الذاتية</button>
+                    <button class="analytics-studio-primary-btn" id="cvStudioRunBtn" type="button">عرض السير الذاتية</button>
+                    <button class="analytics-studio-secondary-btn" id="cvStudioEditProfile" type="button">استكمال سيرتي</button>
                     <button class="analytics-studio-secondary-btn" id="cvStudioResetBtn" type="button">إعادة الضبط</button>
                 </div>
             </div>
@@ -891,6 +899,7 @@
                             </div>
                             <div class="analytics-studio-export-btns">
                                 <button class="analytics-studio-secondary-btn" id="cvStudioExportPdfBtn" type="button">PDF</button>
+                                <button class="analytics-studio-secondary-btn" id="cvStudioExportWordBtn" type="button">Word</button>
                                 <button class="analytics-studio-secondary-btn" id="cvStudioExportCsvBtn" type="button">CSV</button>
                             </div>
                         </div>
@@ -988,6 +997,8 @@
             return;
         }
 
+        // جلسة السير تستخدم ملف ارتباط موقعًا؛ تعطلها لا يمنع استعراض الأنشطة.
+        if (window.AcademicCv) await AcademicCv.signIn(empId, pass);
         // حفظ بيانات الجلسة
         sessionStorage.setItem('loggedIn', 'true');
         sessionStorage.setItem('employeeId', empId);
@@ -1012,6 +1023,7 @@
     }
 
     function handleLogout() {
+        window.AcademicCv?.signOut();
         sessionStorage.removeItem('loggedIn');
         sessionStorage.removeItem('employeeId');
         sessionStorage.removeItem('employeeName');
@@ -1045,7 +1057,8 @@
         });
     });
     </script>
-    <script src="app.js?v=20260910-promotions-v1"></script>
+    <script src="app.js?v=20261008-academic-cv-v1"></script>
+    <script src="assets/cv-studio.js?v=20261008-academic-cv-v1"></script>
     <script src="teaching.js"></script>
 
     <!-- Modal تفاصيل الرسالة -->

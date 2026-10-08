@@ -7076,7 +7076,7 @@ function getCvStudioSelectedDepartmentValue() {
 }
 
 function getCvStudioYearLabel(year) {
-    return year === 'all' ? 'كل السنوات' : formatCustomStatsYearLabel(year);
+    return year === 'all' ? 'كل السنوات المسجلة' : formatCustomStatsYearLabel(year);
 }
 
 function getCvStudioDepartmentLabel(department) {
@@ -7085,7 +7085,7 @@ function getCvStudioDepartmentLabel(department) {
 
 function getCvStudioAvailableYears() {
     const years = new Set();
-    [allData.faculty, allData.publications, allData.theses, allData.participations].forEach(collection => {
+    [allData.faculty, allData.publications, allData.theses, allData.participations, allData.academicPromotions].forEach(collection => {
         (collection || []).forEach(record => {
             const year = parseCustomStatsYear(record?.year);
             if (year !== null) years.add(year);
@@ -7284,9 +7284,9 @@ function renderCvStudioYearOptions(resetSelections = false) {
     if (!select) return;
 
     const years = getCvStudioAvailableYears();
-    const fallback = currentYear !== 'all' && currentYear !== null ? String(currentYear) : 'all';
+    const fallback = 'all';
     const selectedValue = !resetSelections ? analyticsStudioText(select.value, fallback) : fallback;
-    select.innerHTML = '<option value="all">كل السنوات</option>' +
+    select.innerHTML = '<option value="all">المسيرة الأكاديمية — كل السنوات المسجلة</option>' +
         years.map(year => `<option value="${year}">${formatCustomStatsYearLabel(year)}</option>`).join('');
     const validValues = new Set(['all', ...years.map(year => String(year))]);
     select.value = validValues.has(selectedValue) ? selectedValue : 'all';
@@ -7394,7 +7394,8 @@ function buildCvStudioMemberBundle(memberId, selectedYear = 'all') {
         points: pointsData.points,
         breakdown: pointsData.breakdown,
         publications: activities.publications,
-        theses: activities.theses,
+        theses: activities.theses.map(thesis => ({ ...thesis, degreeLabel: getThesisTypeName(thesis.type, thesis), programLabel: getThesisProgramLabel(thesis) })),
+        academicPromotions: activities.academicPromotions,
         researchSupport: sortByDateDesc([
             ...activities.studentResearch.map(item => ({ ...item, _cvType: 'بحوث الطلاب' })),
             ...activities.reviewing.map(item => ({ ...item, _cvType: 'تحكيم علمي' })),
@@ -7572,107 +7573,7 @@ function buildCvStudioTeachingRows(memberData) {
 }
 
 function buildCvStudioMemberCardHtml(memberData) {
-    const member = memberData.member;
-    const teachingSummary = memberData.teachingSummary;
-    const profileItems = [
-        ['الاسم', analyticsStudioText(member.name, '-')],
-        ['الرقم', analyticsStudioText(member.id, '-')],
-        ['القسم', analyticsStudioText(member.department, '-')],
-        ['الفرع', analyticsStudioText(getFacultyBranchValue(member), '-')],
-        ['الرتبة', analyticsStudioText(member.rank, '-')],
-        ['الجنسية', analyticsStudioText(getFacultyNationalityValue(member), '-')],
-        ['الجنس', analyticsStudioText(getFacultyGenderValue(member), '-')],
-        ['البريد', analyticsStudioText(member.email, '-')],
-        ['الحالة', analyticsStudioText(member.activeLabel, '-')],
-        ['سجل العضوية', analyticsStudioText(member.yearLabel, '-')],
-        ['نطاق التقرير', memberData.scopeYearLabel]
-    ];
-
-    return `
-        <div class="analytics-studio-card cv-studio-member-card">
-            <div class="cv-studio-member-header">
-                <div>
-                    <h3>${escapeHtml(member.name || '-') }</h3>
-                    <p>${escapeHtml([member.rank, getFacultyBranchValue(member), getFacultyNationalityValue(member), getFacultyGenderValue(member), member.department, member.id].filter(Boolean).join(' | '))}</p>
-                </div>
-                <div class="cv-studio-member-points">
-                    <strong>${formatArabicDigits(memberData.points)}</strong>
-                    <span>نقطة</span>
-                </div>
-            </div>
-
-            <div class="cv-studio-profile-grid">
-                ${profileItems.map(([label, value]) => `
-                    <div class="cv-studio-profile-item">
-                        <span class="cv-studio-profile-label">${escapeHtml(label)}</span>
-                        <span class="cv-studio-profile-value">${escapeHtml(value || '-')}</span>
-                    </div>
-                `).join('')}
-            </div>
-
-            <div class="cv-studio-summary-strip">
-                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.publications.length)}</strong><span>بحوث</span></div>
-                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.theses.length)}</strong><span>رسائل ومشاريع</span></div>
-                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.scientificEvents.length)}</strong><span>فعاليات علمية</span></div>
-                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.communityActivities.length)}</strong><span>أنشطة مجتمعية</span></div>
-                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalSections || 0)}</strong><span>شعب تدريسية</span></div>
-                <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(memberData.monitorings.length)}</strong><span>مراقبات</span></div>
-            </div>
-
-            <div class="cv-studio-section member-breakdown">
-                <h4>تفصيل النقاط</h4>
-                ${buildCvStudioBreakdownHtml(memberData)}
-            </div>
-
-            <div class="cv-studio-section">
-                <h4>البحوث المنشورة</h4>
-                ${buildCvStudioTable(['العنوان', 'وعاء النشر', 'تاريخ النشر', 'نطاق الاقتباسات', 'طالب مشارك'], buildCvStudioPublicationRows(memberData))}
-            </div>
-
-            <div class="cv-studio-section">
-                <h4>الإشراف والمناقشات</h4>
-                ${buildCvStudioTable(['الدور', 'النوع', 'الطالب', 'العنوان', 'الحالة', 'التاريخ'], buildCvStudioThesisRows(memberData))}
-            </div>
-
-            <div class="cv-studio-section">
-                <h4>الأنشطة البحثية المساندة</h4>
-                ${buildCvStudioTable(['التصنيف', 'العنوان', 'المكان', 'نوع المشاركة', 'التاريخ'], buildCvStudioResearchSupportRows(memberData))}
-            </div>
-
-            <div class="cv-studio-section">
-                <h4>الفعاليات العلمية</h4>
-                ${buildCvStudioTable(['التصنيف', 'نوع المشاركة', 'العنوان', 'المكان', 'التاريخ', 'تفاصيل إضافية'], buildCvStudioParticipationRows(memberData.scientificEvents))}
-            </div>
-
-            <div class="cv-studio-section">
-                <h4>الأنشطة المجتمعية والمهنية</h4>
-                ${buildCvStudioTable(['التصنيف', 'نوع المشاركة', 'العنوان', 'المكان', 'التاريخ', 'تفاصيل إضافية'], buildCvStudioParticipationRows(memberData.communityActivities))}
-            </div>
-
-            <div class="cv-studio-section">
-                <h4>النشاط التدريسي</h4>
-                <div class="cv-studio-teaching-summary">
-                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalCourses || 0)}</strong><span>مقررات</span></div>
-                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalSections || 0)}</strong><span>شعب</span></div>
-                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalStudents || 0)}</strong><span>طلاب</span></div>
-                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalHours || 0)}</strong><span>ساعات</span></div>
-                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.avgStudents || 0)}</strong><span>متوسط الطلاب/شعبة</span></div>
-                    <div class="cv-studio-summary-chip"><strong>${formatArabicDigits(teachingSummary?.totalYears || 0)}</strong><span>سنوات التغطية</span></div>
-                </div>
-                ${buildCvStudioTable(['السنة', 'الفصل', 'الرمز', 'المقرر', 'البرنامج', 'الدرجة', 'النمط', 'الطلاب', 'الساعات'], buildCvStudioTeachingRows(memberData))}
-            </div>
-
-            <div class="cv-studio-section">
-                <h4>المراقبات والمهام المشابهة</h4>
-                ${buildCvStudioTable(['التصنيف', 'نوع المشاركة', 'العنوان', 'المكان', 'التاريخ', 'تفاصيل إضافية'], buildCvStudioParticipationRows(memberData.monitorings))}
-            </div>
-
-            <div class="cv-studio-section">
-                <h4>أنشطة أخرى</h4>
-                ${buildCvStudioTable(['التصنيف', 'نوع المشاركة', 'العنوان', 'المكان', 'التاريخ', 'تفاصيل إضافية'], buildCvStudioParticipationRows(memberData.otherActivities))}
-            </div>
-        </div>
-    `;
+    return AcademicCv.renderMember(memberData);
 }
 
 function buildCvStudioExportMatrix() {
@@ -7722,7 +7623,7 @@ function renderCvStudioResults() {
     if (!results || !caption || !summary || !container) return;
 
     caption.textContent = cvStudioReport.caption;
-    summary.innerHTML = buildCvStudioSummaryCards(cvStudioReport).map(card => `
+    summary.innerHTML = AcademicCv.renderSummary(cvStudioReport).map(card => `
         <div class="analytics-studio-summary-card">
             <span class="analytics-studio-summary-value">${escapeHtml(card.value)}</span>
             <span class="analytics-studio-summary-label">${escapeHtml(card.label)}</span>
@@ -7750,6 +7651,17 @@ async function runCvStudioReport() {
         return;
     }
 
+    const runButton = document.getElementById('cvStudioRunBtn');
+    if (runButton) { runButton.disabled = true; runButton.textContent = 'جارٍ جمع بيانات السيرة…'; }
+    try {
+        await AcademicCv.load(effectiveMemberIds, true);
+    } catch (error) {
+        alert(error.message);
+        return;
+    } finally {
+        if (runButton) { runButton.disabled = false; runButton.textContent = 'عرض السير الذاتية'; }
+    }
+
     const members = effectiveMemberIds
         .map(memberId => buildCvStudioMemberBundle(memberId, selectedYear))
         .filter(Boolean);
@@ -7775,78 +7687,11 @@ async function runCvStudioReport() {
 }
 
 function exportCvStudioCSV() {
-    if (!cvStudioReport) return;
-    const csvText = convertMatrixToDelimitedText(buildCvStudioExportMatrix());
-    downloadCSV(csvText, `${cvStudioReport.filenameBase}.csv`);
+    if (cvStudioReport) AcademicCv.exportCsv();
 }
 
 function exportCvStudioPDF() {
-    if (!cvStudioReport) return;
-
-    const summaryCards = buildCvStudioSummaryCards(cvStudioReport).map(card => `
-        <div class="summary-item">
-            <strong>${escapeHtml(card.value)}</strong>
-            <span>${escapeHtml(card.label)}</span>
-        </div>
-    `).join('');
-
-    const membersHtml = cvStudioReport.members.map(memberData => `
-        <section class="member-card">
-            ${buildCvStudioMemberCardHtml(memberData)}
-        </section>
-    `).join('');
-
-    const printContent = `
-        <!DOCTYPE html>
-        <html lang="ar" dir="rtl">
-        <head>
-            <meta charset="UTF-8">
-            <title>السير الذاتية</title>
-            <style>
-                body { font-family: "Cairo", Tahoma, Arial, sans-serif; margin: 24px; color: #111827; direction: rtl; }
-                h1, h2, h3, h4 { margin: 0 0 8px; }
-                p { color: #374151; line-height: 1.8; }
-                .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 24px; }
-                .summary-item { border: 1px solid #d1d5db; border-radius: 12px; padding: 12px; text-align: center; }
-                .summary-item strong { display: block; font-size: 1.2rem; margin-bottom: 4px; }
-                .member-card { page-break-inside: avoid; margin: 18px 0 28px; }
-                .analytics-studio-card { border: 1px solid #d1d5db; border-radius: 18px; padding: 18px; }
-                .cv-studio-member-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
-                .cv-studio-member-header p { margin: 0; font-size: 0.95rem; }
-                .cv-studio-member-points { text-align: center; min-width: 90px; }
-                .cv-studio-member-points strong { display: block; font-size: 1.4rem; }
-                .cv-studio-profile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
-                .cv-studio-profile-item, .cv-studio-summary-chip { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; }
-                .cv-studio-profile-label { display: block; color: #6b7280; font-size: 0.8rem; margin-bottom: 4px; }
-                .cv-studio-profile-value { display: block; font-weight: 700; }
-                .cv-studio-summary-strip, .cv-studio-teaching-summary { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
-                .cv-studio-summary-chip strong { display: block; font-size: 1.05rem; margin-bottom: 4px; }
-                .cv-studio-section { margin-top: 16px; }
-                .cv-studio-empty-note { border: 1px dashed #d1d5db; border-radius: 12px; padding: 10px 12px; color: #6b7280; }
-                table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-                th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: right; vertical-align: top; }
-                th { background: #f3f4f6; }
-                @media print { body { margin: 10mm; } .member-card { page-break-after: always; } .member-card:last-child { page-break-after: auto; } }
-            </style>
-        </head>
-        <body>
-            <h1>السير الذاتية</h1>
-            <p>${escapeHtml(cvStudioReport.caption)}</p>
-            <div class="summary-grid">${summaryCards}</div>
-            ${membersHtml}
-            <script>window.onload = function(){ window.print(); };</script>
-        </body>
-        </html>
-    `;
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        alert('تعذر فتح نافذة الطباعة. تأكد من السماح بالنوافذ المنبثقة.');
-        return;
-    }
-
-    printWindow.document.write(printContent);
-    printWindow.document.close();
+    if (cvStudioReport) AcademicCv.exportPdf();
 }
 
 function resetCvStudioView() {
@@ -7872,6 +7717,7 @@ async function setupCvStudio() {
         renderCvStudioMemberPicker(true);
         cvStudioClearReport();
     });
+    await AcademicCv.setup();
     document.getElementById('cvStudioRunBtn')?.addEventListener('click', runCvStudioReport);
     document.getElementById('cvStudioResetBtn')?.addEventListener('click', resetCvStudioView);
     document.getElementById('cvStudioExportCsvBtn')?.addEventListener('click', exportCvStudioCSV);
