@@ -21,26 +21,20 @@ const bundle = (overrides = {}) => ({
 
 const docFor = overrides => buildCvDocument(bundle(overrides), { mode: 'public', generatedAt: '2026-10-09T10:00:00Z' }, context);
 
-test('charts appear only when the data can carry them, and years stay unformatted labels', () => {
-  const sparse = docFor({ publications: [{ title: 'بحث', year: '1446', kind: 'بحث', status: 'منشور' }] });
-  assert.equal(sparse.charts.find(chart => chart.id === 'trend'), undefined, 'one year is not a trend');
-  assert.equal(sparse.charts.find(chart => chart.id === 'contribution'), undefined, 'one category is not a composition');
+test('a chart appears only when the data can carry it, and years stay labels', () => {
+  const sparse = docFor({ teachingDetails: [{ courseName: 'التفسير', year: '1446', students: '30' }] });
+  assert.equal(sparse.charts.find(chart => chart.id === 'teaching'), undefined, 'one year is not a trend');
 
-  const rich = docFor({
-    publications: [
-      { title: 'أ', year: '1445', kind: 'بحث', status: 'منشور' },
-      { title: 'ب', year: '1447', kind: 'بحث', status: 'منشور' }
-    ],
-    theses: [{ role: 'مشرف', title: 'رسالة', year: '1446', defense_date: '1446-01-01' }]
-  });
-  const trend = rich.charts.find(chart => chart.id === 'trend');
-  assert.ok(trend, 'two populated years make a trend');
-  assert.deepEqual(trend.rows.map(row => row.label), ['١٤٤٥', '١٤٤٦', '١٤٤٧'], 'gap years are filled, not dropped');
-  assert.ok(!trend.rows.some(row => /٬|,/.test(row.label)), 'a year is a label, never grouped as ١٬٤٤٧');
-
-  const contribution = rich.charts.find(chart => chart.id === 'contribution');
-  assert.equal(contribution.total, 3);
-  assert.equal(contribution.slices.reduce((sum, slice) => sum + slice.share, 0).toFixed(4), '1.0000');
+  const rich = docFor({ teachingDetails: [
+    { courseName: 'التفسير', year: '1446', students: '30' },
+    { courseName: 'علوم القرآن', year: '1447', students: '25' },
+    { courseName: 'التفسير', year: '1447', students: '40' }
+  ] });
+  const teaching = rich.charts.find(chart => chart.id === 'teaching');
+  assert.ok(teaching, 'two populated years make a trend');
+  assert.deepEqual(teaching.rows.map(row => row.label), ['١٤٤٦', '١٤٤٧']);
+  assert.ok(!teaching.rows.some(row => /٬|,/.test(row.label)), 'a year is a label, never grouped as ١٬٤٤٧');
+  assert.match(teaching.note, /٩٥/, 'the note totals the enrolled students');
 });
 
 test('the expertise list gives way to its chart but keeps domains carrying a description', () => {
@@ -215,7 +209,7 @@ test('a missing or unusable portrait leaves no gap, and only real images are emb
   assert.ok(sources.at(-1).includes('"/portrait-0.png")'), 'the document references the mounted file');
 });
 
-test('metrics count exactly what the sections list', () => {
+test('the tiles are not restated as a chart, and no chart plots a defence calendar', () => {
   const doc = docFor({
     publications: [
       { title: 'أ', year: '1445', kind: 'بحث', status: 'منشور' },
@@ -226,16 +220,88 @@ test('metrics count exactly what the sections list', () => {
       { role: 'مناقش', title: 'ر٢', year: '1447', defense_date: '1447-01-01' }
     ]
   });
-  const slice = label => doc.charts.find(chart => chart.id === 'contribution').slices.find(item => item.label === label)?.value || 0;
-  const count = label => doc.counts.find(([, text]) => text === label)?.[0] || 0;
-  assert.equal(slice('بحوث منشورة'), count('بحوث منشورة'));
-  assert.equal(slice('كتب وفصول وتحقيقات'), count('كتب وفصول وتحقيقات'));
-  assert.equal(slice('إشراف على الرسائل'), count('إشرافات'));
-  assert.equal(slice('مناقشة الرسائل'), count('مناقشات'));
+  // The KPI tiles already carry these five numbers; a composition bar beside
+  // them was the same data in colour.
+  assert.equal(doc.charts.find(chart => chart.id === 'contribution'), undefined);
+  // Defence dates cluster in Muharram, so a per-year bar plotted the academic
+  // calendar rather than output.
+  assert.equal(doc.charts.find(chart => chart.id === 'trend'), undefined);
+  assert.deepEqual(doc.counts.map(([, label]) => label),
+    ['بحوث منشورة', 'كتب وفصول وتحقيقات', 'إشرافات', 'مناقشات']);
 });
 
 test('buildCvMetrics reuses the expertise verdict it was handed', () => {
   const chart = { kind: 'bars', id: 'expertise', title: 'مُمرَّر', rows: [], max: 1 };
   const metrics = buildCvMetrics(bundle(), {}, { published: [], books: [], supervisions: [], discussions: [], reviewing: [], expertiseChart: chart });
   assert.ok(metrics.includes(chart), 'the caller and the chart must agree on one verdict');
+});
+
+const SURAS = ['البقرة', 'آل عمران', 'النساء', 'المائدة', 'الأنعام', 'الأعراف', 'الأنفال', 'التوبة', 'يونس', 'هود'];
+
+test('a repetitive axis states its constants once and names the series it belongs to', () => {
+  // Twenty-three supervisions differing only in student, scope and date.
+  const theses = Array.from({ length: 10 }, (_, index) => ({
+    role: 'مشرف رئيسي', type: 'مشروع بحثي', programLabel: 'مشروع بحثي دراسات قرآنية',
+    student_name: `طالب ${index + 1}`, university: 'جامعة الطائف', status: 'منجزة',
+    defense_date: '١٤٤٨هـ',
+    title: `${index % 2 ? 'تصنيف' : 'تصنيفات'} الاختلافات التفسيرية في زاد المسير لابن الجوزي (سورة ${SURAS[index]} من الآية ${index * 10} إلى الآية ${index * 10 + 9})`
+  }));
+  const section = docFor({ theses }).sections.find(item => item.title === 'الإشراف على الرسائل والمشروعات');
+
+  // The degree is not printed twice because the programme name already carries it.
+  assert.ok(!section.shared.includes('مشروع بحثي'), 'the bare degree is dropped beside "مشروع بحثي دراسات قرآنية"');
+  assert.deepEqual(section.shared, ['مشرف رئيسي', 'مشروع بحثي دراسات قرآنية', 'جامعة الطائف', 'منجزة', '١٤٤٨هـ']);
+
+  // Constants leave the rows; what distinguishes them stays.
+  assert.deepEqual(section.entries.map(row => row.details), theses.map((_, i) => `الطالب: طالب ${i + 1}`));
+
+  assert.equal(section.programme.covered, 10);
+  assert.equal(section.programme.label, 'الاختلافات التفسيرية في زاد المسير لابن الجوزي');
+  // The heading must show the spelling the member used, never the folded key.
+  assert.ok(!section.programme.label.includes('التفسيريه'));
+
+  // Both renderers surface it, and no record is lost.
+  for (const output of [renderCvDocument(docFor({ theses })), renderCvTypst(docFor({ theses }))]) {
+    assert.ok(output.includes('مشرف رئيسي'), 'the hoisted line is printed');
+    for (const row of theses) assert.ok(output.includes(row.student_name), `kept ${row.student_name}`);
+  }
+});
+
+test('unrelated records are never forced into a series, and short axes keep their details', () => {
+  const unrelated = ['أثر السياق في الترجيح', 'قواعد التفسير دراسة تأصيلية', 'الصرفة ووجوه الإعجاز',
+    'أسباب الجهل بالعلم', 'مناهج المفسرين المعاصرين', 'القراءة الحداثية للقرآن', 'الوقف والابتداء']
+    .map((title, index) => ({ role: 'مشرف', title, student_name: `ط${index}`, status: 'منجزة' }));
+  const section = docFor({ theses: unrelated }).sections.find(item => item.title === 'الإشراف على الرسائل والمشروعات');
+  assert.equal(section.programme, undefined, 'titles sharing nothing must not be given a common heading');
+
+  // Two records are too few to hoist: the saving would not pay for the indirection.
+  const pair = docFor({ theses: [
+    { role: 'مشرف', title: 'أ', university: 'جامعة الطائف', student_name: 'ط١' },
+    { role: 'مشرف', title: 'ب', university: 'جامعة الطائف', student_name: 'ط٢' }
+  ] }).sections.find(item => item.title === 'الإشراف على الرسائل والمشروعات');
+  assert.equal(pair.shared, undefined);
+  assert.ok(pair.entries.every(row => row.details.includes('جامعة الطائف')));
+});
+
+test('the service forwards the hoisted line and series label it is sent', async () => {
+  let source = '';
+  const handler = createCvPdfHandler({ compile: async text => { source = text; return Buffer.from('%PDF-1.7'); } });
+  const response = await handler(new Request('https://cv.example/api/cv-pdf', {
+    method: 'POST',
+    body: JSON.stringify({ documents: [{
+      name: 'د. فلان',
+      sections: [{
+        title: 'الإشراف على الرسائل والمشروعات',
+        shared: ['مشرف رئيسي', 'جامعة الطائف'],
+        programme: { label: 'الاختلافات التفسيرية … زاد المسير', covered: 23, total: 23 },
+        entries: [{ title: 'رسالة', details: 'الطالب: ط' }]
+      }]
+    }] })
+  }));
+  assert.equal(response.status, 200);
+  // The allow-list dropped these silently once; the PDF then printed every
+  // constant on every row while the model said otherwise.
+  assert.ok(source.includes('مشرف رئيسي'), 'the hoisted constants survive sanitising');
+  assert.ok(source.includes('الاختلافات التفسيرية'), 'the series label survives sanitising');
+  assert.ok(source.includes('٢٣'), 'the coverage count is rendered in Arabic-Indic digits');
 });

@@ -1,5 +1,5 @@
 import { normalizeProfile, safeUrl } from './cv-schema.mjs';
-import { buildCvMetrics, buildExpertise, sectionLayout } from './cv-metrics.mjs';
+import { buildCvMetrics, buildExpertise, sectionLayout, hoistSharedDetails, detectProgramme } from './cv-metrics.mjs';
 import { renderCvCharts } from './cv-charts.mjs';
 
 import { html } from './cv-html.mjs';
@@ -62,8 +62,23 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   const add = (title, entries, extra = {}) => {
     entries = entries.filter(row => row.title || row.details || row.url || row.source);
     const total = entries.length;
-    if (total) sections.push({ title: short && total > 5 ? `${title} — مختارات (${5} من ${total})` : title, entries: short ? entries.slice(0, 5) : entries, ...extra });
-    else if (internal) sections.push({ title, text: 'لا توجد سجلات أو بيانات مضافة في هذا المحور.' });
+    if (!total) {
+      if (internal) sections.push({ title, text: 'لا توجد سجلات أو بيانات مضافة في هذا المحور.' });
+      return;
+    }
+    const kept = short ? entries.slice(0, 5) : entries;
+    // Constants are lifted out of the rows and the series the records belong to
+    // is named, so a long axis reads as one body of work instead of repeating
+    // its own metadata on every line.
+    const hoisted = hoistSharedDetails(kept);
+    const programme = detectProgramme(kept);
+    sections.push({
+      title: short && total > 5 ? `${title} — مختارات (${5} من ${total})` : title,
+      entries: hoisted.entries,
+      ...(hoisted.shared.length ? { shared: hoisted.shared } : {}),
+      ...(programme ? { programme } : {}),
+      ...extra
+    });
   };
   // A partially completed record still exports its supplied facts. Promote
   // details when the primary field was left blank, without adding placeholders.
@@ -106,11 +121,17 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   add('إنتاج علمي مقبول للنشر أو قيد العمل', publications.filter(row => !unclassified(row) && isPending(row)).map(bibliography));
   add('إنتاج علمي إضافي', publications.filter(unclassified).map(bibliography));
 
-  const thesisEntry = row => entry(row.title, join([
-    row.role, row.degreeLabel || row.type, row.programLabel || row.specialization,
-    row.student_name && `الطالب: ${row.student_name}`, row.university || context.university,
-    row.status, formatDate(row.defense_date)
-  ]), row);
+  // The programme label usually repeats the degree it belongs to, which printed
+  // "مشروع بحثي · مشروع بحثي دراسات قرآنية" on every supervised record.
+  const thesisEntry = row => {
+    const kind = clean(row.degreeLabel || row.type);
+    const programme = clean(row.programLabel || row.specialization);
+    return entry(row.title, join([
+      row.role, programme.includes(kind) ? '' : kind, programme,
+      row.student_name && `الطالب: ${row.student_name}`, row.university || context.university,
+      row.status, formatDate(row.defense_date)
+    ]), row);
+  };
   const supervisions = (bundle.theses || []).filter(row => /مشرف/.test(row.role || ''));
   const discussions = (bundle.theses || []).filter(row => !/مشرف/.test(row.role || ''));
   add('الإشراف على الرسائل والمشروعات', supervisions.map(thesisEntry));
@@ -190,6 +211,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
 // Mirrors the layout the PDF chooses for the same section, so the preview is a
 // preview rather than a second, differently shaped document.
 function renderSectionHtml(section) {
+  const arabic = value => Number(value || 0).toLocaleString('ar-SA');
   const layout = sectionLayout(section);
   const entries = section.entries || [];
   const prose = section.text ? `<p class="cv-prose">${html(section.text)}</p>` : '';
@@ -205,7 +227,11 @@ function renderSectionHtml(section) {
   } else if (entries.length) {
     body = `<ul>${entries.map(row => `<li>${row.title ? `<strong>${html(row.title)}</strong>` : ''}${row.details ? `<p>${html(row.details)}</p>` : ''}${link(row)}${source(row)}</li>`).join('')}</ul>`;
   }
-  return `<section class="cv-doc-section" data-layout="${layout}"><h3>${html(section.title)}</h3>${prose}${body}</section>`;
+  const preface = [
+    section.programme && `${arabic(section.programme.covered)} من ${arabic(section.programme.total)} ضمن سلسلة واحدة: «${section.programme.label}»`,
+    section.shared?.length && section.shared.join(' · ')
+  ].filter(Boolean).map(line => `<p class="cv-section-shared">${html(line)}</p>`).join('');
+  return `<section class="cv-doc-section" data-layout="${layout}"><h3>${html(section.title)}</h3>${preface}${prose}${body}</section>`;
 }
 
 export function renderCvDocument(doc) {

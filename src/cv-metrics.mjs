@@ -27,65 +27,6 @@ const yearOf = row => {
   return match ? match[1] : '';
 };
 
-const countBy = (rows, pick) => {
-  const counts = new Map();
-  for (const row of rows || []) {
-    const key = pick(row);
-    if (key) counts.set(key, (counts.get(key) || 0) + 1);
-  }
-  return counts;
-};
-
-// Years run oldest to newest so a trajectory reads naturally, and gap years are
-// filled with zero rather than dropped — a silent gap would overstate output.
-function yearSeries(groups) {
-  const present = [...new Set(groups.flatMap(group => [...group.counts.keys()]))].map(Number).filter(Number.isFinite);
-  if (!present.length) return [];
-  const span = [];
-  for (let year = Math.min(...present); year <= Math.max(...present); year += 1) span.push(String(year));
-  return span.length <= 12 ? span : present.map(String).sort((a, b) => Number(a) - Number(b));
-}
-
-export function buildOutputTrend(bundle, parts) {
-  const groups = [
-    { label: 'بحوث وكتب', color: 'primary', counts: countBy(parts.published.concat(parts.books), yearOf) },
-    { label: 'إشراف', color: 'accent', counts: countBy(parts.supervisions, yearOf) },
-    { label: 'مناقشة', color: 'muted', counts: countBy(parts.discussions, yearOf) }
-  ].filter(group => group.counts.size);
-  const years = yearSeries(groups);
-  if (years.length < 2 || !groups.length) return null;
-  const rows = years.map(year => ({
-    label: arabicYear(year),
-    parts: groups.map(group => ({ label: group.label, color: group.color, value: group.counts.get(year) || 0 }))
-  }));
-  const max = Math.max(...rows.map(row => row.parts.reduce((sum, part) => sum + part.value, 0)));
-  if (!max) return null;
-  return {
-    kind: 'stacked-bars', id: 'trend', title: 'الإنتاج العلمي عبر السنوات',
-    note: 'بالسنة الهجرية، حسب السجلات المتاحة.',
-    legend: groups.map(group => ({ label: group.label, color: group.color })),
-    rows, max
-  };
-}
-
-export function buildContribution(parts) {
-  const slices = [
-    { label: 'بحوث منشورة', value: parts.published.length, color: 'primary' },
-    { label: 'كتب وفصول وتحقيقات', value: parts.books.length, color: 'accent' },
-    { label: 'إشراف على الرسائل', value: parts.supervisions.length, color: 'deep' },
-    { label: 'مناقشة الرسائل', value: parts.discussions.length, color: 'muted' },
-    { label: 'تحكيم علمي', value: parts.reviewing.length, color: 'soft' }
-  ].filter(slice => slice.value > 0);
-  const total = slices.reduce((sum, slice) => sum + slice.value, 0);
-  // One slice is a number, not a composition.
-  if (slices.length < 2 || !total) return null;
-  return {
-    kind: 'split', id: 'contribution', title: 'تركيبة الإنتاج العلمي',
-    slices: slices.map(slice => ({ ...slice, share: slice.value / total })),
-    total, totalLabel: 'مخرجًا علميًّا'
-  };
-}
-
 export function buildExpertise(profile) {
   // Expertise durations are the clearest quantitative claim a member makes about
   // themselves, and the flat list wastes a page on them.
@@ -163,14 +104,110 @@ export function sectionLayout(section) {
   return 'list';
 }
 
+// A supervision list repeats its own constants: role, degree, programme and
+// university are identical down all twenty-three rows, and only the student,
+// the scope and the date actually differ. Anything present in *every* entry is
+// a property of the section, so it is stated once under the heading and struck
+// from the rows. Nothing is discarded — the same facts are said in one place.
+const SEPARATOR = ' · ';
+export function hoistSharedDetails(entries) {
+  if (entries.length < 3) return { shared: [], entries };
+  const parts = entries.map(row => clean(row.details).split(SEPARATOR).map(clean).filter(Boolean));
+  if (parts.some(list => !list.length)) return { shared: [], entries };
+  const shared = parts[0].filter(token => parts.every(list => list.includes(token)));
+  // Striking every token would leave rows that say nothing at all.
+  if (!shared.length || parts.some(list => list.every(token => shared.includes(token)))) {
+    return { shared: [], entries };
+  }
+  return {
+    shared,
+    entries: entries.map((row, index) => ({
+      ...row, details: parts[index].filter(token => !shared.includes(token)).join(SEPARATOR)
+    }))
+  };
+}
+
+// Titles vary in wording even inside one supervised series — "تصنيف" against
+// "تصنيفات", "لابن الجوزي" against "عند ابن الجوزي في كتابه" — so matching is
+// done on normalised token runs, never on the literal string.
+const fold = word => word.normalize('NFKC')
+  .replace(/[ً-ٟـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/[ىئ]/g, 'ي').replace(/ة/g, 'ه');
+
+// Folding is for comparison only. The surface spelling is kept alongside it so
+// a detected phrase is shown as the member actually wrote it — a heading
+// reading "التفسيريه" would be the normaliser talking, not the CV.
+const tokenize = title => {
+  const words = clean(title).replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+  return { words, keys: words.map(fold) };
+};
+
+// Words that locate a record inside a series rather than name the series. They
+// are shared by every title precisely because they are scaffolding, so a label
+// must not begin or end on one: "… لابن الجوزي سورة" names nothing.
+const SCOPE = new Set(['من', 'الي', 'في', 'عند', 'سوره', 'الايه', 'ايه', 'بدايه', 'نهايه', 'حتي', 'علي', 'مع', 'و']);
+const trimScope = phrase => {
+  const words = phrase.split(' ');
+  while (words.length && SCOPE.has(fold(words[words.length - 1]))) words.pop();
+  while (words.length && SCOPE.has(fold(words[0]))) words.shift();
+  return words.join(' ');
+};
+
+const runsOf = (keys, minimum = 2) => {
+  const runs = new Map();
+  for (let start = 0; start < keys.length; start += 1) {
+    for (let end = start + minimum; end <= keys.length; end += 1) {
+      const run = keys.slice(start, end).join(' ');
+      if (!runs.has(run)) runs.set(run, start);
+    }
+  }
+  return runs;
+};
+
+// Returns the phrases the titles share, in the order they appear, so a reader
+// sees the series these records belong to rather than twenty-three
+// near-identical lines. Coverage is preferred over length: a shorter phrase
+// true of every record beats a longer one true of three quarters.
+export function detectProgramme(entries, { minimum = 6 } = {}) {
+  if (entries.length < minimum) return null;
+  const parsed = entries.map(row => tokenize(row.title)).filter(item => item.keys.length);
+  if (parsed.length < minimum) return null;
+  const maps = parsed.map(item => runsOf(item.keys));
+
+  for (const threshold of [1, 0.9, 0.8, 0.7]) {
+    const needed = Math.ceil(parsed.length * threshold);
+    const common = [...maps[0].keys()].filter(run => maps.filter(map => map.has(run)).length >= needed);
+    // Keep only maximal runs: "زاد المسير" adds nothing beside "في زاد المسير".
+    const maximal = common.filter(run => !common.some(other => other !== run && other.includes(run)));
+    const placed = maximal.map(run => ({ run, at: maps[0].get(run) })).sort((a, b) => a.at - b.at);
+    if (!placed.length) continue;
+
+    // Render each run from the first title's own words, not the folded keys,
+    // and keep the result a heading: beyond this the shared text is scope
+    // boilerplate ("من الآية … إلى الآية") that describes no series.
+    const BUDGET = 8;
+    let spent = 0;
+    const phrases = [];
+    for (const item of placed) {
+      if (spent >= BUDGET) break;
+      const length = item.run.split(' ').length;
+      phrases.push(parsed[0].words.slice(item.at, item.at + Math.min(length, BUDGET - spent)).join(' '));
+      spent += length;
+    }
+    const label = phrases.map(trimScope).filter(Boolean).join(' … ');
+    if (label.replace(/[\s…]/g, '').length < 14) continue;
+    const covered = maps.filter(map => placed.every(item => map.has(item.run))).length;
+    if (covered < needed) continue;
+    return { label, covered, total: entries.length };
+  }
+  return null;
+}
+
 // `parts` carries the classifications buildCvDocument already computed, so the
 // charts count exactly what the sections list — no second, divergent pass.
 // `parts.expertiseChart` is passed in because the caller needs the same verdict
 // to decide whether the expertise list still earns its place.
 export function buildCvMetrics(bundle, profile, parts) {
   return [
-    buildOutputTrend(bundle, parts),
-    buildContribution(parts),
     parts.expertiseChart ?? buildExpertise(profile),
     buildTeachingLoad(bundle),
     buildCareerTimeline(bundle, profile)
