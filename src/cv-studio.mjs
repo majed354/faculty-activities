@@ -115,9 +115,30 @@ const PDF_ENDPOINT = '/api/cv-pdf';
 // The typeset PDF is produced on the server and arrives as a file. That is what
 // makes this behave the same on a phone: no popup to be blocked, no print
 // dialog to configure, and no browser header stamped across every page.
+// Typst needs the bytes, not the address. A portrait that cannot be fetched —
+// blocked by CORS, moved, or offline — is simply left out, and the masthead
+// lays out without it rather than reserving an empty frame.
+async function withPortrait(doc) {
+  if (!doc.photo) return doc;
+  try {
+    const response = await fetch(doc.photo, { mode: 'cors', cache: 'force-cache' });
+    if (!response.ok) return doc;
+    const blob = await response.blob();
+    if (!blob.size || blob.size > 3 * 1024 * 1024) return doc;
+    const portraitData = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    return { ...doc, portraitData };
+  } catch { return doc; }
+}
+
 async function exportPdf(id) {
-  const documents = selectedDocuments(id);
-  if (!documents.length) return;
+  const selected = selectedDocuments(id);
+  if (!selected.length) return;
+  const documents = await Promise.all(selected.map(withPortrait));
   const name = fileName(documents);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45000);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildCvDocument } from '../src/cv-document.mjs';
 import { buildCvMetrics, sectionLayout } from '../src/cv-metrics.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
-import { createCvPdfHandler, sanitizeDocument, contentDisposition, MAX_DOCUMENTS } from '../src/cv-pdf-service.mjs';
+import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES } from '../src/cv-pdf-service.mjs';
 
 const context = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || ''), yearLabel: value => `${value}هـ` };
 
@@ -148,6 +148,41 @@ test('an Arabic file name survives as filename* and never degrades to "..pdf"', 
   assert.match(contentDisposition('السيرة-الأكاديمية'), /filename\*=UTF-8''%D8/);
   assert.match(contentDisposition('report/2026:draft'), /filename="report2026draft\.pdf"/, 'path and drive separators are stripped');
   assert.ok(!contentDisposition('د.ماجد').includes('filename="..pdf"'));
+});
+
+test('a missing or unusable portrait leaves no gap, and only real images are embedded', async () => {
+  // Smallest well-formed PNG and JPEG headers the decoder should accept.
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]).toString('base64');
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)]).toString('base64');
+
+  assert.equal(decodePortrait(`data:image/png;base64,${png}`).extension, 'png');
+  assert.equal(decodePortrait(jpg).extension, 'jpg');
+  for (const rejected of ['', '   ', 'not-base64-at-all', Buffer.from('<svg onload=alert(1)>').toString('base64'),
+    Buffer.from('%PDF-1.7 fake').toString('base64'), Buffer.from([0x89, 0x50]).toString('base64')]) {
+    assert.equal(decodePortrait(rejected), null, `refused: ${rejected.slice(0, 20)}`);
+  }
+  // An image larger than the ceiling is dropped rather than compiled.
+  assert.equal(decodePortrait(Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(MAX_PORTRAIT_BYTES + 1)]).toString('base64')), null);
+
+  const sources = [];
+  const assetSets = [];
+  const handler = createCvPdfHandler({
+    compile: async (source, assets) => { sources.push(source); assetSets.push(assets); return Buffer.from('%PDF-1.7'); }
+  });
+  const post = body => handler(new Request('https://cv.example/api/cv-pdf', { method: 'POST', body: JSON.stringify(body) }));
+
+  assert.equal((await post({ documents: [{ name: 'بلا صورة' }] })).status, 200);
+  assert.equal(assetSets.at(-1).length, 0, 'no portrait means no asset');
+  assert.ok(sources.at(-1).includes(', none)'), 'the masthead is told there is no portrait');
+
+  assert.equal((await post({ documents: [{ name: 'صورة تالفة', portraitData: '###' }] })).status, 200,
+    'an unusable portrait must not fail the whole document');
+  assert.equal(assetSets.at(-1).length, 0);
+
+  assert.equal((await post({ documents: [{ name: 'مع صورة', portraitData: `data:image/png;base64,${png}` }] })).status, 200);
+  assert.equal(assetSets.at(-1).length, 1);
+  assert.equal(assetSets.at(-1)[0].path, '/portrait-0.png');
+  assert.ok(sources.at(-1).includes('"/portrait-0.png")'), 'the document references the mounted file');
 });
 
 test('metrics count exactly what the sections list', () => {
