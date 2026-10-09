@@ -2,6 +2,7 @@ import { PROFILE_SECTIONS, normalizeProfile, profileChecklist } from './cv-schem
 import { buildCvDocument, renderCvDocument, html } from './cv-document.mjs';
 import { CERTIFICATE_CHOICES, chooseEntry, chooseInterest, draftBiography } from './cv-choices.mjs';
 import { EDITOR_STEPS, CHOICE_IDENTITIES, entryHtml, editorStepsHtml, syncChoices, filterChoices } from './cv-editor.mjs';
+import { chartCsvRows } from './cv-chart-data.mjs';
 import printStyles from '../cv-studio.css';
 
 const ENDPOINT = '/.netlify/functions/cv-profiles';
@@ -197,6 +198,7 @@ function exportCsv() {
   documents.forEach(doc => {
     doc.profileItems.forEach(([label, value]) => rows.push([doc.name, 'التعريف الأكاديمي', label, value, '', '']));
     doc.links.forEach(([label, url]) => rows.push([doc.name, 'الروابط العلمية', label, '', url, '']));
+    rows.push(...chartCsvRows(doc));
     doc.sections.forEach(section => {
       if (section.text) rows.push([doc.name, section.title, '', section.text, '', '']);
       (section.entries || []).forEach(row => rows.push([doc.name, section.title, row.title, row.details, row.url, row.source]));

@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import JSZip from 'jszip';
 import { buildCvDocument } from '../src/cv-document.mjs';
+import { renderCvDocument } from '../src/cv-document.mjs';
+import { createWordBlob } from '../src/cv-word.mjs';
+import { chartCsvRows } from '../src/cv-chart-data.mjs';
 import { buildCvMetrics, sectionLayout } from '../src/cv-metrics.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
 import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES } from '../src/cv-pdf-service.mjs';
@@ -73,6 +77,32 @@ test('an open-ended appointment is not labelled "حتى حتى الآن"', () =>
   assert.ok(labels.includes('حتى ١٤٤٥'), 'a closed term is dated in Arabic-Indic digits');
   assert.ok(labels.includes('حتى الآن'), 'an open term is not prefixed twice');
   assert.ok(!labels.some(label => /حتى\s+حتى/.test(label)));
+});
+
+test('expertise without years or beyond the chart limit remains in every document', () => {
+  const expertise = Array.from({ length: 14 }, (_, index) => ({ domain: `مجال الخبرة ${index + 1}`, years: String(20 - index) }));
+  expertise.push({ domain: 'مجال بلا مدة' });
+  const doc = docFor({ profile: { expertise } });
+  assert.equal(doc.charts.find(chart => chart.id === 'expertise').rows.length, 12);
+  const remaining = doc.sections.find(section => section.title === 'مجالات الخبرة الأكاديمية والإدارية');
+  assert.deepEqual(remaining.entries.map(row => row.title), ['مجال الخبرة 13', 'مجال الخبرة 14', 'مجال بلا مدة']);
+  assert.ok(renderCvDocument(doc).includes('مجال بلا مدة'));
+  assert.ok(renderCvTypst(doc).includes('مجال بلا مدة'));
+  assert.ok(!remaining.entries.find(row => row.title === 'مجال بلا مدة').details.includes('سنة'));
+});
+
+test('Word and CSV retain plotted expertise without restoring the duplicate list', async () => {
+  const doc = docFor({ profile: { expertise: [
+    { domain: 'الجودة', years: '5' }, { domain: 'الاعتماد', years: '4' }, { domain: 'التعلم', years: '6' }, { domain: 'خبرة بلا مدة' }
+  ] } });
+  const zip = await JSZip.loadAsync(await (await createWordBlob([doc])).arrayBuffer());
+  const xml = await zip.file('word/document.xml').async('string');
+  for (const label of ['الجودة', 'الاعتماد', 'التعلم', 'خبرة بلا مدة']) assert.ok(xml.includes(label), label);
+  assert.match(xml, /w:tbl/);
+  assert.ok(!xml.includes('مدة الخبرة:'));
+  const csv = chartCsvRows(doc);
+  assert.ok(csv.some(row => row[2] === 'الجودة' && row[3] === 'سنة: ٥'));
+  assert.ok(csv.some(row => row[2] === 'التعلم' && row[3] === 'سنة: ٦'));
 });
 
 test('section layout separates cited records, bare tags and detailed lists', () => {

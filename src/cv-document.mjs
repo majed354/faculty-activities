@@ -73,11 +73,12 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
 
   if (profile.biography) sections.push({ title: 'النبذة العلمية', text: short && profile.biography.length > 800 ? `${profile.biography.slice(0, 800)}…` : profile.biography });
   // When the chart plots domain against duration, repeating it as a list of
-  // one-line bullets spends a page restating the chart. Only domains carrying
-  // a description the chart cannot show are still worth listing.
+  // one-line bullets spends a page restating the chart. Keep descriptions and
+  // domains absent from the plotted rows, including optional, unfilled years.
   const expertiseChart = buildExpertise(profile);
+  const plottedExpertise = new Set((expertiseChart?.rows || []).map(row => JSON.stringify([row.label, row.value])));
   add('مجالات الخبرة الأكاديمية والإدارية', profile.expertise
-    .filter(row => !expertiseChart || clean(row.description))
+    .filter(row => !plottedExpertise.has(JSON.stringify([row.domain, Number(row.years)])) || clean(row.description) || (internal && clean(row.source)))
     .map(row => entry(row.domain, join([row.years && `مدة الخبرة: ${Number(row.years).toLocaleString('ar-SA')} سنة`, row.description]), row)));
   add('المهارات', profile.skills.map(row => entry(row.name, join([row.level, row.details]), row)));
   add('المؤهلات العلمية', profile.education.map(row => entry(join([row.degree, row.specialization]), join([row.institution, row.country, row.year, row.thesisTitle && `عنوان الرسالة: ${row.thesisTitle}`]), row)));

@@ -1,4 +1,6 @@
-import { Document, Packer, Paragraph, TextRun, ExternalHyperlink, Footer, AlignmentType, PageNumber } from 'docx';
+import { Document, Packer, Paragraph, TextRun, ExternalHyperlink, Footer, AlignmentType, PageNumber, Table, TableRow, TableCell, WidthType } from 'docx';
+import { chartTable } from './cv-chart-data.mjs';
+import { PALETTE } from './cv-metrics.mjs';
 
 const run = (text, options = {}) => new TextRun({ text: String(text || ''), font: 'Arial', size: 23, rightToLeft: /[\u0600-\u06ff]/.test(String(text)), ...options });
 const paragraph = (text, options = {}) => new Paragraph({ children: [run(text)], bidirectional: true, alignment: AlignmentType.RIGHT, widowControl: true, spacing: { after: 100, line: 320 }, ...options });
@@ -15,6 +17,24 @@ export async function createWordBlob(documents) {
       ...(doc.links.length ? [new Paragraph({ children: doc.links.flatMap(([label, url], index) => [...(index ? [run('  |  ')] : []), link(label, url)]), bidirectional: true, alignment: AlignmentType.RIGHT, spacing: { after: 150 } })] : []),
       ...(doc.counts.length ? [paragraph(doc.counts.map(([count, label]) => `${count.toLocaleString('ar-SA')} ${label}`).join('  ·  '))] : [])
     ];
+    for (const chart of doc.charts || []) {
+      const table = chartTable(chart);
+      if (!table.rows.length) continue;
+      children.push(new Paragraph({ children: [run(chart.title, { bold: true, size: 28 })], bidirectional: true, alignment: AlignmentType.RIGHT, keepNext: true, spacing: { before: 200, after: 100 } }));
+      children.push(new Table({
+        width: { size: 9800, type: WidthType.DXA }, visuallyRightToLeft: true,
+        columnWidths: table.headings.map(() => Math.floor(9800 / table.headings.length)),
+        rows: [table.headings, ...table.rows].map((cells, index) => new TableRow({
+          tableHeader: index === 0, cantSplit: true,
+          children: cells.map(text => new TableCell({
+            ...(index === 0 ? { shading: { fill: PALETTE.primary.slice(1) } } : {}),
+            margins: { top: 60, bottom: 60, left: 80, right: 80 },
+            children: [new Paragraph({ children: [run(text, { size: 19, bold: index === 0, ...(index === 0 ? { color: 'FFFFFF' } : {}) })], bidirectional: true, alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 260 } })]
+          }))
+        }))
+      }));
+      if (chart.note) children.push(paragraph(chart.note, { spacing: { before: 60, after: 100 } }));
+    }
     for (const section of doc.sections) {
       children.push(new Paragraph({ style: 'Heading1', children: [run(section.title, { bold: true, size: 28, color: '000000' })], bidirectional: true, alignment: AlignmentType.RIGHT, keepNext: true, spacing: { before: 200, after: 120 } }));
       if (section.text) children.push(...section.text.split('\n').map(text => paragraph(text)));
