@@ -4,7 +4,7 @@ import Papa from 'papaparse';
 
 await rm('public', { recursive: true, force: true });
 await mkdir('public/assets', { recursive: true });
-for (const file of ['index.html', 'add-activity.html', 'app.js', 'style.css', 'style-additions.css', 'teaching.js', 'teaching-styles.css', '_headers', 'cv-studio.css', 'data']) {
+for (const file of ['index.html', 'add-activity.html', 'app.js', 'style.css', 'style-additions.css', 'teaching.js', 'teaching-styles.css', '_headers', 'cv-studio.css', 'CHANGELOG.md', 'README.md', 'data']) {
   await cp(file, `public/${file}`, { recursive: true });
 }
 const csv = await readFile('data/faculty.csv', 'utf8');
