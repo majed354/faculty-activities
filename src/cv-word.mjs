@@ -19,7 +19,7 @@ export async function createWordBlob(documents) {
       children.push(new Paragraph({ style: 'Heading1', children: [run(section.title, { bold: true, size: 28, color: '000000' })], bidirectional: true, alignment: AlignmentType.RIGHT, keepNext: true, spacing: { before: 200, after: 120 } }));
       if (section.text) children.push(...section.text.split('\n').map(text => paragraph(text)));
       for (const entry of section.entries || []) {
-        children.push(new Paragraph({ children: [run(entry.title, { bold: true })], bidirectional: true, alignment: AlignmentType.RIGHT, keepNext: !!(entry.details || entry.url || entry.source), spacing: { before: 100, after: 50 } }));
+        if (entry.title) children.push(new Paragraph({ children: [run(entry.title, { bold: true })], bidirectional: true, alignment: AlignmentType.RIGHT, keepNext: !!(entry.details || entry.url || entry.source), spacing: { before: 100, after: 50 } }));
         if (entry.details) children.push(paragraph(entry.details));
         if (entry.url) children.push(new Paragraph({ children: [link('رابط الوصول', entry.url)], bidirectional: true, alignment: AlignmentType.RIGHT, spacing: { after: 70 } }));
         if (entry.source) children.push(paragraph(`المصدر: ${entry.source}`));

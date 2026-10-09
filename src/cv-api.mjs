@@ -58,7 +58,7 @@ export function createCvHandler({ openStore, roster, getEnv, now = () => Date.no
           return json({ message: 'حفظ سيرة عضو آخر يتطلب كلمة مرور الصلاحيات.' }, 403);
         }
         let profile;
-        try { profile = normalizeProfile(body.profile, { strict: true }); } catch (error) { return json({ message: error.message }, 400); }
+        try { profile = normalizeProfile(body.profile); } catch (error) { return json({ message: error.message }, 400); }
         profile.updatedAt = new Date(now()).toISOString();
         const expected = String(body.expectedEtag || '');
         const store = openStore();

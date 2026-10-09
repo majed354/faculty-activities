@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 import { createCvHandler } from '../src/cv-api.mjs';
-import { normalizeProfile } from '../src/cv-schema.mjs';
+import { PROFILE_SECTIONS, normalizeProfile } from '../src/cv-schema.mjs';
+import { editorStepsHtml } from '../src/cv-editor.mjs';
 import { buildCvDocument, renderCvDocument, mergePublications, groupTeaching } from '../src/cv-document.mjs';
 import { createWordBlob } from '../src/cv-word.mjs';
 import { chooseEntry, chooseInterest, draftBiography, EXPERIENCE_AREAS, searchKey } from '../src/cv-choices.mjs';
@@ -58,15 +59,45 @@ test('saving another member requires privileges and concurrent edits never overw
   assert.equal((await read.json()).records[0].profile.biography, 'نسخة أحدث');
 });
 
-test('server validates profile fields and rejects unsupported URLs and incomplete records', async () => {
+test('server validates supplied values and rejects unsupported URLs and oversized fields', async () => {
   const { request, login } = fixture(); const cookie = await login('100');
   const save = profile => request({ action: 'save', employeeId: '100', profile }, cookie);
   assert.equal((await save({ website: 'javascript:alert(1)' })).status, 400);
   assert.equal((await save({ biography: 'x'.repeat(4001) })).status, 400);
-  assert.equal((await save({ education: [{ degree: 'دكتوراه' }] })).status, 400);
-  const profile = normalizeProfile({ biography: '<script>alert(1)</script>', password: 'never-stored', education: [{ degree: 'دكتوراه', institution: 'جامعة' }] }, { strict: true });
+  const profile = normalizeProfile({ biography: '<script>alert(1)</script>', password: 'never-stored', education: [{ degree: 'دكتوراه' }] });
   assert.equal(profile.password, undefined);
   assert.equal((await save(profile)).status, 200);
+});
+
+test('all supplemental fields may be blank or partially filled and persist in a fresh session', async () => {
+  const { request, login } = fixture();
+  const cookie = await login('100');
+  const empty = await request({ action: 'save', employeeId: '100', profile: {} }, cookie);
+  assert.equal(empty.status, 200);
+  const etag = (await empty.json()).etag;
+  // Every section is saved with only one non-primary field supplied.
+  const field = section => section.fields.find(([key]) => !['domain', 'name', 'title', 'degree', 'role', 'course', 'years', 'url'].includes(key))[0];
+  const profile = Object.fromEntries(PROFILE_SECTIONS.map(section => [section.key, [{ [field(section)]: `تفاصيل ${section.key}` }, {}]]));
+  profile.expertise.push({ domain: 'الجودة والاعتماد الأكاديمي' });
+  profile.education.push({ degree: 'دكتوراه' });
+  const response = await request({ action: 'save', employeeId: '100', expectedEtag: etag, profile }, cookie);
+  assert.equal(response.status, 200);
+  const read = await request(null, await login('100'), '?ids=100');
+  const saved = (await read.json()).records[0].profile;
+  for (const section of PROFILE_SECTIONS) {
+    assert.equal(saved[section.key][0][field(section)], `تفاصيل ${section.key}`);
+    assert.ok(saved[section.key].every(row => Object.values(row).some(Boolean)));
+  }
+  assert.equal(saved.expertise[1].years, '');
+  assert.equal(saved.education[1].institution, '');
+  const markup = editorStepsHtml(bundle.member, saved);
+  assert.doesNotMatch(markup, /\brequired\b| \*/);
+  for (const mode of ['public', 'short', 'internal']) {
+    const rendered = renderCvDocument(buildCvDocument({ ...bundle, profile: saved }, { mode }));
+    assert.match(rendered, /الجودة والاعتماد الأكاديمي/);
+    assert.match(rendered, /دكتوراه/);
+    assert.doesNotMatch(rendered, /مدة الخبرة:|NaN|undefined|<strong><\/strong>/);
+  }
 });
 
 const bundle = {
@@ -95,9 +126,13 @@ test('HTML escapes user text and supplemental metadata enriches rather than dupl
   const pubs = mergePublications([{ title: 'بحث واحد', journal: 'مجلة', year: '1448' }], [{ title: 'بحث واحد', venue: 'مجلة', year: '1448', pages: '١–٢٥', doi: '10.1000/test' }]);
   assert.equal(pubs.length, 1); assert.equal(pubs[0].pages, '١–٢٥');
   assert.equal(mergePublications([{ title: 'أ', doi: '10.1/23' }], [{ title: 'ب', doi: '10.12/3' }]).length, 2);
+  assert.equal(mergePublications([], [{ authors: 'المؤلف الأول' }, { authors: 'المؤلف الثاني' }]).length, 2);
   const doc = buildCvDocument({ ...bundle, profile: { biography: '<img onerror=alert(1)>', notes: 'خاص' } });
   assert.ok(renderCvDocument(doc).includes('&lt;img onerror=alert(1)&gt;'));
   assert.ok(!renderCvDocument(doc).includes('<img onerror'));
+  const partial = buildCvDocument({ ...bundle, profile: { publications: [{ title: 'عمل لم يُستكمل تصنيفه' }, { kind: 'كتاب' }] } });
+  assert.ok(!partial.sections.some(section => section.title === 'البحوث المنشورة'));
+  assert.equal(partial.sections.find(section => section.title === 'إنتاج علمي إضافي').entries[1].title, 'كتاب');
 });
 
 test('teaching lists unique courses across terms and concise CV explicitly labels selections', () => {
@@ -107,6 +142,31 @@ test('teaching lists unique courses across terms and concise CV explicitly label
   const short = buildCvDocument(full, { mode: 'short' });
   const section = short.sections.find(section => section.title.includes('الإشراف'));
   assert.equal(section.entries.length, 5); assert.match(section.title, /مختارات/);
+});
+
+test('teaching exports one compact paragraph of course names without codes or repeated term details', async () => {
+  const teachingDetails = [
+    ...[1447, 1448].flatMap(year => [1, 2].map(term => ({ year, term, courseCode: 'Q101', courseName: 'القراءات (1)', degree: 'بكالوريوس', programLabel: 'برنامج القراءات' }))),
+    { courseCode: 'Q201', courseName: 'القراءات (1)', degree: 'ماجستير', programLabel: 'برنامج آخر' },
+    { courseCode: 'Q102', courseName: 'القراءات (2)' },
+    { courseCode: 'MISSING', courseName: 'MISSING' }
+  ];
+  const profile = { teaching: [{ course: 'القراءات (1)' }, { course: 'التفسير' }, { contribution: 'تطوير أساليب التقويم' }] };
+  const doc = buildCvDocument({ ...bundle, profile, teachingDetails });
+  const section = doc.sections.find(row => row.title === 'الخبرة التدريسية');
+  assert.equal(section.text, 'المقررات ومجالات التدريس: القراءات (1)؛ القراءات (2)؛ التفسير.');
+  assert.equal(section.entries.length, 1);
+  assert.equal(section.entries[0].title, 'تطوير أساليب التقويم');
+  assert.equal(doc.counts.find(([, label]) => label === 'مقررات وخبرات تدريسية')[0], 4);
+  const markup = renderCvDocument(doc);
+  for (const text of ['Q101', 'Q201', 'Q102', 'MISSING', 'برنامج آخر', 'برنامج القراءات']) assert.ok(!markup.includes(text), text);
+  assert.ok(markup.includes('القراءات (2)'));
+  const zip = await JSZip.loadAsync(await (await createWordBlob([doc])).arrayBuffer());
+  const xml = await zip.file('word/document.xml').async('string');
+  assert.ok(xml.includes(section.text));
+  assert.ok(!xml.includes('Q101'));
+  assert.equal(groupTeaching(teachingDetails).length, 2);
+  assert.equal(groupTeaching([{ courseName: 'تفسير آيات الأحكام (2)' }, { courseName: 'تفسير آيات الاحكام (2)' }]).length, 1);
 });
 
 test('Word output is a real editable DOCX with Arabic direction, page numbers and links', async () => {
@@ -130,8 +190,8 @@ test('experience years, skills and certificates persist in fresh sessions and ol
   const read = await request(null, await login('100'), '?ids=100');
   const saved = (await read.json()).records[0].profile;
   assert.equal(saved.expertise[0].years, '5.5'); assert.equal(saved.skills[0].name, 'مهارة مخصصة'); assert.equal(saved.certifications[0].credentialId, 'private-credential');
-  for (const years of ['-1', '0', '81', 'خمسة', 'Infinity']) assert.throws(() => normalizeProfile({ expertise: [{ domain: 'مجال', years }] }, { strict: true }), /سنوات الخبرة/);
-  assert.throws(() => normalizeProfile({ expertise: [{ domain: 'مجال' }] }, { strict: true }), /أكمل/);
+  for (const years of ['-1', '0', '81', 'خمسة', 'Infinity']) assert.throws(() => normalizeProfile({ expertise: [{ domain: 'مجال', years }] }), /سنوات الخبرة/);
+  assert.equal(normalizeProfile({ expertise: [{ domain: 'مجال' }] }).expertise[0].years, '');
 });
 
 test('choices preserve custom text and existing details and biography drafts only use provided facts', () => {
@@ -143,6 +203,8 @@ test('choices preserve custom text and existing details and biography drafts onl
   assert.equal(searchKey('الجودة'), searchKey('الجوده')); assert.ok(EXPERIENCE_AREAS.includes('إعداد الدراسة الذاتية'));
   const draft = draftBiography({ expertise: entries, education: [], researchInterests: '' }, bundle.member, 'جامعة اختبار');
   assert.match(draft, /6 سنة/); assert.ok(!draft.includes('دكتوراه')); assert.ok(!draft.includes('شهادة'));
+  const partial = draftBiography({ expertise: [{ domain: 'الاعتماد والجودة' }] }, bundle.member);
+  assert.match(partial, /الاعتماد والجودة/); assert.doesNotMatch(partial, /سنة|undefined|NaN/);
 });
 
 test('public HTML and Word include experience durations and selected certificates while hiding credential IDs', async () => {

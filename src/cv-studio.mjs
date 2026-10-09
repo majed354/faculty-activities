@@ -192,7 +192,7 @@ function storeDraft() {
 
 function editorHtml(member, profile) {
   return `<div class="modal-content cv-profile-dialog" role="dialog" aria-modal="true" aria-labelledby="cvEditorTitle">
-    <div class="cv-editor-header"><div><p>استكمال السيرة بخطوات سهلة</p><h3 id="cvEditorTitle">${html(member.name)}</h3><p>حدد خبرتك ومدتها، ثم اختر مهاراتك وشهاداتك. الحفظ دائم، والتوليد يشمل جميع سنوات النشاط.</p></div><button type="button" data-close-editor aria-label="إغلاق محرر السيرة">×</button></div>
+    <div class="cv-editor-header"><div><p>جميع حقول استكمال السيرة اختيارية</p><h3 id="cvEditorTitle">${html(member.name)}</h3><p>أدخل ما تشاء واترك الباقي فارغًا، بما فيه سنوات الخبرة، ثم احفظ وولّد الملف. الحفظ دائم، والتوليد يشمل جميع سنوات النشاط.</p></div><button type="button" data-close-editor aria-label="إغلاق محرر السيرة">×</button></div>
     <details class="cv-import-tools"><summary>نسخ البيانات واستعادة المسودة</summary><div class="cv-editor-import"><button type="button" id="cvRestoreDraft" class="hidden">استعادة مسودة هذا الجهاز</button><button type="button" id="cvProfileBackup">تنزيل نسخة من البيانات</button><label class="cv-file-label">استيراد نسخة بيانات<input type="file" id="cvProfileImport" accept=".json,application/json"></label><p>النسخة هنا لاستعادة الحقول. استخدم «حفظ وتوليد الملف» لتنزيل السيرة بصيغة Word أو PDF.</p></div></details>
     <form id="cvProfileForm" novalidate>
       ${editorStepsHtml(member, profile)}
@@ -411,7 +411,7 @@ function validateEditor() {
   if (panel) showStep(Number(panel.dataset.editorPanel));
   let ancestor = invalid.parentElement;
   while (ancestor && ancestor !== byId('cvProfileForm')) { if (ancestor.tagName === 'DETAILS') ancestor.open = true; ancestor = ancestor.parentElement; }
-  byId('cvEditorError').textContent = 'أكمل الحقل المحدد قبل الحفظ. باقي حقول السيرة اختيارية.';
+  byId('cvEditorError').textContent = invalid.validity.valueMissing ? 'أدخل كلمة مرور الصلاحيات لحفظ سيرة عضو آخر.' : 'راجع قيمة الحقل المحدد، أو اتركه فارغًا؛ حقول استكمال السيرة اختيارية.';
   invalid.reportValidity(); invalid.focus(); return false;
 }
 
@@ -425,7 +425,7 @@ async function saveEditor(event) {
   const output = byId('cvEditorOutput').value, mode = byId('cvEditorMode').value;
   let confirmed = false, preparedPopup;
   try {
-    const profile = normalizeProfile(rawForm(), { strict: true });
+    const profile = normalizeProfile(rawForm());
     // Open during the user gesture; opening after the save request would be
     // blocked by browsers. It remains blank until the server confirms saving.
     if (generate && output === 'pdf') preparedPopup = window.open('', '_blank');

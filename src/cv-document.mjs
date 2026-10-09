@@ -4,6 +4,7 @@ export const html = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&
 const clean = value => String(value ?? '').trim();
 const join = (values, separator = ' · ') => values.map(clean).filter(Boolean).join(separator);
 const key = value => clean(value).normalize('NFKC').replace(/[\u064b-\u065f\u0640]/g, '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+const courseKey = value => key(value).replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي');
 const years = entries => [...new Set(entries.map(row => clean(row.year)).filter(Boolean))].sort((a, b) => Number(b) - Number(a));
 const period = row => join([row.start, row.end], ' — ');
 const unique = (entries, identity) => {
@@ -25,7 +26,7 @@ export function mergePublications(automatic, supplemental) {
         const doi = value => clean(value).replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').toLowerCase();
         return doi(row.doi) === doi(existing.doi);
       }
-      return key(existing.title) === key(row.title) && (!row.year || !existing.year || row.year === existing.year) &&
+      return !!key(row.title) && key(existing.title) === key(row.title) && (!row.year || !existing.year || row.year === existing.year) &&
         (!row.venue || !existing.venue || key(row.venue) === key(existing.venue));
     });
     if (index < 0) rows.push({ ...row });
@@ -37,8 +38,12 @@ export function mergePublications(automatic, supplemental) {
 export function groupTeaching(rows) {
   const groups = new Map();
   for (const row of rows) {
-    const id = join([row.courseCode || row.courseName, row.degree, row.programLabel], '|');
-    const current = groups.get(id) || { title: join([row.courseCode, row.courseName], ' — '), degree: row.degree, program: row.programLabel, years: new Set() };
+    const title = clean(row.courseName);
+    // Codes sometimes substitute for missing names in the source. Omit those
+    // from the CV, and list each named course once across terms and programs.
+    const id = courseKey(title);
+    if (!id || id === courseKey(row.courseCode) || title === 'غير محدد') continue;
+    const current = groups.get(id) || { title, years: new Set() };
     if (row.year) current.years.add(String(row.year));
     groups.set(id, current);
   }
@@ -54,11 +59,14 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   const yearLabel = context.yearLabel || (value => clean(value));
   const sections = [];
   const add = (title, entries, extra = {}) => {
+    entries = entries.filter(row => row.title || row.details || row.url || row.source);
     const total = entries.length;
     if (total) sections.push({ title: short && total > 5 ? `${title} — مختارات (${5} من ${total})` : title, entries: short ? entries.slice(0, 5) : entries, ...extra });
     else if (internal) sections.push({ title, text: 'لا توجد سجلات ضمن نطاق النشاط المختار أو لم تُستكمل بيانات هذا المحور.' });
   };
-  const entry = (title, details = '', row = {}) => ({ title: clean(title), details: clean(details), url: safeUrl(row.url), source: internal ? clean(row.source) : '' });
+  // A partially completed record still exports its supplied facts. Promote
+  // details when the primary field was left blank, without adding placeholders.
+  const entry = (title, details = '', row = {}) => ({ title: clean(title) || clean(details), details: clean(title) ? clean(details) : '', url: safeUrl(row.url), source: internal ? clean(row.source) : '' });
 
   if (profile.biography) sections.push({ title: 'النبذة العلمية', text: short && profile.biography.length > 800 ? `${profile.biography.slice(0, 800)}…` : profile.biography });
   add('مجالات الخبرة الأكاديمية والإدارية', profile.expertise.map(row => entry(row.domain, join([row.years && `مدة الخبرة: ${Number(row.years).toLocaleString('ar-SA')} سنة`, row.description]), row)));
@@ -71,19 +79,22 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
 
   const publications = mergePublications(bundle.publications || [], profile.publications);
   const bibliography = row => entry(row.title, join([
-    row.authors, row.venue, row.date ? formatDate(row.date) : row.year,
+    unclassified(row) ? row.kind : '', row.authors, row.venue, row.date ? formatDate(row.date) : row.year,
     row.volume && `المجلد ${row.volume}`, row.issue && `العدد ${row.issue}`, row.pages && `ص ${row.pages}`,
     row.status !== 'منشور' ? row.status : '', row.doi && `DOI: ${row.doi}`
   ]), { ...row, url: row.url || (row.doi && `https://doi.org/${row.doi.replace(/^https?:\/\/doi\.org\//i, '')}`) });
   const isBook = row => /كتاب|كتب|فصل|تحقيق|book|chapter/i.test(row.kind || '');
   const isPending = row => /مقبول|قيد|مقدم|submitted|review|accepted|forthcoming/i.test(row.status || '');
-  add('البحوث المنشورة', publications.filter(row => !isBook(row) && !isPending(row)).map(bibliography));
+  const unclassified = row => !clean(row.kind) || !clean(row.status);
+  const publishedResearch = publications.filter(row => !unclassified(row) && !isBook(row) && !isPending(row));
+  add('البحوث المنشورة', publishedResearch.map(bibliography));
   const books = [
-    ...publications.filter(row => isBook(row) && !isPending(row)).map(bibliography),
+    ...publications.filter(row => !unclassified(row) && isBook(row) && !isPending(row)).map(bibliography),
     ...(bundle.researchSupport || []).filter(row => row._cvType === 'تأليف كتب').map(row => entry(row.title, join([row.location, formatDate(row.date)]), row))
   ];
   add('الكتب والفصول والتحقيقات', unique(books, row => key(row.title) + key(row.details)));
-  add('إنتاج علمي مقبول للنشر أو قيد العمل', publications.filter(isPending).map(bibliography));
+  add('إنتاج علمي مقبول للنشر أو قيد العمل', publications.filter(row => !unclassified(row) && isPending(row)).map(bibliography));
+  add('إنتاج علمي إضافي', publications.filter(unclassified).map(bibliography));
 
   const thesisEntry = row => entry(row.title, join([
     row.role, row.degreeLabel || row.type, row.programLabel || row.specialization,
@@ -100,10 +111,16 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   add('الإشراف على بحوث الطلاب', (bundle.researchSupport || []).filter(row => row._cvType === 'بحوث الطلاب').map(row => entry(row.title, join([row.location, formatDate(row.date)]), row)));
 
   const courses = groupTeaching(bundle.teachingDetails || []);
-  add('الخبرة التدريسية', [
-    ...courses.map(row => entry(row.title, join([row.degree, row.program, row.years.map(yearLabel).join('، ')]))),
-    ...profile.teaching.map(row => entry(row.course, join([row.degree, row.program, row.years, row.contribution]), row))
-  ]);
+  const courseNames = unique([...courses.map(row => row.title), ...profile.teaching.map(row => clean(row.course)).filter(Boolean)], courseKey);
+  const teachingDetails = profile.teaching.map(row => entry(row.course, join([row.degree, row.program, row.years, row.contribution]), row))
+    .filter((row, index) => (row.title || row.url || row.source) && (!profile.teaching[index].course || row.details || row.url || row.source));
+  if (courseNames.length || teachingDetails.length) {
+    sections.push({
+      title: short && teachingDetails.length > 5 ? `الخبرة التدريسية — تفاصيل مختارة (5 من ${teachingDetails.length})` : 'الخبرة التدريسية',
+      ...(courseNames.length ? { text: `المقررات ومجالات التدريس: ${courseNames.join('؛ ')}.` } : {}),
+      ...(teachingDetails.length ? { entries: short ? teachingDetails.slice(0, 5) : teachingDetails } : {})
+    });
+  } else add('الخبرة التدريسية', []);
   if (profile.teachingStatement) sections.push({ title: 'تطوير التدريس والإرشاد الأكاديمي', text: profile.teachingStatement });
   add('المؤتمرات والفعاليات العلمية', (bundle.scientificEvents || []).map(row => entry(row.title, join([row.category, row.participation_type, row.location, formatDate(row.date)]), row)));
   add('الخدمة الأكاديمية والعضويات والتحكيم', [
@@ -150,9 +167,9 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     updatedAt: profile.updatedAt,
     generatedAt: options.generatedAt || new Date().toISOString(),
     counts: [
-      [publications.filter(row => !isBook(row) && !isPending(row)).length, 'بحوث منشورة'],
+      [publishedResearch.length, 'بحوث منشورة'],
       [books.length, 'كتب وفصول وتحقيقات'], [supervisions.length, 'إشرافات'],
-      [discussions.length, 'مناقشات'], [courses.length + profile.teaching.length, 'مقررات وخبرات تدريسية']
+      [discussions.length, 'مناقشات'], [courseNames.length + profile.teaching.filter(row => !row.course && join([row.degree, row.program, row.years, row.contribution])).length, 'مقررات وخبرات تدريسية']
     ].filter(([count]) => count > 0)
   };
 }
@@ -167,7 +184,7 @@ export function renderCvDocument(doc) {
     <dl class="cv-doc-profile">${doc.profileItems.map(([label, value]) => `<div><dt>${html(label)}</dt><dd>${label === 'البريد الجامعي' && /^[^\s@]+@[^\s@]+$/.test(value) ? `<a href="mailto:${html(value)}" dir="ltr">${html(value)}</a>` : html(value)}</dd></div>`).join('')}</dl>
     ${doc.links.length ? `<nav class="cv-doc-links" aria-label="الروابط العلمية">${doc.links.map(([label, url]) => `<a href="${html(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${html(label)}</a>`).join('')}</nav>` : ''}
     ${doc.counts.length ? `<div class="cv-doc-counts">${doc.counts.map(([count, label]) => `<span><b>${count.toLocaleString('ar-SA')}</b> ${html(label)}</span>`).join('')}</div>` : ''}
-    ${doc.sections.map(section => `<section class="cv-doc-section"><h3>${html(section.title)}</h3>${section.text ? `<p class="cv-prose">${html(section.text)}</p>` : ''}${section.entries?.length ? `<ul>${section.entries.map(row => `<li><strong>${html(row.title)}</strong>${row.details ? `<p>${html(row.details)}</p>` : ''}${row.url ? `<a href="${html(row.url)}" target="_blank" rel="noopener noreferrer">رابط الوصول</a>` : ''}${row.source ? `<p class="cv-source">المصدر: ${html(row.source)}</p>` : ''}</li>`).join('')}</ul>` : ''}</section>`).join('')}
+    ${doc.sections.map(section => `<section class="cv-doc-section"><h3>${html(section.title)}</h3>${section.text ? `<p class="cv-prose">${html(section.text)}</p>` : ''}${section.entries?.length ? `<ul>${section.entries.map(row => `<li>${row.title ? `<strong>${html(row.title)}</strong>` : ''}${row.details ? `<p>${html(row.details)}</p>` : ''}${row.url ? `<a href="${html(row.url)}" target="_blank" rel="noopener noreferrer">رابط الوصول</a>` : ''}${row.source ? `<p class="cv-source">المصدر: ${html(row.source)}</p>` : ''}</li>`).join('')}</ul>` : ''}</section>`).join('')}
     <footer class="cv-doc-footer"><p>${html(doc.coverage)}</p><p>${doc.updatedAt ? `آخر تحديث لبيانات السيرة: ${html(date(doc.updatedAt))} · ` : ''}تاريخ إعداد الملف: ${html(date(doc.generatedAt))}</p></footer>
   </article>`;
 }

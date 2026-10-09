@@ -92,8 +92,8 @@ export function draftBiography(profile, member, university = '') {
   ];
   const education = profile.education?.filter(row => row.degree && row.institution) || [];
   if (education.length) pieces.push(`المؤهلات العلمية: ${education.map(row => [row.degree, row.specialization, `من ${row.institution}`].filter(Boolean).join(' ')).join('؛ ')}`);
-  const expertise = profile.expertise?.filter(row => row.domain && row.years) || [];
-  if (expertise.length) pieces.push(`تشمل مجالات الخبرة: ${expertise.map(row => `${row.domain} (${row.years} سنة)`).join('، ')}`);
+  const expertise = profile.expertise?.filter(row => row.domain) || [];
+  if (expertise.length) pieces.push(`تشمل مجالات الخبرة: ${expertise.map(row => row.domain + (row.years ? ` (${row.years} سنة)` : '')).join('، ')}`);
   if (profile.researchInterests) pieces.push(`الاهتمامات البحثية: ${profile.researchInterests.split('\n').filter(Boolean).join('، ')}`);
   return pieces.filter(Boolean).join('. ') + '.';
 }

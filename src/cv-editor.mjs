@@ -17,8 +17,8 @@ function fieldHtml([key, label, max, type], value, attributes = '') {
 
 export function entryHtml(section, entry = {}) {
   return `<div class="cv-edit-entry"><div class="cv-entry-fields">${[...section.fields, ['source', 'المصدر أو مرجع الإثبات (داخلي)', 1200]].map(([key, label, max]) => fieldHtml(
-    [key, `${label}${section.required.includes(key) ? ' *' : ''}`, max, key === 'url' ? 'url' : 'text'], entry[key],
-    `data-entry-field="${key}" ${section.required.includes(key) ? 'required' : ''} ${FIELD_CHOICES[`${section.key}.${key}`] ? `list="cvChoices-${section.key}-${key}"` : ''} ${section.key === 'expertise' && key === 'years' ? 'inputmode="decimal" placeholder="مثال: 5 أو 0.5"' : ''}`
+    [key, label, max, key === 'url' ? 'url' : 'text'], entry[key],
+    `data-entry-field="${key}" ${FIELD_CHOICES[`${section.key}.${key}`] ? `list="cvChoices-${section.key}-${key}"` : ''} ${section.key === 'expertise' && key === 'years' ? 'inputmode="decimal" placeholder="مثال: 5 أو 0.5 (اختياري)"' : ''}`
   )).join('')}</div><div class="cv-entry-actions"><button type="button" data-move-entry="up" aria-label="نقل السجل لأعلى">نقل لأعلى</button><button type="button" data-move-entry="down" aria-label="نقل السجل لأسفل">نقل لأسفل</button><button type="button" class="cv-remove-entry" data-remove-entry aria-label="حذف هذا السجل من المسودة">حذف السجل</button></div></div>`;
 }
 
@@ -26,10 +26,10 @@ function choicesHtml(section, entries) {
   const identity = CHOICE_IDENTITIES[section];
   const years = section === 'expertise';
   return `<div class="cv-choice-picker" data-choice-section="${section}"><label class="cv-choice-search-label">ابحث في القائمة<input type="search" data-choice-search placeholder="اكتب لتصفية الخيارات…" autocomplete="off"></label>
-    <p class="cv-choice-help">${years ? 'حدد المجالات التي لديك خبرة فعلية فيها، وأدخل عدد السنوات بجوار كل مجال. يمكن إدخال 0.5 لنصف سنة. الفترات قد تتداخل بين المجالات، ولذلك لا تُجمع مددها.' : section === 'certifications' ? 'اختر الشهادات التي حصلت عليها فقط. أضف اسم الإصدار أو المستوى والجهة والتاريخ في التفاصيل إن توفرت.' : 'اختر بندًا واحدًا أو أكثر. يمكنك إضافة بند غير موجود وتعديل تفاصيل الاختيارات.'}</p>
+    <p class="cv-choice-help">${years ? 'حدد المجالات التي لديك خبرة فعلية فيها. عدد السنوات اختياري، ويمكن إدخال 0.5 لنصف سنة. الفترات قد تتداخل بين المجالات، ولذلك لا تُجمع مددها.' : section === 'certifications' ? 'اختر الشهادات التي حصلت عليها فقط. أضف اسم الإصدار أو المستوى والجهة والتاريخ في التفاصيل إن توفرت.' : 'اختر بندًا واحدًا أو أكثر. يمكنك إضافة بند غير موجود وتعديل تفاصيل الاختيارات.'}</p>
     ${choiceGroups(section).map((group, index) => `<details class="cv-choice-group" ${index === 0 || entries.some(row => group.options.includes(row[identity])) ? 'open' : ''}><summary>${html(group.name)}</summary><div class="cv-choice-options">${group.options.map(value => {
       const selected = entries.find(row => row[identity] === value);
-      return `<div class="cv-choice-option" data-choice-row="${html(value)}"><label class="cv-choice-check"><input type="checkbox" data-choice-value="${html(value)}" ${selected ? 'checked' : ''}><span>${html(value)}</span></label>${years ? `<label class="cv-choice-duration"><span>عدد السنوات</span><input type="text" inputmode="decimal" maxlength="80" data-choice-years="${html(value)}" aria-label="سنوات الخبرة في ${html(value)}" placeholder="السنوات" value="${html(selected?.years || '')}" ${selected ? 'required' : 'disabled'}></label>` : ''}</div>`;
+      return `<div class="cv-choice-option" data-choice-row="${html(value)}"><label class="cv-choice-check"><input type="checkbox" data-choice-value="${html(value)}" ${selected ? 'checked' : ''}><span>${html(value)}</span></label>${years ? `<label class="cv-choice-duration"><span>السنوات (اختياري)</span><input type="text" inputmode="decimal" maxlength="80" data-choice-years="${html(value)}" aria-label="سنوات الخبرة في ${html(value)} (اختياري)" placeholder="اختياري" value="${html(selected?.years || '')}" ${selected ? '' : 'disabled'}></label>` : ''}</div>`;
     }).join('')}</div></details>`).join('')}
     <p class="cv-choice-empty" hidden>لا توجد خيارات مطابقة. يمكنك إضافة خيار غير موجود أسفل القائمة.</p></div>`;
 }
@@ -70,7 +70,7 @@ export function syncChoices(form, profile) {
       const row = (profile[section] || []).find(row => row[identity] === checkbox.dataset.choiceValue);
       checkbox.checked = !!row;
       const years = checkbox.closest('.cv-choice-option').querySelector('[data-choice-years]');
-      if (years) { years.disabled = !row; years.required = !!row; years.value = row?.years || ''; }
+      if (years) { years.disabled = !row; years.value = row?.years || ''; }
     });
   });
   const interests = String(profile.researchInterests || '').split('\n').map(row => row.trim());
