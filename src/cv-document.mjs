@@ -1,5 +1,5 @@
 import { normalizeProfile, safeUrl } from './cv-schema.mjs';
-import { buildCvMetrics, buildExpertise, sectionLayout, hoistSharedDetails, detectProgramme } from './cv-metrics.mjs';
+import { buildCvMetrics, buildExpertise, sectionLayout, hoistSharedDetails, detectProgramme, classifyThesis } from './cv-metrics.mjs';
 import { renderCvCharts } from './cv-charts.mjs';
 
 import { html } from './cv-html.mjs';
@@ -134,11 +134,17 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   };
   const supervisions = (bundle.theses || []).filter(row => /مشرف/.test(row.role || ''));
   const discussions = (bundle.theses || []).filter(row => !/مشرف/.test(row.role || ''));
-  add('الإشراف على الرسائل والمشروعات', supervisions.map(thesisEntry));
-  add('مناقشة الرسائل والمشروعات', [
-    ...discussions.map(thesisEntry),
-    ...(bundle.researchSupport || []).filter(row => row._cvType === 'مناقشة خارجية').map(row => entry(row.title, join([row.location, row.participation_type, formatDate(row.date)]), row))
-  ]);
+  // The published CV carries supervision as counts by degree, charted above:
+  // twenty-three near-identical project titles crowd out the research record
+  // and say less than the totals do. The internal report is the evidence
+  // document, so it keeps every record.
+  if (internal) {
+    add('الإشراف على الرسائل والمشروعات', supervisions.map(thesisEntry));
+    add('مناقشة الرسائل والمشروعات', [
+      ...discussions.map(thesisEntry),
+      ...(bundle.researchSupport || []).filter(row => row._cvType === 'مناقشة خارجية').map(row => entry(row.title, join([row.location, row.participation_type, formatDate(row.date)]), row))
+    ]);
+  }
   add('الإشراف على بحوث الطلاب', (bundle.researchSupport || []).filter(row => row._cvType === 'بحوث الطلاب').map(row => entry(row.title, join([row.location, formatDate(row.date)]), row)));
 
   const courses = groupTeaching(bundle.teachingDetails || []);
@@ -200,10 +206,16 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     }),
     updatedAt: profile.updatedAt,
     generatedAt: options.generatedAt || new Date().toISOString(),
+    // Supervising a doctorate is not the same claim as supervising a master's
+    // project, so the tiles separate them rather than reporting one total.
     counts: [
       [publishedResearch.length, 'بحوث منشورة'],
-      [books.length, 'كتب وفصول وتحقيقات'], [supervisions.length, 'إشرافات'],
-      [discussions.length, 'مناقشات'], [courseNames.length + profile.teaching.filter(row => !row.course && join([row.degree, row.program, row.years, row.contribution])).length, 'مقررات وخبرات تدريسية']
+      [books.length, 'كتب وفصول وتحقيقات'],
+      [supervisions.filter(row => classifyThesis(row) === 'phd').length, 'إشراف دكتوراه'],
+      [supervisions.filter(row => /^masters/.test(classifyThesis(row))).length, 'إشراف ماجستير'],
+      [supervisions.filter(row => classifyThesis(row) === 'unspecified').length, 'إشراف غير محدد الدرجة'],
+      [discussions.length, 'مناقشات'],
+      [courseNames.length + profile.teaching.filter(row => !row.course && join([row.degree, row.program, row.years, row.contribution])).length, 'مقررات وخبرات تدريسية']
     ].filter(([count]) => count > 0)
   };
 }

@@ -5,7 +5,7 @@ import { buildCvDocument } from '../src/cv-document.mjs';
 import { renderCvDocument } from '../src/cv-document.mjs';
 import { createWordBlob } from '../src/cv-word.mjs';
 import { chartCsvRows } from '../src/cv-chart-data.mjs';
-import { buildCvMetrics, sectionLayout } from '../src/cv-metrics.mjs';
+import { buildCvMetrics, sectionLayout, classifyThesis } from '../src/cv-metrics.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
 import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES } from '../src/cv-pdf-service.mjs';
 
@@ -20,6 +20,7 @@ const bundle = (overrides = {}) => ({
 });
 
 const docFor = overrides => buildCvDocument(bundle(overrides), { mode: 'public', generatedAt: '2026-10-09T10:00:00Z' }, context);
+const internalDocFor = overrides => buildCvDocument(bundle(overrides), { mode: 'internal', generatedAt: '2026-10-09T10:00:00Z' }, context);
 
 test('a chart appears only when the data can carry it, and years stay labels', () => {
   const sparse = docFor({ teachingDetails: [{ courseName: 'التفسير', year: '1446', students: '30' }] });
@@ -227,7 +228,13 @@ test('the tiles are not restated as a chart, and no chart plots a defence calend
   // calendar rather than output.
   assert.equal(doc.charts.find(chart => chart.id === 'trend'), undefined);
   assert.deepEqual(doc.counts.map(([, label]) => label),
-    ['بحوث منشورة', 'كتب وفصول وتحقيقات', 'إشرافات', 'مناقشات']);
+    ['بحوث منشورة', 'كتب وفصول وتحقيقات', 'إشراف غير محدد الدرجة', 'مناقشات'],
+    'a record with no recorded degree is counted under its own heading, not assigned one');
+  // Supervision survives as a chart split by degree, not as a list of titles.
+  const split = doc.charts.find(chart => chart.id === 'supervision');
+  assert.ok(split, 'the counts the list used to carry are charted instead');
+  assert.equal(doc.sections.find(s => /الإشراف على الرسائل/.test(s.title)), undefined,
+    'the published CV does not list supervised titles');
 });
 
 test('buildCvMetrics reuses the expertise verdict it was handed', () => {
@@ -246,7 +253,7 @@ test('a repetitive axis states its constants once and names the series it belong
     defense_date: '١٤٤٨هـ',
     title: `${index % 2 ? 'تصنيف' : 'تصنيفات'} الاختلافات التفسيرية في زاد المسير لابن الجوزي (سورة ${SURAS[index]} من الآية ${index * 10} إلى الآية ${index * 10 + 9})`
   }));
-  const section = docFor({ theses }).sections.find(item => item.title === 'الإشراف على الرسائل والمشروعات');
+  const section = internalDocFor({ theses }).sections.find(item => item.title === 'الإشراف على الرسائل والمشروعات');
 
   // The degree is not printed twice because the programme name already carries it.
   assert.ok(!section.shared.includes('مشروع بحثي'), 'the bare degree is dropped beside "مشروع بحثي دراسات قرآنية"');
@@ -261,7 +268,7 @@ test('a repetitive axis states its constants once and names the series it belong
   assert.ok(!section.programme.label.includes('التفسيريه'));
 
   // Both renderers surface it, and no record is lost.
-  for (const output of [renderCvDocument(docFor({ theses })), renderCvTypst(docFor({ theses }))]) {
+  for (const output of [renderCvDocument(internalDocFor({ theses })), renderCvTypst(internalDocFor({ theses }))]) {
     assert.ok(output.includes('مشرف رئيسي'), 'the hoisted line is printed');
     for (const row of theses) assert.ok(output.includes(row.student_name), `kept ${row.student_name}`);
   }
@@ -271,11 +278,11 @@ test('unrelated records are never forced into a series, and short axes keep thei
   const unrelated = ['أثر السياق في الترجيح', 'قواعد التفسير دراسة تأصيلية', 'الصرفة ووجوه الإعجاز',
     'أسباب الجهل بالعلم', 'مناهج المفسرين المعاصرين', 'القراءة الحداثية للقرآن', 'الوقف والابتداء']
     .map((title, index) => ({ role: 'مشرف', title, student_name: `ط${index}`, status: 'منجزة' }));
-  const section = docFor({ theses: unrelated }).sections.find(item => item.title === 'الإشراف على الرسائل والمشروعات');
+  const section = internalDocFor({ theses: unrelated }).sections.find(item => item.title === 'الإشراف على الرسائل والمشروعات');
   assert.equal(section.programme, undefined, 'titles sharing nothing must not be given a common heading');
 
   // Two records are too few to hoist: the saving would not pay for the indirection.
-  const pair = docFor({ theses: [
+  const pair = internalDocFor({ theses: [
     { role: 'مشرف', title: 'أ', university: 'جامعة الطائف', student_name: 'ط١' },
     { role: 'مشرف', title: 'ب', university: 'جامعة الطائف', student_name: 'ط٢' }
   ] }).sections.find(item => item.title === 'الإشراف على الرسائل والمشروعات');
@@ -304,4 +311,55 @@ test('the service forwards the hoisted line and series label it is sent', async 
   assert.ok(source.includes('مشرف رئيسي'), 'the hoisted constants survive sanitising');
   assert.ok(source.includes('الاختلافات التفسيرية'), 'the series label survives sanitising');
   assert.ok(source.includes('٢٣'), 'the coverage count is rendered in Arabic-Indic digits');
+});
+
+test('a doctorate, a thesis-track master and a research project are counted apart', () => {
+  // app.js owns the rule: a master's is examined as رسالة علمية only before
+  // 1441 or inside العقيدة, and stamps the verdict on degreeLabel.
+  assert.equal(classifyThesis({ type: 'دكتوراه', degreeLabel: 'رسالة علمية' }), 'phd');
+  assert.equal(classifyThesis({ type: 'ماجستير', degreeLabel: 'مشروع بحثي' }), 'masters-project');
+  assert.equal(classifyThesis({ type: 'ماجستير', degreeLabel: 'رسالة علمية' }), 'masters-thesis');
+  assert.equal(classifyThesis({}), 'unspecified', 'an unrecorded degree is never assigned one');
+
+  const doc = docFor({ theses: [
+    { role: 'مشرف', type: 'دكتوراه', degreeLabel: 'رسالة علمية', title: 'د١' },
+    { role: 'مشرف', type: 'ماجستير', degreeLabel: 'مشروع بحثي', title: 'م١' },
+    { role: 'مشرف', type: 'ماجستير', degreeLabel: 'مشروع بحثي', title: 'م٢' },
+    { role: 'مناقش', type: 'ماجستير', degreeLabel: 'رسالة علمية', title: 'ر١' }
+  ] });
+  const chart = doc.charts.find(item => item.id === 'supervision');
+  const group = label => chart.groups.find(item => item.label === label);
+  assert.equal(group('رسالة دكتوراه').bars.find(bar => bar.label === 'إشراف').value, 1);
+  assert.equal(group('مشروع بحثي (ماجستير)').bars.find(bar => bar.label === 'إشراف').value, 2);
+  assert.equal(group('رسالة ماجستير').bars.find(bar => bar.label === 'مناقشة').value, 1);
+  // Every record lands in exactly one group: the total must reconcile.
+  assert.equal(chart.groups.flatMap(g => g.bars).reduce((sum, bar) => sum + bar.value, 0), 4);
+  assert.match(chart.note, /٤/);
+
+  // The tiles must agree with the chart rather than lump the degrees together.
+  const tile = label => doc.counts.find(([, text]) => text === label)?.[0] || 0;
+  assert.equal(tile('إشراف دكتوراه'), 1);
+  assert.equal(tile('إشراف ماجستير'), 2);
+
+  // And the grouped chart must survive sanitising, like every other field.
+  const sanitized = sanitizeDocument(JSON.parse(JSON.stringify(doc)));
+  const kept = sanitized.charts.find(item => item.id === 'supervision');
+  assert.equal(kept.groups.length, chart.groups.length);
+  assert.ok(renderCvTypst(doc).includes('groupbars'), 'the PDF draws it');
+});
+
+test('equal values draw equal bars regardless of their labels', () => {
+  // A wider label ("مناقشة") once narrowed its own track, so two bars of the
+  // same value rendered at different lengths — the chart distorted its data.
+  const doc = docFor({ theses: [
+    { role: 'مشرف', type: 'دكتوراه', degreeLabel: 'رسالة علمية', title: 'د١' },
+    { role: 'مناقش', type: 'دكتوراه', degreeLabel: 'رسالة علمية', title: 'د٢' }
+  ] });
+  const source = renderCvTypst(doc);
+  // The value column is a fixed width, so the proportional track is identical.
+  assert.match(source, /columns: \(1fr, 16pt\)/);
+  assert.ok(!/#b\.at\(1\) #b\.at\(3\)/.test(source), 'the role is carried by colour and legend, not by a variable-width label');
+  const chart = doc.charts.find(item => item.id === 'supervision');
+  const [supervised, examined] = chart.groups[0].bars.map(bar => bar.value);
+  assert.equal(supervised, examined, 'the fixture itself must hold equal values for this to test anything');
 });

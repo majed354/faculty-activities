@@ -112,8 +112,14 @@ test('publication CV hides internal fields and empty sections while retaining pe
   const doc = buildCvDocument(bundle, { mode: 'public' });
   const markup = renderCvDocument(doc);
   assert.ok(doc.sections.some(section => section.title === 'المؤهلات العلمية'));
-  assert.ok(doc.sections.some(section => section.title === 'الإشراف على الرسائل والمشروعات'));
   assert.ok(!doc.sections.some(section => section.title === 'البحوث المنشورة'));
+  // Supervision reaches the published CV as counts by degree. The titles are
+  // near-identical and crowd out the research record; the internal report is
+  // the evidence document and still lists every one of them.
+  assert.ok(!doc.sections.some(section => section.title === 'الإشراف على الرسائل والمشروعات'));
+  assert.ok(doc.charts.some(chart => chart.id === 'supervision'), 'the counts are charted instead');
+  assert.ok(buildCvDocument(bundle, { mode: 'internal' }).sections
+    .some(section => section.title === 'الإشراف على الرسائل والمشروعات'), 'the evidence document keeps the list');
   for (const privateText of ['النقاط', 'الرقم الوظيفي', 'الجنسية', 'مراقبة اختبار', 'ملاحظة داخلية لا تنشر', 'لا توجد سجلات']) assert.ok(!markup.includes(privateText), privateText);
   const limited = buildCvDocument({ ...bundle, scopeYear: 1448, scopeYearLabel: '١٤٤٨هـ' }, { mode: 'public' });
   assert.ok(limited.sections.some(section => section.title === 'المؤهلات العلمية'));
@@ -139,9 +145,11 @@ test('HTML escapes user text and supplemental metadata enriches rather than dupl
 test('teaching lists unique courses across terms and concise CV explicitly labels selections', () => {
   const rows = [1447, 1448].flatMap(year => [1, 2].map(term => ({ year, term, courseCode: 'Q1', courseName: 'القراءات', degree: 'بكالوريوس', programLabel: 'برنامج القراءات' })));
   assert.equal(groupTeaching(rows).length, 1); assert.equal(groupTeaching(rows)[0].years.length, 2);
-  const full = { ...bundle, theses: Array.from({ length: 9 }, (_, index) => ({ ...bundle.theses[0], title: `مشروع ${index}` })) };
+  // Supervision is charted rather than listed, so the selection cap is checked
+  // on an axis the concise CV still carries.
+  const full = { ...bundle, publications: Array.from({ length: 9 }, (_, index) => ({ title: `بحث ${index}`, year: '1447', kind: 'بحث', status: 'منشور' })) };
   const short = buildCvDocument(full, { mode: 'short' });
-  const section = short.sections.find(section => section.title.includes('الإشراف'));
+  const section = short.sections.find(section => section.title.includes('البحوث المنشورة'));
   assert.equal(section.entries.length, 5); assert.match(section.title, /مختارات/);
 });
 
