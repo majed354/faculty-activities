@@ -2,6 +2,7 @@ import { PROFILE_SECTIONS, normalizeProfile, profileChecklist } from './cv-schem
 import { buildCvDocument, renderCvDocument, html } from './cv-document.mjs';
 import { CERTIFICATE_CHOICES, chooseEntry, chooseInterest, draftBiography } from './cv-choices.mjs';
 import { EDITOR_STEPS, CHOICE_IDENTITIES, entryHtml, editorStepsHtml, syncChoices, filterChoices } from './cv-editor.mjs';
+import { chartCsvRows } from './cv-chart-data.mjs';
 import printStyles from '../cv-studio.css';
 
 const ENDPOINT = '/.netlify/functions/cv-profiles';
@@ -110,12 +111,68 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
-function exportPdf(id, preparedPopup) {
-  const documents = selectedDocuments(id);
-  if (!documents.length) return;
-  const popup = preparedPopup || window.open('', '_blank');
-  if (!popup) { alert('اسمح بفتح نافذة الطباعة لتنزيل PDF.'); return; }
-  popup.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(fileName(documents))}</title><style>${printStyles}</style></head><body class="cv-print-body"><div class="cv-print-hint">اختر «حفظ بصيغة PDF» من نافذة الطباعة. النص والروابط قابلان للنسخ والبحث.</div>${documents.map(renderCvDocument).join('')}</body></html>`);
+const PDF_ENDPOINT = '/api/cv-pdf';
+
+// The typeset PDF is produced on the server and arrives as a file. That is what
+// makes this behave the same on a phone: no popup to be blocked, no print
+// dialog to configure, and no browser header stamped across every page.
+// Typst needs the bytes, not the address. A portrait that cannot be fetched —
+// blocked by CORS, moved, or offline — is simply left out, and the masthead
+// lays out without it rather than reserving an empty frame.
+async function withPortrait(doc) {
+  if (!doc.photo) return doc;
+  try {
+    const response = await fetch(doc.photo, { mode: 'cors', cache: 'force-cache' });
+    if (!response.ok) return doc;
+    const blob = await response.blob();
+    if (!blob.size || blob.size > 3 * 1024 * 1024) return doc;
+    const portraitData = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    return { ...doc, portraitData };
+  } catch { return doc; }
+}
+
+async function exportPdf(id) {
+  const selected = selectedDocuments(id);
+  if (!selected.length) return;
+  const documents = await Promise.all(selected.map(withPortrait));
+  const name = fileName(documents);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  try {
+    message('جارٍ توليد ملف PDF…');
+    const response = await fetch(PDF_ENDPOINT, {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documents, fileName: name }),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      let detail = 'تعذر توليد الملف.';
+      try { detail = (await response.json()).message || detail; } catch { /* Not every failure returns JSON. */ }
+      throw new Error(detail);
+    }
+    const blob = await response.blob();
+    if (!blob.size) throw new Error('وصل ملف فارغ من الخادم');
+    download(blob, `${name}.pdf`);
+    message('تم تنزيل ملف PDF.');
+  } catch (error) {
+    // Printing still yields a usable file offline or while the service is
+    // down, so the member is never left without a way to export.
+    const reason = error.name === 'AbortError' ? 'انتهت مهلة توليد الملف' : error.message;
+    message(`${reason}. سيُفتح بديل الطباعة.`, true);
+    printFallback(documents, name);
+  } finally { clearTimeout(timeout); }
+}
+
+function printFallback(documents, name) {
+  const popup = window.open('', '_blank');
+  if (!popup) { alert('تعذر توليد PDF. اسمح بفتح نافذة الطباعة لاستخدام البديل.'); return; }
+  popup.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(name)}</title><style>${printStyles}</style></head><body class="cv-print-body"><div class="cv-print-hint">اختر «حفظ بصيغة PDF» من نافذة الطباعة، وأوقف خيار ترويسة الصفحة وتذييلها.</div>${documents.map(renderCvDocument).join('')}</body></html>`);
   popup.addEventListener('load', async () => {
     await popup.document.fonts.ready;
     await Promise.all([...popup.document.images].map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = () => { img.remove(); resolve(); }; setTimeout(resolve, 4000); })));
@@ -141,6 +198,7 @@ function exportCsv() {
   documents.forEach(doc => {
     doc.profileItems.forEach(([label, value]) => rows.push([doc.name, 'التعريف الأكاديمي', label, value, '', '']));
     doc.links.forEach(([label, url]) => rows.push([doc.name, 'الروابط العلمية', label, '', url, '']));
+    rows.push(...chartCsvRows(doc));
     doc.sections.forEach(section => {
       if (section.text) rows.push([doc.name, section.title, '', section.text, '', '']);
       (section.entries || []).forEach(row => rows.push([doc.name, section.title, row.title, row.details, row.url, row.source]));
@@ -197,7 +255,7 @@ function editorHtml(member, profile) {
     <form id="cvProfileForm" novalidate>
       ${editorStepsHtml(member, profile)}
       ${editing.id !== getLoggedInEmployeeId() ? '<label class="cv-privilege-field">كلمة مرور الصلاحيات لحفظ سيرة عضو آخر<input type="password" id="cvEditorPrivilege" autocomplete="off" required></label>' : ''}
-      <div class="cv-editor-footer"><div class="cv-step-controls"><button type="button" data-step-back disabled>السابق</button><p id="cvStepStatus" role="status">الخطوة ١ من ٤</p><button type="button" data-step-next>التالي</button></div><div class="cv-save-status"><p id="cvEditorSaveState">${profile.updatedAt ? 'التعديلات تُعتمد عند الحفظ.' : 'أكمل ما ينطبق عليك فقط.'}</p><p class="cv-form-error" id="cvEditorError" role="alert"></p></div><details class="cv-generation-settings"><summary id="cvEditorOutputLabel">إعدادات الملف: Word</summary><div class="cv-generation-options"><label>نوع السيرة<select id="cvEditorMode"><option value="public">كاملة للنشر</option><option value="short">مختصرة</option><option value="internal">تقرير داخلي</option></select></label><label>الملف بعد الحفظ<select id="cvEditorOutput"><option value="word">Word قابل للتحرير</option><option value="pdf">PDF عبر الطباعة</option><option value="preview">معاينة فقط</option></select></label></div></details><div class="cv-dialog-actions"><button type="button" id="cvReloadProfile">النسخة المحفوظة</button><button type="submit" id="cvProfileSave">حفظ</button><button type="submit" id="cvProfileSaveGenerate" data-save-generate class="cv-primary">حفظ وتوليد Word</button></div></div>
+      <div class="cv-editor-footer"><div class="cv-step-controls"><button type="button" data-step-back disabled>السابق</button><p id="cvStepStatus" role="status">الخطوة ١ من ٤</p><button type="button" data-step-next>التالي</button></div><div class="cv-save-status"><p id="cvEditorSaveState">${profile.updatedAt ? 'التعديلات تُعتمد عند الحفظ.' : 'أكمل ما ينطبق عليك فقط.'}</p><p class="cv-form-error" id="cvEditorError" role="alert"></p></div><details class="cv-generation-settings"><summary id="cvEditorOutputLabel">إعدادات الملف: Word</summary><div class="cv-generation-options"><label>نوع السيرة<select id="cvEditorMode"><option value="public">كاملة للنشر</option><option value="short">مختصرة</option><option value="internal">تقرير داخلي</option></select></label><label>الملف بعد الحفظ<select id="cvEditorOutput"><option value="word">Word قابل للتحرير</option><option value="pdf">PDF احترافي بالمخططات</option><option value="preview">معاينة فقط</option></select></label></div></details><div class="cv-dialog-actions"><button type="button" id="cvReloadProfile">النسخة المحفوظة</button><button type="submit" id="cvProfileSave">حفظ</button><button type="submit" id="cvProfileSaveGenerate" data-save-generate class="cv-primary">حفظ وتوليد Word</button></div></div>
     </form></div>`;
 }
 
@@ -423,12 +481,9 @@ async function saveEditor(event) {
   const button = byId('cvProfileSave'), errorLabel = byId('cvEditorError');
   const generate = !!event.submitter?.hasAttribute('data-save-generate');
   const output = byId('cvEditorOutput').value, mode = byId('cvEditorMode').value;
-  let confirmed = false, preparedPopup;
+  let confirmed = false;
   try {
     const profile = normalizeProfile(rawForm());
-    // Open during the user gesture; opening after the save request would be
-    // blocked by browsers. It remains blank until the server confirms saving.
-    if (generate && output === 'pdf') preparedPopup = window.open('', '_blank');
     state.saving = true;
     byId('cvProfileModal').querySelectorAll('input,textarea,select,button').forEach(element => { element.disabled = true; });
     button.disabled = true; button.textContent = 'جارٍ الحفظ…'; errorLabel.textContent = '';
@@ -441,7 +496,7 @@ async function saveEditor(event) {
     byId('cvEditorPrivilege') && (byId('cvEditorPrivilege').value = '');
     if (cvStudioReport) renderCvStudioResults();
     message('تم حفظ البيانات الأكاديمية وتحديث المعاينة.');
-  } catch (error) { preparedPopup?.close(); errorLabel.textContent = error.message; storeDraft(); }
+  } catch (error) { errorLabel.textContent = error.message; storeDraft(); }
   finally {
     state.saving = false;
     byId('cvProfileModal').querySelectorAll('input,textarea,select,button').forEach(element => { element.disabled = false; });
@@ -454,12 +509,9 @@ async function saveEditor(event) {
       closeEditor();
       byId('cvStudioResults').scrollIntoView({ behavior: 'smooth', block: 'start' });
       if (output === 'word') await exportWord(state.id, true);
-      if (output === 'pdf') {
-        if (!preparedPopup) throw new Error('اسمح بفتح نافذة الطباعة، ثم اضغط PDF بجوار السيرة.');
-        exportPdf(state.id, preparedPopup);
-      }
+      if (output === 'pdf') await exportPdf(state.id);
       if (output === 'preview') message('تم الحفظ الدائم وتوليد معاينة السيرة من جميع سنوات النشاط.');
-    } catch (error) { preparedPopup?.close(); message(`تم حفظ البيانات، لكن تعذر توليد الملف: ${error.message}`, true); }
+    } catch (error) { message(`تم حفظ البيانات، لكن تعذر توليد الملف: ${error.message}`, true); }
   }
 }
 

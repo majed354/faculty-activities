@@ -1,6 +1,9 @@
 import { normalizeProfile, safeUrl } from './cv-schema.mjs';
+import { buildCvMetrics, buildExpertise, sectionLayout } from './cv-metrics.mjs';
+import { renderCvCharts } from './cv-charts.mjs';
 
-export const html = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+import { html } from './cv-html.mjs';
+export { html };
 const clean = value => String(value ?? '').trim();
 const join = (values, separator = ' · ') => values.map(clean).filter(Boolean).join(separator);
 const key = value => clean(value).normalize('NFKC').replace(/[\u064b-\u065f\u0640]/g, '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
@@ -69,7 +72,14 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   const entry = (title, details = '', row = {}) => ({ title: clean(title) || clean(details), details: clean(title) ? clean(details) : '', url: safeUrl(row.url), source: internal ? clean(row.source) : '' });
 
   if (profile.biography) sections.push({ title: 'النبذة العلمية', text: short && profile.biography.length > 800 ? `${profile.biography.slice(0, 800)}…` : profile.biography });
-  add('مجالات الخبرة الأكاديمية والإدارية', profile.expertise.map(row => entry(row.domain, join([row.years && `مدة الخبرة: ${Number(row.years).toLocaleString('ar-SA')} سنة`, row.description]), row)));
+  // When the chart plots domain against duration, repeating it as a list of
+  // one-line bullets spends a page restating the chart. Keep descriptions and
+  // domains absent from the plotted rows, including optional, unfilled years.
+  const expertiseChart = buildExpertise(profile);
+  const plottedExpertise = new Set((expertiseChart?.rows || []).map(row => JSON.stringify([row.label, row.value])));
+  add('مجالات الخبرة الأكاديمية والإدارية', profile.expertise
+    .filter(row => !plottedExpertise.has(JSON.stringify([row.domain, Number(row.years)])) || clean(row.description) || (internal && clean(row.source)))
+    .map(row => entry(row.domain, join([row.years && `مدة الخبرة: ${Number(row.years).toLocaleString('ar-SA')} سنة`, row.description]), row)));
   add('المهارات', profile.skills.map(row => entry(row.name, join([row.level, row.details]), row)));
   add('المؤهلات العلمية', profile.education.map(row => entry(join([row.degree, row.specialization]), join([row.institution, row.country, row.year, row.thesisTitle && `عنوان الرسالة: ${row.thesisTitle}`]), row)));
   add('المسار الوظيفي', profile.appointments.map(row => entry(row.role, join([row.institution, period(row)]), row)));
@@ -88,9 +98,11 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   const unclassified = row => !clean(row.kind) || !clean(row.status);
   const publishedResearch = publications.filter(row => !unclassified(row) && !isBook(row) && !isPending(row));
   add('البحوث المنشورة', publishedResearch.map(bibliography));
+  const bookPublications = publications.filter(row => !unclassified(row) && isBook(row) && !isPending(row));
+  const authoredBooks = (bundle.researchSupport || []).filter(row => row._cvType === 'تأليف كتب');
   const books = [
-    ...publications.filter(row => !unclassified(row) && isBook(row) && !isPending(row)).map(bibliography),
-    ...(bundle.researchSupport || []).filter(row => row._cvType === 'تأليف كتب').map(row => entry(row.title, join([row.location, formatDate(row.date)]), row))
+    ...bookPublications.map(bibliography),
+    ...authoredBooks.map(row => entry(row.title, join([row.location, formatDate(row.date)]), row))
   ];
   add('الكتب والفصول والتحقيقات', unique(books, row => key(row.title) + key(row.details)));
   add('إنتاج علمي مقبول للنشر أو قيد العمل', publications.filter(row => !unclassified(row) && isPending(row)).map(bibliography));
@@ -164,6 +176,13 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     profileItems: profileItems.filter(([, value]) => clean(value)),
     links: [['الصفحة الجامعية / الشخصية', profile.website], ['ORCID', profile.orcid], ['Google Scholar', profile.scholar], ['Scopus', profile.scopus]].filter(([, url]) => safeUrl(url)),
     sections, coverage,
+    // The short CV trades detail for brevity, so it keeps the charts: they carry
+    // the record in less space than the lists they stand in for.
+    charts: buildCvMetrics(bundle, profile, {
+      published: publishedResearch, books: [...bookPublications, ...authoredBooks],
+      supervisions, discussions,
+      reviewing: (bundle.researchSupport || []).filter(row => row._cvType === 'تحكيم علمي'), expertiseChart
+    }),
     updatedAt: profile.updatedAt,
     generatedAt: options.generatedAt || new Date().toISOString(),
     counts: [
@@ -172,6 +191,27 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
       [discussions.length, 'مناقشات'], [courseNames.length + profile.teaching.filter(row => !row.course && join([row.degree, row.program, row.years, row.contribution])).length, 'مقررات وخبرات تدريسية']
     ].filter(([count]) => count > 0)
   };
+}
+
+// Mirrors the layout the PDF chooses for the same section, so the preview is a
+// preview rather than a second, differently shaped document.
+function renderSectionHtml(section) {
+  const layout = sectionLayout(section);
+  const entries = section.entries || [];
+  const prose = section.text ? `<p class="cv-prose">${html(section.text)}</p>` : '';
+  const link = row => row.url ? `<a href="${html(row.url)}" target="_blank" rel="noopener noreferrer">رابط الوصول</a>` : '';
+  const source = row => row.source ? `<p class="cv-source">المصدر: ${html(row.source)}</p>` : '';
+  let body = '';
+  if (layout === 'cited') {
+    body = `<ol class="cv-cited">${entries.map(row => `<li>${row.title ? `<strong>${html(row.title)}</strong>` : ''}${row.details ? `<p>${html(row.details)}</p>` : ''}${link(row)}${source(row)}</li>`).join('')}</ol>`;
+  } else if (layout === 'tags') {
+    body = `<ul class="cv-tags">${entries.map(row => `<li>${html(row.title)}</li>`).join('')}</ul>`;
+  } else if (layout === 'columns') {
+    body = `<ul class="cv-columns">${entries.map(row => `<li>${html(row.title)}</li>`).join('')}</ul>`;
+  } else if (entries.length) {
+    body = `<ul>${entries.map(row => `<li>${row.title ? `<strong>${html(row.title)}</strong>` : ''}${row.details ? `<p>${html(row.details)}</p>` : ''}${link(row)}${source(row)}</li>`).join('')}</ul>`;
+  }
+  return `<section class="cv-doc-section" data-layout="${layout}"><h3>${html(section.title)}</h3>${prose}${body}</section>`;
 }
 
 export function renderCvDocument(doc) {
@@ -184,7 +224,8 @@ export function renderCvDocument(doc) {
     <dl class="cv-doc-profile">${doc.profileItems.map(([label, value]) => `<div><dt>${html(label)}</dt><dd>${label === 'البريد الجامعي' && /^[^\s@]+@[^\s@]+$/.test(value) ? `<a href="mailto:${html(value)}" dir="ltr">${html(value)}</a>` : html(value)}</dd></div>`).join('')}</dl>
     ${doc.links.length ? `<nav class="cv-doc-links" aria-label="الروابط العلمية">${doc.links.map(([label, url]) => `<a href="${html(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${html(label)}</a>`).join('')}</nav>` : ''}
     ${doc.counts.length ? `<div class="cv-doc-counts">${doc.counts.map(([count, label]) => `<span><b>${count.toLocaleString('ar-SA')}</b> ${html(label)}</span>`).join('')}</div>` : ''}
-    ${doc.sections.map(section => `<section class="cv-doc-section"><h3>${html(section.title)}</h3>${section.text ? `<p class="cv-prose">${html(section.text)}</p>` : ''}${section.entries?.length ? `<ul>${section.entries.map(row => `<li>${row.title ? `<strong>${html(row.title)}</strong>` : ''}${row.details ? `<p>${html(row.details)}</p>` : ''}${row.url ? `<a href="${html(row.url)}" target="_blank" rel="noopener noreferrer">رابط الوصول</a>` : ''}${row.source ? `<p class="cv-source">المصدر: ${html(row.source)}</p>` : ''}</li>`).join('')}</ul>` : ''}</section>`).join('')}
+    ${renderCvCharts(doc.charts)}
+    ${doc.sections.map(renderSectionHtml).join('')}
     <footer class="cv-doc-footer"><p>${html(doc.coverage)}</p><p>${doc.updatedAt ? `آخر تحديث لبيانات السيرة: ${html(date(doc.updatedAt))} · ` : ''}تاريخ إعداد الملف: ${html(date(doc.generatedAt))}</p></footer>
   </article>`;
 }

@@ -6,6 +6,11 @@
 [functions]
   node_bundler = "esbuild"
 
+# The Typst compiler is a native addon: esbuild cannot inline a .node binary,
+# so it ships as a real dependency alongside the bundled function.
+[functions."cv-pdf"]
+  external_node_modules = ["@myriaddreamin/typst-ts-node-compiler"]
+
 [dev]
   publish = "public"
   framework = "#static"

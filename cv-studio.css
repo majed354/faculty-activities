@@ -159,9 +159,58 @@
   .cv-editor-footer .cv-dialog-actions button { padding: 8px 9px; font-size: .76rem; }
   .cv-step-nav { margin-bottom: 10px; }
 }
+/* Charts and section layouts mirror the typeset PDF so the preview shows what
+   will actually be generated. Colours come from src/cv-metrics.mjs. */
+.cv-chart-grid { display: grid; gap: 12px; margin: 16px 0; }
+.cv-chart { margin: 0; padding: 12px 14px; background: #f2f8f6; border: 1px solid #d8e4e2; border-radius: 6px; break-inside: avoid; }
+.cv-chart figcaption { font-weight: 700; color: #0d3f3d; font-size: .95rem; margin-bottom: 10px; }
+.cv-chart-note { margin: 8px 0 0; font-size: .72rem; color: #5f7678; }
+.cv-chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: .72rem; color: #5f7678; }
+.cv-chart-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-left: 5px; vertical-align: -1px; }
+
+/* The document is already RTL, so `row` starts at the right margin and the
+   oldest year lands there, matching the PDF. `row-reverse` would undo that. */
+.cv-trend { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+.cv-trend-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.cv-trend-stack { flex: 1; width: 100%; max-width: 34px; display: flex; flex-direction: column; justify-content: flex-end; }
+.cv-trend-part { display: block; width: 100%; }
+.cv-trend-part:first-child { border-radius: 2px 2px 0 0; }
+.cv-trend-label { margin-top: 6px; font-size: .68rem; color: #5f7678; white-space: nowrap; }
+
+.cv-split { display: flex; height: 14px; border-radius: 3px; overflow: hidden; border: 1px solid #d8e4e2; }
+.cv-split span { display: block; height: 100%; }
+
+.cv-bars { display: grid; gap: 6px; }
+.cv-bar-row { display: grid; grid-template-columns: minmax(90px, 32%) 1fr auto; gap: 10px; align-items: center; }
+.cv-bar-label { font-size: .8rem; }
+.cv-bar-track { height: 9px; background: #fff; border: 1px solid #d8e4e2; border-radius: 2px; overflow: hidden; }
+.cv-bar-fill { display: block; height: 100%; background: #176b68; }
+.cv-bar-value { font-size: .72rem; color: #5f7678; white-space: nowrap; }
+
+.cv-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cv-timeline li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: baseline; }
+.cv-timeline-year { font-size: .78rem; font-weight: 700; color: #176b68; white-space: nowrap; }
+.cv-timeline-body strong { display: block; font-size: .86rem; }
+.cv-timeline-body span { font-size: .74rem; color: #5f7678; }
+
+.cv-doc-section .cv-tags { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }
+.cv-doc-section .cv-tags li { background: #f2f8f6; border: 1px solid #d8e4e2; border-radius: 3px; padding: 4px 9px; font-size: .82rem; }
+.cv-doc-section .cv-columns { columns: 2; column-gap: 24px; padding-right: 18px; margin: 0; }
+.cv-doc-section .cv-columns li { break-inside: avoid; }
+.cv-doc-section .cv-cited { padding-right: 20px; margin: 0; }
+.cv-doc-section .cv-cited li { margin-bottom: 7px; break-inside: avoid; }
+
+@media (max-width: 640px) {
+  .cv-bar-row { grid-template-columns: 1fr auto; }
+  .cv-bar-track { grid-column: 1 / -1; }
+  .cv-doc-section .cv-columns { columns: 1; }
+  .cv-trend { height: 96px; }
+}
+
 @page { size: A4; margin: 16mm 17mm 18mm; @bottom-center { content: "صفحة " counter(page); font-family: Arial, sans-serif; font-size: 9pt; color: #63787c; } }
 @media print {
   .cv-print-hint { display: none; }
+  .cv-chart, .cv-timeline li, .cv-bar-row { break-inside: avoid; }
   .cv-print-body .cv-document { margin: 0; padding: 0; max-width: none; font-size: 10.5pt; }
   .cv-print-body .cv-document + .cv-document { break-before: page; }
   .cv-doc-header, .cv-doc-profile, .cv-doc-counts { break-inside: avoid; }
