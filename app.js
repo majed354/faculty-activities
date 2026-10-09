@@ -47,6 +47,7 @@ let analyticsStudioChart = null;
 let analyticsStudioTeachingRowsCache = null;
 let analyticsStudioInitialized = false;
 let cvStudioReport = null;
+let cvStudioReportRequestId = 0;
 let cvStudioInitialized = false;
 let cvStudioSetupPromise = null;
 let memberModalState = { memberId: null, selectedYear: 'all', token: 0 };
@@ -7077,6 +7078,7 @@ function setupAnalyticsStudio() {
 // استوديو السير الذاتية
 // ========================================
 function cvStudioClearReport() {
+    cvStudioReportRequestId += 1;
     cvStudioReport = null;
     document.getElementById('cvStudioResults')?.classList.add('hidden');
 }
@@ -7224,13 +7226,12 @@ function renderCvStudioMemberPicker(resetSelections = false) {
                     const meta = [analyticsStudioText(member.rank), selectedDepartment === 'all' ? analyticsStudioText(member.department) : '', branch].filter(Boolean).join(' · ');
                     const searchText = normalizeSearchText(`${member.name || ''} ${member.id || ''}`);
                     return `
-                        <label class="analytics-studio-multi-option cv-studio-member-option" data-search="${escapeHtml(searchText)}">
-                            <input type="checkbox" value="${escapeHtml(id)}" ${selectedIds.includes(id) ? 'checked' : ''}>
-                            <span>
-                                <strong>${escapeHtml(label)}</strong>
-                                <small>${escapeHtml(meta || id)}</small>
-                            </span>
-                        </label>
+                        <div class="analytics-studio-multi-option cv-studio-member-option" data-search="${escapeHtml(searchText)}">
+                            <input type="checkbox" value="${escapeHtml(id)}" aria-label="${escapeHtml(`تحديد ${label} للعرض الجماعي`)}" ${selectedIds.includes(id) ? 'checked' : ''}>
+                            <button type="button" class="cv-studio-member-open" data-cv-open="${escapeHtml(id)}" aria-label="${escapeHtml(`فتح سيرة ${label}`)}">
+                                <span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(meta || id)}</small></span>
+                            </button>
+                        </div>
                     `;
                 }).join('')}
             </div>
@@ -7269,9 +7270,24 @@ function renderCvStudioMemberPicker(resetSelections = false) {
         });
     });
 
+    wrapper.querySelectorAll('[data-cv-open]').forEach(button => {
+        button.addEventListener('click', () => {
+            if (!cvStudioInitialized) return;
+            checkboxes.forEach(input => { input.checked = input.value === button.dataset.cvOpen; });
+            syncState(true);
+            runCvStudioReport({ useCachedProfiles: true, focusResult: true });
+        });
+    });
+
     searchInput?.addEventListener('input', () => {
         filterCvStudioMemberOptions(searchInput.value, true);
         syncState(true);
+    });
+
+    searchInput?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        const matches = wrapper.querySelectorAll('.cv-studio-member-option:not(.hidden) [data-cv-open]');
+        if (matches.length === 1) { event.preventDefault(); matches[0].click(); }
     });
 
     filterCvStudioMemberOptions(searchInput.value);
@@ -7600,7 +7616,7 @@ function buildCvStudioExportMatrix() {
     return [headers, ...rows];
 }
 
-function renderCvStudioResults() {
+function renderCvStudioResults({ immediate = false } = {}) {
     if (!cvStudioReport) return;
     const results = document.getElementById('cvStudioResults');
     const caption = document.getElementById('cvStudioCaption');
@@ -7617,12 +7633,15 @@ function renderCvStudioResults() {
     `).join('');
     container.innerHTML = cvStudioReport.members.map(buildCvStudioMemberCardHtml).join('');
     results.classList.remove('hidden');
-    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const scrollTarget = immediate ? container.querySelector('.cv-academic-card') || results : results;
+    const stickyHeight = [...document.querySelectorAll('.main-header, .main-nav')]
+        .filter(element => ['sticky', 'fixed'].includes(getComputedStyle(element).position))
+        .reduce((height, element) => height + element.getBoundingClientRect().height, 0);
+    scrollTarget.style.scrollMarginTop = `${stickyHeight + 12}px`;
+    scrollTarget.scrollIntoView({ behavior: immediate ? 'instant' : 'smooth', block: 'start' });
 }
 
-async function runCvStudioReport() {
-    await ensureTeachingLoaded().catch(() => null);
-
+async function runCvStudioReport({ useCachedProfiles = false, focusResult = false } = {}) {
     const selectedYear = 'all';
     const selectedDepartment = getCvStudioSelectedDepartmentValue();
     const memberRows = getCvStudioFacultyRowsInScope(selectedYear, selectedDepartment);
@@ -7636,19 +7655,25 @@ async function runCvStudioReport() {
     }
 
     const runButton = document.getElementById('cvStudioRunBtn');
-    if (runButton?.dataset.busy === 'true') return;
-    if (runButton) { runButton.dataset.busy = 'true'; updateCvStudioRunButton(); }
+    const requestId = ++cvStudioReportRequestId;
+    if (runButton) { runButton.dataset.busy = 'true'; runButton.dataset.busyRequestId = String(requestId); updateCvStudioRunButton(); }
     try {
-        await AcademicCv.load(effectiveMemberIds, true);
+        await ensureTeachingLoaded().catch(() => null);
+        if (requestId !== cvStudioReportRequestId) return;
+        await AcademicCv.load(effectiveMemberIds, !useCachedProfiles);
     } catch (error) {
-        alert(error.message);
+        if (requestId === cvStudioReportRequestId) alert(error.message);
         return;
     } finally {
-        if (runButton) { delete runButton.dataset.busy; updateCvStudioRunButton(); }
+        if (runButton?.dataset.busyRequestId === String(requestId)) {
+            delete runButton.dataset.busy;
+            delete runButton.dataset.busyRequestId;
+            updateCvStudioRunButton();
+        }
     }
 
     const currentIds = getCvStudioSelectedMemberIds();
-    if (selectedDepartment !== getCvStudioSelectedDepartmentValue() || currentIds.length !== effectiveMemberIds.length || currentIds.some(id => !effectiveMemberIds.includes(id))) return;
+    if (requestId !== cvStudioReportRequestId || selectedDepartment !== getCvStudioSelectedDepartmentValue() || currentIds.length !== effectiveMemberIds.length || currentIds.some(id => !effectiveMemberIds.includes(id))) return;
 
     const members = effectiveMemberIds
         .map(memberId => buildCvStudioMemberBundle(memberId, selectedYear))
@@ -7671,7 +7696,8 @@ async function runCvStudioReport() {
         filenameBase: analyticsStudioSafeFileName(`السير-الذاتية-${getCvStudioDepartmentLabel(selectedDepartment)}`)
     };
     cvStudioReport.caption = `السير الذاتية | ${cvStudioReport.departmentLabel} | عدد الأعضاء: ${formatArabicDigits(members.length)}`;
-    renderCvStudioResults();
+    renderCvStudioResults({ immediate: focusResult });
+    if (focusResult) document.getElementById('cvStudioResults')?.focus({ preventScroll: true });
 }
 
 function exportCvStudioCSV() {

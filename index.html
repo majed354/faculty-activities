@@ -19,7 +19,7 @@
     
     <!-- Styles -->
     <link rel="stylesheet" href="style.css?v=20260910-promotions-v1">
-    <link rel="stylesheet" href="style-additions.css?v=20261009-cv-picker-v1">
+    <link rel="stylesheet" href="style-additions.css?v=20261009-cv-open-v1">
     <link rel="stylesheet" href="teaching-styles.css">
     <link rel="stylesheet" href="cv-studio.css?v=20261009-cv-picker-v1">
 </head>
@@ -862,7 +862,7 @@
             <div class="section-header">
                 <h2>🗂️ السير الذاتية</h2>
             </div>
-            <p class="cv-studio-intro">اختر القسم والعضو لعرض سيرته وتنزيلها. تُجمع إنجازاته من جميع السنوات تلقائيًا، ويمكنه استكمال بياناته اختياريًا وحفظها على الموقع من «استكمال سيرتي».</p>
+            <p class="cv-studio-intro">ابحث عن العضو واضغط اسمه لفتح سيرته وتنزيلها. تُجمع إنجازاته من جميع السنوات تلقائيًا، ويمكنه استكمال بياناته اختياريًا وحفظها على الموقع من «استكمال سيرتي».</p>
 
             <div class="analytics-studio-card cv-studio-builder">
                 <div class="analytics-studio-grid cv-studio-selection-grid">
@@ -873,7 +873,7 @@
                     <div class="analytics-studio-field cv-studio-members-field">
                         <label for="cvStudioMemberSearch">الأعضاء</label>
                         <div class="analytics-studio-multi-select" id="cvStudioMemberSelect"></div>
-                        <p class="cv-studio-field-note" id="cvStudioMemberHelp">كتابة الاسم تحدد النتائج المطابقة فقط. يمكنك تحديد أكثر من عضو، ومسح البحث يُبقي اختيارك الحالي.</p>
+                        <p class="cv-studio-field-note" id="cvStudioMemberHelp">اضغط اسم العضو لفتح سيرته مباشرة. مربعات الاختيار لعرض عدة سير؛ والبحث يحدد المطابقين فقط.</p>
                     </div>
                     <div class="cv-output-options">
                         <label for="cvStudioMode">نوع الملف<select id="cvStudioMode"><option value="public">سيرة كاملة للنشر</option><option value="short">سيرة مختصرة — مختارات من الإنجازات</option><option value="internal">تقرير أكاديمي داخلي</option></select></label>
@@ -888,7 +888,7 @@
                 <div class="cv-storage-bar"><p id="cvStudioStorageStatus" role="status" aria-live="polite">جارٍ الاتصال ببيانات السير المحفوظة…</p><button type="button" id="cvStudioActivate" class="hidden">تفعيل حفظ السير</button></div>
             </div>
 
-            <div class="cv-studio-results hidden" id="cvStudioResults">
+            <div class="cv-studio-results hidden" id="cvStudioResults" role="region" aria-label="نتائج السير الأكاديمية" tabindex="-1">
                 <div id="cvStudioExportArea">
                     <div class="analytics-studio-card">
                         <div class="analytics-studio-results-head">
@@ -1056,7 +1056,7 @@
         });
     });
     </script>
-    <script src="app.js?v=20261009-cv-picker-v1"></script>
+    <script src="app.js?v=20261009-cv-open-v1"></script>
     <script src="assets/cv-studio.js?v=20261009-cv-picker-v1"></script>
     <script src="teaching.js"></script>
 

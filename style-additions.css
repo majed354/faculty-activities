@@ -3529,6 +3529,31 @@ button.stats-detail-item {
     border-color: rgba(198, 169, 98, 0.18);
 }
 
+.cv-studio-member-open {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: right;
+    cursor: pointer;
+}
+
+.cv-studio-member-open:hover strong {
+    color: var(--gold-400);
+}
+
+.cv-studio-member-open:focus-visible {
+    outline: 2px solid var(--gold-400);
+    outline-offset: 4px;
+}
+
 .cv-studio-field-note {
     margin: 8px 0 0;
     color: var(--gray-400);
