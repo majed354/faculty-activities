@@ -66,7 +66,7 @@ async function load(ids, force = false) {
     result.records.forEach(record => profiles.set(record.employeeId, record));
   }
   sessionReady = true;
-  message('الحفظ الدائم متصل. البيانات التعريفية تراكمية، ومرشح السنة يحدد سجلات النشاط فقط.');
+  message('الحفظ الدائم متصل. تجمع السيرة البيانات المحفوظة وسجلات النشاط من جميع السنوات.');
 }
 
 function documentFor(bundle) {
@@ -86,12 +86,12 @@ function renderMember(bundle) {
 }
 
 function renderSummary(report) {
-  const completeProfiles = report.members.filter(bundle => profileChecklist(getProfile(bundle.member.id)).every(([, present]) => present)).length;
+  const savedProfiles = report.members.filter(bundle => getProfile(bundle.member.id).updatedAt).length;
   return [
     { value: report.members.length.toLocaleString('ar-SA'), label: 'الأعضاء المختارون' },
     { value: options().mode === 'internal' ? 'تقرير داخلي' : options().mode === 'short' ? 'سيرة مختصرة' : 'سيرة كاملة للنشر', label: 'نوع الملف' },
-    { value: report.yearLabel, label: 'نطاق سجلات النشاط' },
-    { value: completeProfiles.toLocaleString('ar-SA'), label: 'سير استُكملت حقولها التعريفية الستة' }
+    { value: report.departmentLabel, label: 'القسم' },
+    { value: savedProfiles.toLocaleString('ar-SA'), label: 'ملفات محفوظة' }
   ];
 }
 
@@ -294,7 +294,7 @@ function replaceEntries(key, rows) {
 async function openEditor(id) {
   if (editing?.saving) return;
   if (!sessionReady) { openSession(); return; }
-  const members = getCvStudioFacultyRowsInScope(getCvStudioSelectedYearValue(), getCvStudioSelectedDepartmentValue());
+  const members = getCvStudioFacultyRowsInScope('all', getCvStudioSelectedDepartmentValue());
   const target = id || (members.some(member => String(member.id) === getLoggedInEmployeeId()) ? getLoggedInEmployeeId() : String(members[0]?.id || ''));
   const member = getCvStudioMemberRecord(target, 'all');
   if (!member) return;
@@ -447,16 +447,15 @@ function showSavedMember(id, mode) {
   const bundle = buildCvStudioMemberBundle(id, 'all');
   if (!bundle) throw new Error('تعذر جمع سجلات العضو للتوليد. بياناتك محفوظة ويمكن إعادة المحاولة.');
   byId('cvStudioMode').value = mode;
-  byId('cvStudioYearFilter').value = 'all';
-  byId('cvStudioDepartmentFilter').value = 'all';
+  byId('cvStudioDepartmentFilter').value = bundle.member.department || 'all';
   renderCvStudioMemberPicker(true);
   const checkboxes = [...byId('cvStudioMemberSelect').querySelectorAll('.cv-studio-member-options input[type="checkbox"]')];
   checkboxes.forEach(checkbox => { checkbox.checked = checkbox.value === String(id); });
   checkboxes.find(checkbox => checkbox.checked)?.dispatchEvent(new Event('change', { bubbles: true }));
   const yearLabel = getCvStudioYearLabel('all');
   cvStudioReport = {
-    year: 'all', yearLabel, department: 'all', departmentLabel: bundle.member.department || 'الأعضاء', members: [bundle],
-    generatedAt: new Date().toISOString(), caption: `السيرة الذاتية | ${bundle.member.name} | ${yearLabel}`,
+    year: 'all', yearLabel, department: bundle.member.department || 'all', departmentLabel: bundle.member.department || 'الأعضاء', members: [bundle],
+    generatedAt: new Date().toISOString(), caption: `السيرة الذاتية | ${bundle.member.name}`,
     filenameBase: analyticsStudioSafeFileName(`السيرة-الذاتية-${bundle.member.name}`)
   };
   renderCvStudioResults();

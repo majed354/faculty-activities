@@ -8,7 +8,6 @@ const clean = value => String(value ?? '').trim();
 const join = (values, separator = ' · ') => values.map(clean).filter(Boolean).join(separator);
 const key = value => clean(value).normalize('NFKC').replace(/[\u064b-\u065f\u0640]/g, '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
 const courseKey = value => key(value).replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي');
-const years = entries => [...new Set(entries.map(row => clean(row.year)).filter(Boolean))].sort((a, b) => Number(b) - Number(a));
 const period = row => join([row.start, row.end], ' — ');
 const unique = (entries, identity) => {
   const seen = new Set();
@@ -59,13 +58,12 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   const internal = options.mode === 'internal';
   const short = options.mode === 'short';
   const formatDate = context.formatDate || (value => clean(value));
-  const yearLabel = context.yearLabel || (value => clean(value));
   const sections = [];
   const add = (title, entries, extra = {}) => {
     entries = entries.filter(row => row.title || row.details || row.url || row.source);
     const total = entries.length;
     if (total) sections.push({ title: short && total > 5 ? `${title} — مختارات (${5} من ${total})` : title, entries: short ? entries.slice(0, 5) : entries, ...extra });
-    else if (internal) sections.push({ title, text: 'لا توجد سجلات ضمن نطاق النشاط المختار أو لم تُستكمل بيانات هذا المحور.' });
+    else if (internal) sections.push({ title, text: 'لا توجد سجلات أو بيانات مضافة في هذا المحور.' });
   };
   // A partially completed record still exports its supplied facts. Promote
   // details when the primary field was left blank, without adding placeholders.
@@ -163,10 +161,6 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   ];
   if (internal) profileItems.push(['الرقم الوظيفي', member.id], ['الفرع في السجل', member.branch], ['حالة العمل', member.activeLabel], ['سنة سجل العضوية', member.yearLabel]);
   if (internal || options.personal) profileItems.push(['الجنسية', member.nationality], ['الجنس', member.gender]);
-  const coverageYears = years([...(bundle.publications || []), ...(bundle.theses || []), ...(bundle.scientificEvents || []), ...(bundle.teachingDetails || []), ...(bundle.communityActivities || []), ...(bundle.academicPromotions || [])]);
-  const coverage = bundle.scopeYear !== 'all'
-    ? `نطاق سجلات النشاط: ${bundle.scopeYearLabel}. البيانات الأكاديمية المضافة يدويًا تعرض كاملة ضمن ملف العضو الدائم.`
-    : `نطاق سجلات النشاط: ${coverageYears.length ? coverageYears.map(yearLabel).join('، ') : 'لم تتوفر سجلات نشاط'}. تعتمد السيرة على البيانات المضافة والسجلات المتاحة.`;
   return {
     name: profile.displayName || member.name,
     englishName: profile.englishName,
@@ -175,7 +169,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     photo: safeUrl(profile.photo),
     profileItems: profileItems.filter(([, value]) => clean(value)),
     links: [['الصفحة الجامعية / الشخصية', profile.website], ['ORCID', profile.orcid], ['Google Scholar', profile.scholar], ['Scopus', profile.scopus]].filter(([, url]) => safeUrl(url)),
-    sections, coverage,
+    sections, coverage: '',
     // The short CV trades detail for brevity, so it keeps the charts: they carry
     // the record in less space than the lists they stand in for.
     charts: buildCvMetrics(bundle, profile, {

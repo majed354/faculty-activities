@@ -19,9 +19,9 @@
     
     <!-- Styles -->
     <link rel="stylesheet" href="style.css?v=20260910-promotions-v1">
-    <link rel="stylesheet" href="style-additions.css?v=20261008-sheet-cache-v1">
+    <link rel="stylesheet" href="style-additions.css?v=20261009-cv-picker-v1">
     <link rel="stylesheet" href="teaching-styles.css">
-    <link rel="stylesheet" href="cv-studio.css?v=20261009-cv-optional-v1">
+    <link rel="stylesheet" href="cv-studio.css?v=20261009-cv-picker-v1">
 </head>
 <body>
     <!-- ===== شاشة تسجيل الدخول ===== -->
@@ -862,36 +862,30 @@
             <div class="section-header">
                 <h2>🗂️ السير الذاتية</h2>
             </div>
-            <p class="cv-studio-intro">استكمل سيرتك في أربع خطوات: اختر مجالات خبرتك ومهاراتك وشهاداتك، وأضف ما تشاء من التفاصيل. جميع حقول الاستكمال اختيارية، بما فيها سنوات الخبرة. اضغط «حفظ وتوليد الملف»؛ تبقى بياناتك محفوظة على الموقع، وتُضاف سجلات نشاطك تلقائيًا من جميع السنوات.</p>
+            <p class="cv-studio-intro">اختر القسم والعضو لعرض سيرته وتنزيلها. تُجمع إنجازاته من جميع السنوات تلقائيًا، ويمكنه استكمال بياناته اختياريًا وحفظها على الموقع من «استكمال سيرتي».</p>
 
             <div class="analytics-studio-card cv-studio-builder">
-                <div class="analytics-studio-grid">
-                    <div class="analytics-studio-field">
-                        <label for="cvStudioYearFilter">نطاق سجلات النشاط</label>
-                        <select id="cvStudioYearFilter"></select>
-                    </div>
-                    <div class="analytics-studio-field">
+                <div class="analytics-studio-grid cv-studio-selection-grid">
+                    <div class="analytics-studio-field cv-studio-department-field">
                         <label for="cvStudioDepartmentFilter">القسم</label>
                         <select id="cvStudioDepartmentFilter"></select>
                     </div>
                     <div class="analytics-studio-field cv-studio-members-field">
-                        <label>الأعضاء</label>
+                        <label for="cvStudioMemberSearch">الأعضاء</label>
                         <div class="analytics-studio-multi-select" id="cvStudioMemberSelect"></div>
-                        <p class="cv-studio-field-note">يمكنك اختيار جميع أعضاء النطاق أو تحديد بعضهم فقط من داخل القائمة.</p>
+                        <p class="cv-studio-field-note" id="cvStudioMemberHelp">كتابة الاسم تحدد النتائج المطابقة فقط. يمكنك تحديد أكثر من عضو، ومسح البحث يُبقي اختيارك الحالي.</p>
+                    </div>
+                    <div class="cv-output-options">
+                        <label for="cvStudioMode">نوع الملف<select id="cvStudioMode"><option value="public">سيرة كاملة للنشر</option><option value="short">سيرة مختصرة — مختارات من الإنجازات</option><option value="internal">تقرير أكاديمي داخلي</option></select></label>
+                        <label class="cv-checkbox-label"><input type="checkbox" id="cvStudioPersonal">إظهار الجنسية والجنس في نسخة النشر</label>
+                    </div>
+                    <div class="analytics-studio-actions cv-studio-selection-actions">
+                        <button class="analytics-studio-primary-btn" id="cvStudioRunBtn" type="button" disabled>جارٍ تجهيز السير…</button>
+                        <button class="analytics-studio-secondary-btn" id="cvStudioEditProfile" type="button" disabled>استكمال سيرتي</button>
+                        <button class="analytics-studio-secondary-btn" id="cvStudioResetBtn" type="button" disabled>إعادة الضبط</button>
                     </div>
                 </div>
-
-                <div class="cv-output-options">
-                    <label for="cvStudioMode">نوع الملف<select id="cvStudioMode"><option value="public">سيرة كاملة للنشر</option><option value="short">سيرة مختصرة — مختارات من الإنجازات</option><option value="internal">تقرير أكاديمي داخلي</option></select></label>
-                    <label class="cv-checkbox-label"><input type="checkbox" id="cvStudioPersonal">إظهار الجنسية والجنس في نسخة النشر</label>
-                    <p>المؤهلات والخبرات ثابتة مع العضو. السنة تحدد الأنشطة المضمّنة، والأقسام الفارغة تظهر في التقرير الداخلي وتُخفى في نسخة النشر.</p>
-                </div>
                 <div class="cv-storage-bar"><p id="cvStudioStorageStatus" role="status" aria-live="polite">جارٍ الاتصال ببيانات السير المحفوظة…</p><button type="button" id="cvStudioActivate" class="hidden">تفعيل حفظ السير</button></div>
-                <div class="analytics-studio-actions">
-                    <button class="analytics-studio-primary-btn" id="cvStudioRunBtn" type="button" disabled>جارٍ تجهيز السير…</button>
-                    <button class="analytics-studio-secondary-btn" id="cvStudioEditProfile" type="button" disabled>استكمال سيرتي</button>
-                    <button class="analytics-studio-secondary-btn" id="cvStudioResetBtn" type="button" disabled>إعادة الضبط</button>
-                </div>
             </div>
 
             <div class="cv-studio-results hidden" id="cvStudioResults">
@@ -1062,8 +1056,8 @@
         });
     });
     </script>
-    <script src="app.js?v=20261008-sheet-cache-v1"></script>
-    <script src="assets/cv-studio.js?v=20261009-cv-optional-v1"></script>
+    <script src="app.js?v=20261009-cv-picker-v1"></script>
+    <script src="assets/cv-studio.js?v=20261009-cv-picker-v1"></script>
     <script src="teaching.js"></script>
 
     <!-- Modal تفاصيل الرسالة -->

@@ -117,7 +117,8 @@ test('publication CV hides internal fields and empty sections while retaining pe
   for (const privateText of ['النقاط', 'الرقم الوظيفي', 'الجنسية', 'مراقبة اختبار', 'ملاحظة داخلية لا تنشر', 'لا توجد سجلات']) assert.ok(!markup.includes(privateText), privateText);
   const limited = buildCvDocument({ ...bundle, scopeYear: 1448, scopeYearLabel: '١٤٤٨هـ' }, { mode: 'public' });
   assert.ok(limited.sections.some(section => section.title === 'المؤهلات العلمية'));
-  assert.match(limited.coverage, /١٤٤٨هـ/);
+  assert.equal(limited.coverage, '');
+  assert.doesNotMatch(markup, /نطاق سجلات النشاط/);
   const internal = renderCvDocument(buildCvDocument(bundle, { mode: 'internal' }));
   for (const privateText of ['النقاط', 'الرقم الوظيفي', 'الجنسية', 'مراقبة اختبار', 'ملاحظة داخلية لا تنشر']) assert.ok(internal.includes(privateText), privateText);
 });

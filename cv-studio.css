@@ -7,6 +7,7 @@
 .cv-storage-bar { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin: 16px 0; }
 .cv-storage-bar p { font-size: .85rem; margin: 0; color: #75c9b5; }
 .cv-storage-bar p.is-error { color: #fbbf24; }
+.cv-storage-bar .hidden { display: none; }
 .cv-storage-bar button, .cv-tool-buttons button, .cv-dialog-actions button, .cv-editor-import button, .cv-add-entry, .cv-file-label { padding: 9px 15px; border-radius: 9px; border: 1px solid #d2dedc; font: inherit; cursor: pointer; background: #f7fbfa; color: #176b68; }
 .cv-tool-buttons button:hover, .cv-dialog-actions button:hover, .cv-add-entry:hover { background: #e5f3ee; }
 .cv-academic-card { padding: 0 !important; overflow: hidden; }
