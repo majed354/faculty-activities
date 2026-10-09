@@ -27,6 +27,60 @@ const yearOf = row => {
   return match ? match[1] : '';
 };
 
+// A master's degree is examined as a رسالة علمية only before 1441 or inside the
+// العقيدة programme; otherwise it is a مشروع بحثي. app.js owns that rule and
+// stamps its verdict on `degreeLabel`, so this reads the verdict instead of
+// deriving a second, divergent one — `type` alone cannot tell the two apart.
+export const THESIS_KINDS = [
+  { id: 'phd', label: 'رسالة دكتوراه' },
+  { id: 'masters-thesis', label: 'رسالة ماجستير' },
+  { id: 'masters-project', label: 'مشروع بحثي (ماجستير)' },
+  // A record whose degree was never recorded is counted under its own heading
+  // rather than assigned one, and never dropped: the total must still add up.
+  { id: 'unspecified', label: 'غير محدد الدرجة' }
+];
+
+export function classifyThesis(row) {
+  const type = clean(row?.type);
+  const degree = clean(row?.degreeLabel);
+  if (type === 'دكتوراه' || /دكتوراه/.test(degree)) return 'phd';
+  if (type === 'ماجستير') return degree === 'مشروع بحثي' ? 'masters-project' : 'masters-thesis';
+  if (/مشروع/.test(degree)) return 'masters-project';
+  if (/رسالة/.test(degree)) return 'masters-thesis';
+  return 'unspecified';
+}
+
+// Supervision is evidence of standing, but twenty-three near-identical project
+// titles say less than the counts do. The counts are kept and the list is not,
+// split by degree because supervising a doctorate is not the same claim as
+// supervising a master's project.
+export function buildSupervisionSplit(parts) {
+  const tally = kind => ({
+    supervised: parts.supervisions.filter(row => classifyThesis(row) === kind).length,
+    examined: parts.discussions.filter(row => classifyThesis(row) === kind).length
+  });
+  const groups = THESIS_KINDS
+    .map(kind => ({ label: kind.label, ...tally(kind.id) }))
+    .filter(group => group.supervised || group.examined)
+    .map(group => ({
+      label: group.label,
+      bars: [
+        { label: 'إشراف', value: group.supervised, color: 'primary' },
+        { label: 'مناقشة', value: group.examined, color: 'accent' }
+      ].filter(bar => bar.value > 0)
+    }));
+  if (!groups.length) return null;
+  const max = Math.max(...groups.flatMap(group => group.bars.map(bar => bar.value)));
+  if (!max) return null;
+  const total = groups.reduce((sum, group) => sum + group.bars.reduce((inner, bar) => inner + bar.value, 0), 0);
+  return {
+    kind: 'grouped-bars', id: 'supervision', title: 'الإشراف والمناقشة حسب الدرجة',
+    note: `الإجمالي: ${arabic(total)} رسالة ومشروعًا.`,
+    legend: [{ label: 'إشراف', color: 'primary' }, { label: 'مناقشة', color: 'accent' }],
+    groups, max
+  };
+}
+
 export function buildExpertise(profile) {
   // Expertise durations are the clearest quantitative claim a member makes about
   // themselves, and the flat list wastes a page on them.
@@ -208,6 +262,7 @@ export function detectProgramme(entries, { minimum = 6 } = {}) {
 // to decide whether the expertise list still earns its place.
 export function buildCvMetrics(bundle, profile, parts) {
   return [
+    buildSupervisionSplit(parts),
     parts.expertiseChart ?? buildExpertise(profile),
     buildTeachingLoad(bundle),
     buildCareerTimeline(bundle, profile)

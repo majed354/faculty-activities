@@ -41,6 +41,8 @@ const shortUrl = value => {
   const text = clean(value).replace(/^https?:\/\//i, '').replace(/\/$/, '');
   return text.length > 34 ? `${text.slice(0, 33)}…` : text;
 };
+const pair = (...values) => `(${values.join(', ')})`;
+const color = name => `rgb("${PALETTE[name] || PALETTE.primary}")`;
 const arr = values => `(${values.join(', ')}${values.length === 1 ? ',' : ''})`;
 const date = value => {
   const parsed = new Date(value);
@@ -86,6 +88,20 @@ const PREAMBLE = `
 // A grid of equal fractions spreads the columns over the full frame; a plain
 // stack left two thirds of the box empty. RTL ordering puts the earliest year
 // at the right margin, so the series reads with the text.
+#let groupbars(groups, maxv, swatch) = grid(
+  columns: (auto, 1fr), column-gutter: 8pt, row-gutter: 7pt, align: (horizon, horizon),
+  ..groups.map(g => (
+    text(size: 8.5pt, weight: 600)[#g.at(0)],
+    stack(dir: ttb, spacing: 3pt, ..g.at(1).map(b => grid(
+      columns: (1fr, 16pt), column-gutter: 6pt, align: (horizon, horizon + left),
+      box(width: 100%, height: 8pt, radius: 1.5pt, fill: white, stroke: 0.4pt + LINE)[
+        #place(top + right, rect(width: 100% * calc.max(b.at(0) / maxv, 0.03), height: 8pt, radius: 1.5pt, fill: b.at(2), stroke: none))],
+      text(size: 7.5pt, fill: DIM)[#b.at(1)])))
+  )).flatten())
+
+#let swatches(items) = text(size: 7.5pt, fill: DIM)[
+  #items.map(it => box(baseline: 0.1em, [#box(width: 6pt, height: 6pt, radius: 1pt, fill: it.at(1)) #h(3pt) #it.at(0)])).join(h(9pt))]
+
 #let barlist(rows, maxv, unit) = grid(
   columns: (auto, 1fr, auto), column-gutter: 7pt, row-gutter: 5pt, align: horizon,
   ..rows.map(r => (
@@ -143,6 +159,14 @@ const PREAMBLE = `
 
 function renderChart(chart) {
   const frame = (body, note = '') => `#chartframe(${lit(chart.title)}, ${lit(note)}, ${body})`;
+  if (chart.kind === 'grouped-bars') {
+    const groups = chart.groups.map(group => pair(
+      lit(bidi(group.label)),
+      arr(group.bars.map(bar => pair(bar.value, lit(num(bar.value)), color(bar.color), lit(bar.label))))
+    ));
+    const legend = arr(chart.legend.map(item => pair(lit(item.label), color(item.color))));
+    return frame(`[#groupbars(${arr(groups)}, ${chart.max}, none) #v(6pt) #swatches(${legend})]`, chart.note || '');
+  }
   if (chart.kind === 'bars') {
     const rows = chart.rows.map(row => `(${lit(row.label)}, ${row.value}, ${lit(num(row.value))})`);
     return frame(`barlist(${arr(rows)}, ${chart.max}, ${lit(chart.unit || '')})`, chart.note || '');
