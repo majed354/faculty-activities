@@ -302,9 +302,10 @@ async function loadConfig() {
 // ========================================
 // نسخة مؤكدة من الشيت، تُحدّث مستقلّة عن فتح صفحة العضو.
 // ========================================
-async function loadFromGoogleSheets({ initial = true } = {}) {
+async function loadFromGoogleSheets({ initial = true, bypassCache = false } = {}) {
     try {
-        const sheetsData = await SiteData.readData(SHEETS_DATA_ENDPOINT, {
+        const sheetsData = await SiteData.loadActivity({
+            initial, bypassCache,
             cache: 'no-store',
             headers: { 'Accept': 'application/json' },
             timeoutMs: SHEETS_REQUEST_TIMEOUT_MS,
@@ -356,7 +357,9 @@ function renderSheetsSyncStatus() {
     const bar = document.getElementById('sheetsSyncBar');
     if (!bar || !sheetsSyncInfo?.syncedAt) return;
     const date = new Date(sheetsSyncInfo.syncedAt).toLocaleString('ar-SA', { calendar: 'gregory', dateStyle: 'short', timeStyle: 'short' });
-    let message = `آخر تحديث مؤكد من الشيت: ${date}.`;
+    let message = sheetsSyncInfo.delivery === 'browser'
+        ? `تظهر نسخة محفوظة في هذا المتصفح؛ آخر تحديث مؤكد من الشيت: ${date}.`
+        : `آخر تحديث مؤكد من الشيت: ${date}.`;
     if (sheetsSyncInfo.refreshing) message += ' جارٍ التحقق من التحديثات…';
     else if (sheetsSyncInfo.lastAttemptFailed) message += ' تعذر التحديث الأخير؛ تظهر آخر نسخة مؤكدة.';
     else if (sheetsSyncInfo.state === 'stale') message += ' نتحقق من التحديثات في الخلفية.';
@@ -9706,7 +9709,7 @@ async function refreshLiveActivityData({ force = false } = {}) {
             }
             for (let check = 0; check < 30; check++) {
                 if (check) await new Promise(resolve => setTimeout(resolve, 5000));
-                await loadFromGoogleSheets({ initial: false });
+                await loadFromGoogleSheets({ initial: false, bypassCache: force });
                 if (lastSheetsSyncAt !== previousSync) { await loadYearData(currentYear); break; }
                 if (sheetsSyncInfo.lastAttemptFailed && Date.parse(sheetsSyncInfo.lastAttemptAt) >= started - 1000) break;
                 if (!force && sheetsSyncInfo.state === 'fresh') break;

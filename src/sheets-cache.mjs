@@ -13,7 +13,7 @@ export function validateActivityPayload(payload) {
 
 // The cache holds only complete, successful reads from the configured Sheet.
 // Its refresh lease collapses concurrent refreshes into one upstream read.
-export function createSheetsCache({ store, sourceUrl, fetchSource, now = () => Date.now(), pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+export function createSheetsCache({ store, sourceUrl, sourceId, fetchSource, now = () => Date.now(), pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   const validSnapshot = record => {
     if (record?.data?.sourceUrl !== sourceUrl || !Number.isFinite(Date.parse(record.data.syncedAt))) return false;
     try { validateActivityPayload(record.data.payload); return true; } catch { return false; }
@@ -27,7 +27,7 @@ export function createSheetsCache({ store, sourceUrl, fetchSource, now = () => D
     if (age > MAX_SNAPSHOT_AGE_MS) return { payload: null, sync: { refreshing, lastAttemptAt: sync.attemptedAt || '', state: 'expired' } };
     return {
       payload: snapshot.data.payload,
-      sync: { syncedAt: snapshot.data.syncedAt, sourceGeneratedAt: snapshot.data.payload.meta?.generated_at || '', state: age >= SYNC_INTERVAL_MS ? 'stale' : 'fresh', refreshing, lastAttemptAt: sync.attemptedAt || '', lastAttemptFailed: sync.state === 'failed', refreshIntervalMinutes: 5 }
+      sync: { syncedAt: snapshot.data.syncedAt, sourceId, sourceGeneratedAt: snapshot.data.payload.meta?.generated_at || '', state: age >= SYNC_INTERVAL_MS ? 'stale' : 'fresh', refreshing, lastAttemptAt: sync.attemptedAt || '', lastAttemptFailed: sync.state === 'failed', refreshIntervalMinutes: 5 }
     };
   }
   async function refresh({ force = false } = {}) {
@@ -59,9 +59,9 @@ export function createSheetsCache({ store, sourceUrl, fetchSource, now = () => D
   return { read, refresh };
 }
 
-export function createSheetsDataHandler({ cache, dispatchRefresh }) {
+export function createSheetsDataHandler({ cache, dispatchRefresh, now = () => Date.now() }) {
   return async (request, context) => {
-    const headers = { 'Cache-Control': 'no-store' };
+    const headers = { 'Cache-Control': 'no-store', 'Netlify-CDN-Cache-Control': 'no-store', 'Netlify-Vary': 'query=fresh' };
     if (!['GET', 'POST'].includes(request.method)) return Response.json({ message: 'طريقة الطلب غير مدعومة.' }, { status: 405, headers: { ...headers, Allow: 'GET, POST' } });
     const queue = force => {
       const task = dispatchRefresh(force).catch(error => console.error('Sheet refresh dispatch failed:', error.message));
@@ -81,6 +81,14 @@ export function createSheetsDataHandler({ cache, dispatchRefresh }) {
       const result = await cache.read();
       if (!result.sync.refreshing && result.sync.state !== 'fresh') queue(false);
       if (!result.payload) return Response.json({ message: 'جارٍ إعداد نسخة مؤكدة من الشيت. أعد المحاولة بعد قليل.', sync: result.sync }, { status: 503, headers: { ...headers, 'Retry-After': '5' } });
+      // Keep browser reads explicit, but let Netlify serve short-lived public
+      // snapshots without invoking the function. Manual refresh bypasses it.
+      const remainingSeconds = Math.floor((Date.parse(result.sync.syncedAt) + MAX_SNAPSHOT_AGE_MS - now()) / 1000);
+      if (new URL(request.url).searchParams.get('fresh') !== '1' && remainingSeconds > 0) {
+        const ttl = Math.min(60, remainingSeconds);
+        const stale = Math.min(120, remainingSeconds - ttl);
+        headers['Netlify-CDN-Cache-Control'] = `public, durable, s-maxage=${ttl}, stale-while-revalidate=${stale}`;
+      }
       return Response.json({ ...result.payload, sync: result.sync }, { headers });
     } catch (error) {
       console.error('Sheet cache read failed:', error.message);
