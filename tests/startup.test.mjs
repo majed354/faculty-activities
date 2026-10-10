@@ -40,7 +40,7 @@ function startupHarness() {
     },
     window: { addEventListener() {} },
     console: { warn() {}, log() {}, error() {} },
-    SiteData: { readData: request },
+    SiteData: { readData: request, loadActivity: options => request('/.netlify/functions/sheets-data', options) },
     setInterval() {},
     setTimeout: (callback, ms) => { timers.set(++timerId, { callback, ms }); return timerId; },
     clearTimeout: id => timers.delete(id)

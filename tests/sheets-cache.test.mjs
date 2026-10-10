@@ -14,8 +14,8 @@ function fixture(fetchSource = async () => structuredClone(payload)) {
       const etag = `"cache-${++sequence}"`; objects.set(key, { data: structuredClone(data), etag }); return { modified: true, etag };
     }
   };
-  const cache = createSheetsCache({ store, sourceUrl: 'https://sheet.example/exec', fetchSource, now: () => clock, pause: async () => {} });
-  return { cache, objects, advance: ms => { clock += ms; } };
+  const cache = createSheetsCache({ store, sourceUrl: 'https://sheet.example/exec', sourceId: 'sheet-a', fetchSource, now: () => clock, pause: async () => {} });
+  return { cache, objects, now: () => clock, advance: ms => { clock += ms; } };
 }
 
 test('cached reads return immediately while upstream refresh is unresolved', async () => {
@@ -79,7 +79,36 @@ test('missing cache returns an explicit unavailable response, never synthetic ze
   const response = await handler(new Request('https://site.example/.netlify/functions/sheets-data'), { waitUntil: task => pending.push(task) });
   assert.equal(response.status, 503); assert.equal(response.headers.get('retry-after'), '5');
   const result = await response.json(); assert.equal(result.publications, undefined); assert.equal(result.sync.state, 'missing');
+  assert.equal(response.headers.get('netlify-cdn-cache-control'), 'no-store');
   await Promise.all(pending);
+});
+
+test('only successful public GETs opt into CDN caching; manual reads bypass it', async () => {
+  const f = fixture(); await f.cache.refresh();
+  const handler = createSheetsDataHandler({ cache: f.cache, now: f.now, dispatchRefresh: async () => {} });
+  const context = { waitUntil() {} }, url = 'https://site.example/.netlify/functions/sheets-data';
+  const normal = await handler(new Request(url), context);
+  assert.equal(normal.headers.get('cache-control'), 'no-store');
+  assert.equal(normal.headers.get('netlify-cdn-cache-control'), 'public, durable, s-maxage=60, stale-while-revalidate=120');
+  assert.equal(normal.headers.get('netlify-vary'), 'query=fresh');
+  assert.equal((await normal.json()).sync.sourceId, 'sheet-a');
+  const forced = await handler(new Request(`${url}?fresh=1`), context);
+  assert.equal(forced.status, 200); assert.equal(forced.headers.get('netlify-cdn-cache-control'), 'no-store');
+  const post = await handler(new Request(url, { method: 'POST', body: '{"action":"refresh"}' }), context);
+  assert.equal(post.status, 202); assert.equal(post.headers.get('netlify-cdn-cache-control'), 'no-store');
+  const errorHandler = createSheetsDataHandler({ cache: { read: async () => { throw new Error('Storage unavailable'); } }, dispatchRefresh: async () => {} });
+  const failed = await errorHandler(new Request(url), context);
+  assert.equal(failed.status, 503); assert.equal(failed.headers.get('netlify-cdn-cache-control'), 'no-store');
+});
+
+test('CDN lifetime never extends a snapshot beyond the maximum accepted age', async () => {
+  const f = fixture(); await f.cache.refresh(); f.advance(MAX_SNAPSHOT_AGE_MS - 90_000);
+  const handler = createSheetsDataHandler({ cache: f.cache, now: f.now, dispatchRefresh: async () => {} });
+  const request = () => handler(new Request('https://site.example/.netlify/functions/sheets-data'), { waitUntil() {} });
+  assert.equal((await request()).headers.get('netlify-cdn-cache-control'), 'public, durable, s-maxage=60, stale-while-revalidate=30');
+  f.advance(89_500);
+  assert.equal((await request()).headers.get('netlify-cdn-cache-control'), 'no-store');
+  f.advance(501); assert.equal((await request()).status, 503);
 });
 
 test('scheduled refresh does not skip alternate runs when previous reads completed late', async () => {

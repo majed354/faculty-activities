@@ -1,4 +1,5 @@
 import { getStore } from '@netlify/blobs';
+import { createHash } from 'node:crypto';
 import siteConfig from '../data/config.json' with { type: 'json' };
 import { createSheetsCache } from './sheets-cache.mjs';
 
@@ -6,6 +7,7 @@ export function sheetsCache(context) {
   return createSheetsCache({
     store: getStore({ name: context.deploy.published ? 'scientific-activity-cache' : 'scientific-activity-cache-preview', consistency: 'strong' }),
     sourceUrl: siteConfig.google_sheets_api,
+    sourceId: createHash('sha256').update(siteConfig.google_sheets_api).digest('hex'),
     fetchSource: async source => {
       const url = new URL(source); url.searchParams.set('action', 'read');
       const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(60_000), headers: { Accept: 'application/json' } });
