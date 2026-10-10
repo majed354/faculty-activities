@@ -1,4 +1,9 @@
 /* Academic profile editor and reusable publication/print layout. */
+.cv-session-dialog.cv-member-access-dialog { max-width: 440px !important; }
+#cvMemberAccessName { font-weight: 700; }
+#cvMemberAccessProgress { font-size: .85rem; }
+#cvMemberAccessId { text-align: center; letter-spacing: .08em; }
+#cvMemberAccessId[aria-invalid=true] { border-color: #b45309 !important; }
 .cv-output-options { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 22px; padding-top: 20px; border-top: 1px solid rgba(148,163,184,.2); }
 .cv-output-options > label:first-child { display: grid; gap: 8px; min-width: 260px; }
 .cv-output-options select { padding: 10px 12px; border-radius: 10px; background: var(--bg-secondary, #1e293b); color: inherit; border: 1px solid rgba(148,163,184,.4); font: inherit; }
