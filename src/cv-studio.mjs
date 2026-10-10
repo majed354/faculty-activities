@@ -4,6 +4,7 @@ import { CERTIFICATE_CHOICES, chooseEntry, chooseInterest, draftBiography } from
 import { EDITOR_STEPS, CHOICE_IDENTITIES, entryHtml, editorStepsHtml, syncChoices, filterChoices } from './cv-editor.mjs';
 import { chartCsvRows } from './cv-chart-data.mjs';
 import { confirmCvMembers, cancelCvConfirmation } from './cv-access.mjs';
+import { readData } from './site-data.mjs';
 import printStyles from '../cv-studio.css';
 
 const ENDPOINT = '/.netlify/functions/cv-profiles';
@@ -13,6 +14,7 @@ let editing = null;
 let sessionReady = false;
 let returnFocus = null;
 let editorRequestId = 0;
+let sessionPrompt = null;
 const byId = id => document.getElementById(id);
 const context = () => ({ university: config.university_name || 'جامعة الطائف', college: config.college_name || 'كلية الشريعة', formatDate, yearLabel: formatCustomStatsYearLabel });
 const options = () => ({ mode: byId('cvStudioMode')?.value || 'public', personal: !!byId('cvStudioPersonal')?.checked, generatedAt: cvStudioReport?.generatedAt });
@@ -22,22 +24,14 @@ const message = (text, error = false) => {
   byId('cvStudioActivate')?.classList.toggle('hidden', sessionReady);
 };
 
-async function api(path = '', body) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+async function api(path = '', body, isCurrent = () => true) {
   try {
-    const response = await fetch(`${ENDPOINT}${path}`, { method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
-    let data;
-    try { data = await response.json(); } catch { throw new Error('خدمة حفظ السير غير متاحة. أعد المحاولة بعد لحظات.'); }
-    if (!response.ok) {
-      if (response.status === 401) { sessionReady = false; message(data.message, true); }
-      const error = new Error(data.message || 'تعذر الاتصال بحفظ السير.'); error.status = response.status; throw error;
-    }
-    return data;
+    return await readData(`${ENDPOINT}${path}`, { method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, timeoutMs: 15000, maxWaitMs: 47000 });
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error('انتهت مهلة الاتصال. لم يتم تأكيد الحفظ؛ احتفظ بالمسودة وأعد تحميل النسخة المحفوظة قبل تكرار الحفظ.');
+    if (error.status === 401 && isCurrent()) { sessionReady = false; message(error.message, true); }
+    if (error.name === 'TimeoutError' && body?.action === 'save') throw new Error('انتهت مهلة الاتصال. لم يتم تأكيد الحفظ؛ احتفظ بالمسودة وأعد تحميل النسخة المحفوظة قبل تكرار الحفظ.');
     throw error;
-  } finally { clearTimeout(timeout); }
+  }
 }
 
 async function signIn(employeeId, password) {
@@ -58,18 +52,36 @@ async function signOut() {
   profiles.clear();
   cvStudioClearReport();
   if (editing) closeEditor();
-  byId('cvSessionModal')?.remove();
+  sessionPrompt?.finish(false);
   try { await api('', { action: 'logout' }); } catch { /* The current app still signs out when offline. */ }
   message('أعد تسجيل الدخول لتفعيل بيانات السيرة المحفوظة.');
 }
 
-async function load(ids, force = false) {
+async function load(ids, force = false, { isCurrent = () => true } = {}) {
+  const checkCurrent = () => {
+    if (isCurrent()) return;
+    const error = new Error('تم إلغاء فتح السيرة.'); error.name = 'CancelledError'; throw error;
+  };
+  checkCurrent();
   const required = [...new Set(ids.map(String))].filter(id => force || !profiles.has(id));
   if (!required.length) return;
+  const received = [];
   for (let offset = 0; offset < required.length; offset += 80) {
-    const result = await api(`?ids=${encodeURIComponent(required.slice(offset, offset + 80).join(','))}`);
-    result.records.forEach(record => profiles.set(record.employeeId, record));
+    checkCurrent();
+    const path = `?ids=${encodeURIComponent(required.slice(offset, offset + 80).join(','))}`;
+    let result;
+    try { result = await api(path, undefined, isCurrent); }
+    catch (error) {
+      checkCurrent();
+      if (error.status !== 401) throw error;
+      if (!await openSession()) { const cancelled = new Error('تم إلغاء فتح السيرة.'); cancelled.name = 'CancelledError'; throw cancelled; }
+      checkCurrent();
+      result = await api(path, undefined, isCurrent);
+    }
+    received.push(...result.records);
   }
+  checkCurrent();
+  received.forEach(record => profiles.set(record.employeeId, record));
   sessionReady = true;
   message('الحفظ الدائم متصل. تجمع السيرة البيانات المحفوظة وسجلات النشاط من جميع السنوات.');
 }
@@ -81,6 +93,7 @@ function confirmMembers(ids) {
 function cancelConfirmation() {
   editorRequestId += 1;
   cancelCvConfirmation();
+  sessionPrompt?.finish(false);
 }
 
 function documentFor(bundle) {
@@ -224,22 +237,37 @@ function exportCsv() {
 }
 
 function openSession() {
-  let modal = byId('cvSessionModal');
-  if (modal) { modal.querySelector('input').focus(); return; }
-  modal = document.createElement('div');
+  if (sessionPrompt) { byId('cvSessionPassword')?.focus(); return sessionPrompt.promise; }
+  const modal = document.createElement('div');
   modal.id = 'cvSessionModal'; modal.className = 'modal active';
-  modal.innerHTML = `<div class="modal-content cv-session-dialog" role="dialog" aria-modal="true" aria-labelledby="cvSessionTitle"><h3 id="cvSessionTitle">تفعيل حفظ السير</h3><p>أدخل كلمة مرور الدخول الحالية لربط جلستك ببيانات السير المحفوظة.</p><form><label for="cvSessionPassword">كلمة مرور الدخول</label><input id="cvSessionPassword" class="form-input" type="password" autocomplete="current-password" required><p class="cv-form-error" role="alert"></p><div class="cv-dialog-actions"><button type="button" data-close>إلغاء</button><button type="submit" class="cv-primary">تفعيل</button></div></form></div>`;
+  modal.innerHTML = `<div class="modal-content cv-session-dialog" role="dialog" aria-modal="true" aria-labelledby="cvSessionTitle"><h3 id="cvSessionTitle">تجديد جلسة السير</h3><p>انتهت جلسة السير أو لم تُفعّل. أدخل كلمة مرور الدخول للمتابعة؛ سيُستكمل فتح السيرة تلقائيًا.</p><form><label for="cvSessionPassword">كلمة مرور الدخول</label><input id="cvSessionPassword" class="form-input" type="password" autocomplete="current-password" required><p class="cv-form-error" role="alert"></p><div class="cv-dialog-actions"><button type="button" data-close>إلغاء</button><button type="submit" class="cv-primary">متابعة</button></div></form></div>`;
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  const prompt = { promise, finish: ok => { if (sessionPrompt !== prompt) return; modal.remove(); sessionPrompt = null; resolve(ok); } };
+  sessionPrompt = prompt;
   document.body.appendChild(modal);
-  modal.querySelector('[data-close]').onclick = () => modal.remove();
+  modal.querySelector('[data-close]').onclick = () => prompt.finish(false);
   modal.querySelector('form').onsubmit = async event => {
     event.preventDefault();
-    const button = modal.querySelector('[type=submit]'); button.disabled = true;
-    const ok = await signIn(getLoggedInEmployeeId(), byId('cvSessionPassword').value);
+    const button = modal.querySelector('[type=submit]');
+    if (button.disabled) return;
+    button.disabled = true;
+    const ok = await signIn(getLoggedInEmployeeId(), normalizeArabicDigits(byId('cvSessionPassword').value));
+    if (sessionPrompt !== prompt) return;
     button.disabled = false;
-    if (ok) { modal.remove(); if (cvStudioReport) { await load(cvStudioReport.members.map(bundle => String(bundle.member.id))); renderCvStudioResults(); } }
+    if (ok) prompt.finish(true);
     else modal.querySelector('.cv-form-error').textContent = byId('cvStudioStorageStatus').textContent;
   };
+  modal.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); prompt.finish(false); }
+    if (event.key === 'Tab') {
+      const items = [...modal.querySelectorAll('button,input')].filter(element => !element.disabled);
+      if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items[items.length - 1].focus(); }
+      else if (!event.shiftKey && document.activeElement === items[items.length - 1]) { event.preventDefault(); items[0].focus(); }
+    }
+  });
   modal.querySelector('input').focus();
+  return promise;
 }
 
 const draftKey = id => `academic-cv-draft-v1:${getLoggedInEmployeeId()}:${id}`;
@@ -307,7 +335,6 @@ function replaceEntries(key, rows) {
 
 async function openEditor(id) {
   if (editing?.saving) return;
-  if (!sessionReady) { openSession(); return; }
   const members = getCvStudioFacultyRowsInScope('all', getCvStudioSelectedDepartmentValue());
   const target = id || (members.some(member => String(member.id) === getLoggedInEmployeeId()) ? getLoggedInEmployeeId() : String(members[0]?.id || ''));
   const member = getCvStudioMemberRecord(target, 'all');
@@ -316,7 +343,7 @@ async function openEditor(id) {
   const alreadyOpen = !byId('cvStudioResults')?.classList.contains('hidden') && cvStudioReport?.members.some(bundle => String(bundle.member.id) === target);
   if (!alreadyOpen && !await confirmMembers([target])) return;
   if (requestId !== editorRequestId) return;
-  try { await load([target], true); } catch (error) { message(error.message, true); if (error.status === 401) { sessionReady = false; openSession(); } return; }
+  try { await load([target], true, { isCurrent: () => requestId === editorRequestId }); } catch (error) { if (error.name !== 'CancelledError') message(error.message, true); return; }
   if (requestId !== editorRequestId) return;
   if (editing) closeEditor();
   returnFocus = document.activeElement;
@@ -547,8 +574,10 @@ async function setup() {
     if (button.dataset.cvAction === 'word') exportWord(button.dataset.cvId);
   });
   document.addEventListener('error', event => { if (event.target.matches?.('.cv-portrait')) event.target.remove(); }, true);
-  try { await api(); sessionReady = true; message('الحفظ الدائم متصل.'); }
-  catch (error) { message(error.message, true); }
+  // A read renews an expired session and resumes after password confirmation.
+  // A separate session probe would delay the member picker on a slow connection.
+  if (sessionReady) message('الحفظ الدائم متصل.');
+  else message('ستُجدّد جلسة السير عند الحاجة إلى فتح بياناتها المحفوظة.');
 }
 
 window.AcademicCv = { setup, signIn, signOut, load, getProfile, renderMember, renderSummary, exportPdf, exportWord, exportCsv, confirmMembers, cancelConfirmation };

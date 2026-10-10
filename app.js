@@ -135,25 +135,12 @@ function getCurrentHijriYearNumber() {
     return Math.floor((new Date().getFullYear() - 622) * 33 / 32) + 1;
 }
 
-async function loadCSV(url) {
+async function loadCSV(url, { required = false } = {}) {
     try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const text = await response.text();
-        
-        const delimiter = detectDelimiter(text);
-        const delimiterName = delimiter === '\t' ? 'TAB' : delimiter;
-        console.log(`📄 تحميل ${url.split('/').pop()} ← الفاصل: "${delimiterName}"`);
-        
-        const result = Papa.parse(text, { 
-            header: true, 
-            skipEmptyLines: true,
-            delimiter: delimiter
-        });
-        
-        return result.data;
+        return await SiteData.loadCsv(url, { requiredFields: required ? ['id', 'name'] : [] });
     } catch (error) {
         console.warn(`❌ فشل تحميل ${url}:`, error);
+        if (required) throw new Error('تعذر تحميل قائمة الأعضاء. تحقق من الاتصال ثم أعد المحاولة.');
         return [];
     }
 }
@@ -229,12 +216,10 @@ function normalizeFacultyMemberCollection(rows) {
 async function loadConfig() {
     const defaultHijriYear = getCurrentHijriYearNumber();
     try {
-        const response = await fetch(`${DATA_BASE_URL}/config.json?_=${Date.now()}`, {
+        config = await SiteData.readData(`${DATA_BASE_URL}/config.json?_=${Date.now()}`, {
             cache: 'no-store',
             headers: { 'Accept': 'application/json' }
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        config = await response.json();
         // يبدأ الموقع دائمًا بالسنة الهجرية الحالية، مع بقاء خيار "الكل"
         // متاحًا للمستخدم بعد التحميل.
         currentYear = defaultHijriYear;
@@ -299,66 +284,53 @@ async function loadConfig() {
 // نسخة مؤكدة من الشيت، تُحدّث مستقلّة عن فتح صفحة العضو.
 // ========================================
 async function loadFromGoogleSheets({ initial = true } = {}) {
-    let lastError = null;
-    for (let attempt = 1; attempt <= SHEETS_REQUEST_ATTEMPTS; attempt += 1) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), SHEETS_REQUEST_TIMEOUT_MS);
-        try {
-            const response = await fetch(SHEETS_DATA_ENDPOINT, {
-                cache: 'no-store',
-                signal: controller.signal,
-                headers: { 'Accept': 'application/json' }
-            });
-            const sheetsData = await response.json();
-            if (!response.ok) throw new Error(sheetsData.message || `HTTP ${response.status}`);
-            if (sheetsData.error || sheetsData.status === 'error') {
-                throw new Error(sheetsData.message || sheetsData.error || 'استجابة غير ناجحة من Google Sheets');
+    try {
+        const sheetsData = await SiteData.readData(SHEETS_DATA_ENDPOINT, {
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' },
+            timeoutMs: SHEETS_REQUEST_TIMEOUT_MS,
+            attempts: initial ? 24 : SHEETS_REQUEST_ATTEMPTS,
+            maxWaitMs: initial ? 130000 : 27000,
+            onRetry: ({ error }) => {
+                if (initial) setLoadingState(error.status === 503
+                    ? 'جارٍ تجهيز نسخة النشاط المؤكدة؛ ستُفتح الصفحة تلقائيًا عند اكتمالها...'
+                    : 'تعثر الاتصال مؤقتًا؛ جارٍ إعادة تحميل بيانات النشاط تلقائيًا...', false);
             }
-
-            const requiredActivitySheets = ['publications', 'theses', 'participations'];
-            const missingSheets = requiredActivitySheets.filter(name => !Array.isArray(sheetsData[name]));
-            if (missingSheets.length > 0) {
-                throw new Error(`استجابة Google Sheets لا تتضمن: ${missingSheets.join(', ')}`);
-            }
-
-            const syncedAt = Date.parse(sheetsData.sync?.syncedAt || '');
-            if (!Number.isFinite(syncedAt)) throw new Error('نسخة الشيت لا تتضمن وقت تحقق صالحًا.');
-            if (initial || !sheetsDataLoaded || syncedAt !== lastSheetsSyncAt) {
-                normalizeGoogleSheetsPayload(sheetsData);
-                allData.publications = sheetsData.publications;
-                allData.theses = sheetsData.theses;
-                allData.participations = sheetsData.participations;
-                if (Array.isArray(sheetsData.academic_promotions)) {
-                    allData.academicPromotions = normalizeAcademicPromotionRows(sheetsData.academic_promotions);
-                }
-            }
-            sheetsDataLoaded = true;
-            lastSheetsSyncAt = syncedAt;
-            sheetsSyncInfo = sheetsData.sync;
-            renderSheetsSyncStatus();
-            return true;
-        } catch (error) {
-            lastError = error;
-            const message = error?.name === 'AbortError'
-                ? `انتهت مهلة الاتصال بعد ${SHEETS_REQUEST_TIMEOUT_MS / 1000} ثانية`
-                : (error?.message || 'خطأ اتصال غير معروف');
-            console.warn(`⚠️ تعذر تحميل Google Sheets في المحاولة ${attempt}:`, message);
-            if (attempt < SHEETS_REQUEST_ATTEMPTS) {
-                if (initial) setLoadingState('جارٍ الاتصال بالنسخة المؤكدة من الشيت...', false);
-                await new Promise(resolve => setTimeout(resolve, 1500));
-            }
-        } finally {
-            clearTimeout(timeoutId);
+        });
+        if (sheetsData.error || sheetsData.status === 'error') {
+            throw new Error(sheetsData.message || sheetsData.error || 'استجابة غير ناجحة من Google Sheets');
         }
-    }
 
-    if (sheetsDataLoaded) {
-        sheetsSyncInfo = { ...sheetsSyncInfo, refreshing: false, lastAttemptFailed: true };
+        const requiredActivitySheets = ['publications', 'theses', 'participations'];
+        const missingSheets = requiredActivitySheets.filter(name => !Array.isArray(sheetsData[name]));
+        if (missingSheets.length > 0) {
+            throw new Error(`استجابة Google Sheets لا تتضمن: ${missingSheets.join(', ')}`);
+        }
+
+        const syncedAt = Date.parse(sheetsData.sync?.syncedAt || '');
+        if (!Number.isFinite(syncedAt)) throw new Error('نسخة الشيت لا تتضمن وقت تحقق صالحًا.');
+        if (initial || !sheetsDataLoaded || syncedAt !== lastSheetsSyncAt) {
+            normalizeGoogleSheetsPayload(sheetsData);
+            allData.publications = sheetsData.publications;
+            allData.theses = sheetsData.theses;
+            allData.participations = sheetsData.participations;
+            if (Array.isArray(sheetsData.academic_promotions)) {
+                allData.academicPromotions = normalizeAcademicPromotionRows(sheetsData.academic_promotions);
+            }
+        }
+        sheetsDataLoaded = true;
+        lastSheetsSyncAt = syncedAt;
+        sheetsSyncInfo = sheetsData.sync;
         renderSheetsSyncStatus();
+        return true;
+    } catch (error) {
+        console.warn('⚠️ تعذر تحميل بيانات النشاط:', error.message);
+        if (sheetsDataLoaded) {
+            sheetsSyncInfo = { ...sheetsSyncInfo, refreshing: false, lastAttemptFailed: true };
+            renderSheetsSyncStatus();
+        }
+        throw new Error('تعذر تحميل نسخة مؤكدة من بيانات النشاط. تحقق من الاتصال ثم أعد المحاولة.');
     }
-    throw new Error(lastError?.name === 'AbortError'
-        ? 'انتهت مهلة الاتصال بالشيت بعد محاولتين.'
-        : (lastError?.message || 'تعذر الاتصال بالشيت بعد محاولتين.'));
 }
 
 function renderSheetsSyncStatus() {
@@ -574,7 +546,7 @@ async function loadAllData() {
     // بيانات الأعضاء والطلاب محلية؛ نسخة النشاط مصدرها الشيت وحده.
     // ملف الترقيات نسخة احتياطية صغيرة إلى أن تضيف واجهة Apps Script التبويب الجديد.
     const [faculty, students, academicPromotions] = await Promise.all([
-        loadCSV(`${DATA_BASE_URL}/faculty.csv`),
+        loadCSV(`${DATA_BASE_URL}/faculty.csv`, { required: true }),
         loadCSV(`${DATA_BASE_URL}/students_count.csv`),
         loadCSV(`${DATA_BASE_URL}/academic_promotions.csv`)
     ]);
@@ -7666,9 +7638,9 @@ async function runCvStudioReport({ useCachedProfiles = false, focusResult = fals
         if (requestId !== cvStudioReportRequestId) return;
         await ensureTeachingLoaded().catch(() => null);
         if (requestId !== cvStudioReportRequestId) return;
-        await AcademicCv.load(effectiveMemberIds, !useCachedProfiles);
+        await AcademicCv.load(effectiveMemberIds, !useCachedProfiles, { isCurrent: () => requestId === cvStudioReportRequestId });
     } catch (error) {
-        if (requestId === cvStudioReportRequestId) alert(error.message);
+        if (requestId === cvStudioReportRequestId && error.name !== 'CancelledError') alert(error.message);
         return;
     } finally {
         if (runButton?.dataset.busyRequestId === String(requestId)) {
@@ -7730,7 +7702,6 @@ function setupCvStudio() {
 
 async function initializeCvStudio() {
 
-    await ensureTeachingLoaded().catch(() => null);
     renderCvStudioDepartmentOptions(true);
     renderCvStudioMemberPicker(true);
 
@@ -9690,7 +9661,7 @@ async function init() {
         if (sheetsSyncInfo?.state === 'stale' || sheetsSyncInfo?.refreshing) refreshLiveActivityData();
     } catch (error) {
         console.error('❌ تعذر بدء الموقع ببيانات موثوقة:', error);
-        showLoadingError('تعذر تحميل نسخة مؤكدة من بيانات النشاط العلمي. أعد المحاولة بعد قليل.');
+        showLoadingError(error.message || 'تعذر بدء الموقع. تحقق من الاتصال ثم أعد المحاولة.');
     }
 
     // إنشاء واجهة إضافة الأنشطة

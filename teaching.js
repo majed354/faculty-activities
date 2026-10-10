@@ -29,9 +29,7 @@ function rafTick() {
 }
 
 async function fetchJSONOrThrow(url) {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status} @ ${url}`);
-    return response.json();
+    return SiteData.readData(url);
 }
 
 function setTeachingLoaderMessage(message) {
@@ -107,9 +105,7 @@ async function loadTeachingData() {
             } catch (splitError) {
                 console.warn('⚠️ تعذر تحميل النسخة المقسمة، سيتم استخدام teaching_data.json:', splitError.message);
                 setTeachingLoaderMessage('جاري تحميل بيانات النشاط التدريسي (نسخة احتياطية)...');
-                const response = await fetch(`${DATA_BASE_URL}/teaching_data.json`);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                teachingData = await response.json();
+                teachingData = await fetchJSONOrThrow(`${DATA_BASE_URL}/teaching_data.json`);
                 console.log('🏫 مصدر بيانات التدريس: teaching_data.json');
             }
 

@@ -9,6 +9,7 @@
   "dependencies": {
     "@myriaddreamin/typst-ts-node-compiler": "^0.7.0",
     "@netlify/blobs": "^10.0.0",
+    "chart.js": "4.5.1",
     "docx": "^9.5.1",
     "papaparse": "^5.5.3"
   },
