@@ -11,17 +11,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- PapaParse for CSV -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Core libraries are shipped with the site, with versions fixed by package-lock. -->
+    <script src="assets/site-runtime.js?v=20261011-stability-v1"></script>
     
     <!-- Styles -->
     <link rel="stylesheet" href="style.css?v=20260910-promotions-v1">
     <link rel="stylesheet" href="style-additions.css?v=20261009-cv-open-v1">
     <link rel="stylesheet" href="teaching-styles.css">
-    <link rel="stylesheet" href="cv-studio.css?v=20261009-cv-picker-v1">
+    <link rel="stylesheet" href="cv-studio.css?v=20261011-stability-v1">
 </head>
 <body>
     <!-- ===== شاشة تسجيل الدخول ===== -->
@@ -945,6 +942,7 @@
     // نظام تسجيل الدخول
     // ========================================
     let facultyListForLogin = [];
+    let loginPending = false;
 
     function normalizeArabicDigitsForLogin(value) {
         if (value === null || value === undefined) return '';
@@ -958,17 +956,13 @@
     }
 
     async function loadFacultyForLogin() {
-        try {
-            const response = await fetch('./data/faculty.csv');
-            const text = await response.text();
-            const result = Papa.parse(text, { header: true, skipEmptyLines: true });
-            facultyListForLogin = result.data.filter(m => m.id && m.name);
-        } catch (e) {
-            console.error('خطأ في تحميل بيانات الأعضاء:', e);
-        }
+        const rows = await SiteData.loadCsv('./data/faculty.csv', { requiredFields: ['id', 'name'] });
+        facultyListForLogin = rows.filter(m => m.id && m.name);
+        if (!facultyListForLogin.length) throw new Error('لا توجد قائمة أعضاء صالحة.');
     }
 
     async function handleLogin() {
+        if (loginPending) return;
         const empId = normalizeArabicDigitsForLogin(document.getElementById('loginEmployeeId').value.trim());
         const pass = normalizeArabicDigitsForLogin(document.getElementById('loginPassword').value);
         const errorMsg = document.getElementById('loginErrorMsg');
@@ -983,27 +977,44 @@
             return;
         }
 
-        if (facultyListForLogin.length === 0) {
-            await loadFacultyForLogin();
-        }
-
-        const member = facultyListForLogin.find(m => {
-            const memberId = normalizeArabicDigitsForLogin(m.id).trim();
-            return memberId && memberId === empId;
-        });
-        if (!member) {
-            errorMsg.textContent = 'الرقم الوظيفي غير موجود في سجلات الأعضاء';
+        const button = document.getElementById('loginBtn');
+        loginPending = true;
+        button.disabled = true;
+        button.textContent = 'جارٍ التحقق...';
+        try {
+            if (facultyListForLogin.length === 0) await loadFacultyForLogin();
+        } catch (error) {
+            console.warn('تعذر التحقق من قائمة الأعضاء:', error.message);
+            errorMsg.textContent = 'تعذر تحميل قائمة الأعضاء للتحقق من الرقم. أعد المحاولة؛ هذا لا يعني أن رقمك غير مسجل.';
+            loginPending = false;
+            button.disabled = false;
+            button.textContent = 'دخول';
             return;
         }
 
-        // جلسة السير تستخدم ملف ارتباط موقعًا؛ تعطلها لا يمنع استعراض الأنشطة.
-        if (window.AcademicCv) await AcademicCv.signIn(empId, pass);
-        // حفظ بيانات الجلسة
-        sessionStorage.setItem('loggedIn', 'true');
-        sessionStorage.setItem('employeeId', empId);
-        sessionStorage.setItem('employeeName', member.name);
+        try {
+            const member = facultyListForLogin.find(m => {
+                const memberId = normalizeArabicDigitsForLogin(m.id).trim();
+                return memberId && memberId === empId;
+            });
+            if (!member) {
+                errorMsg.textContent = 'الرقم الوظيفي غير موجود في سجلات الأعضاء';
+                return;
+            }
 
-        showMainApp(member.name);
+            // جلسة السير تستخدم ملف ارتباط موقعًا؛ تعطلها لا يمنع استعراض الأنشطة.
+            if (window.AcademicCv) await AcademicCv.signIn(empId, pass);
+            // حفظ بيانات الجلسة
+            sessionStorage.setItem('loggedIn', 'true');
+            sessionStorage.setItem('employeeId', empId);
+            sessionStorage.setItem('employeeName', member.name);
+
+            showMainApp(member.name);
+        } finally {
+            loginPending = false;
+            button.disabled = false;
+            button.textContent = 'دخول';
+        }
     }
 
     function showMainApp(memberName) {
@@ -1056,9 +1067,9 @@
         });
     });
     </script>
-    <script src="app.js?v=20261010-cv-member-id-v1"></script>
-    <script src="assets/cv-studio.js?v=20261010-cv-member-id-v1"></script>
-    <script src="teaching.js"></script>
+    <script src="app.js?v=20261011-stability-v1"></script>
+    <script src="assets/cv-studio.js?v=20261011-stability-v1"></script>
+    <script src="teaching.js?v=20261011-stability-v1"></script>
 
     <!-- Modal تفاصيل الرسالة -->
     <div id="thesisModal" class="modal">
