@@ -7080,7 +7080,10 @@ function setupAnalyticsStudio() {
 function cvStudioClearReport() {
     cvStudioReportRequestId += 1;
     cvStudioReport = null;
+    window.AcademicCv?.cancelConfirmation();
     document.getElementById('cvStudioResults')?.classList.add('hidden');
+    const container = document.getElementById('cvStudioMembersContainer');
+    if (container) container.innerHTML = '';
 }
 
 function getCvStudioSelectedDepartmentValue() {
@@ -7229,7 +7232,7 @@ function renderCvStudioMemberPicker(resetSelections = false) {
                         <div class="analytics-studio-multi-option cv-studio-member-option" data-search="${escapeHtml(searchText)}">
                             <input type="checkbox" value="${escapeHtml(id)}" aria-label="${escapeHtml(`تحديد ${label} للعرض الجماعي`)}" ${selectedIds.includes(id) ? 'checked' : ''}>
                             <button type="button" class="cv-studio-member-open" data-cv-open="${escapeHtml(id)}" aria-label="${escapeHtml(`فتح سيرة ${label}`)}">
-                                <span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(meta || id)}</small></span>
+                                <span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(meta)}</small></span>
                             </button>
                         </div>
                     `;
@@ -7654,10 +7657,13 @@ async function runCvStudioReport({ useCachedProfiles = false, focusResult = fals
         return;
     }
 
+    cvStudioClearReport();
     const runButton = document.getElementById('cvStudioRunBtn');
     const requestId = ++cvStudioReportRequestId;
     if (runButton) { runButton.dataset.busy = 'true'; runButton.dataset.busyRequestId = String(requestId); updateCvStudioRunButton(); }
     try {
+        if (!await AcademicCv.confirmMembers(effectiveMemberIds)) return;
+        if (requestId !== cvStudioReportRequestId) return;
         await ensureTeachingLoaded().catch(() => null);
         if (requestId !== cvStudioReportRequestId) return;
         await AcademicCv.load(effectiveMemberIds, !useCachedProfiles);

@@ -3,6 +3,7 @@ import { buildCvDocument, renderCvDocument, html } from './cv-document.mjs';
 import { CERTIFICATE_CHOICES, chooseEntry, chooseInterest, draftBiography } from './cv-choices.mjs';
 import { EDITOR_STEPS, CHOICE_IDENTITIES, entryHtml, editorStepsHtml, syncChoices, filterChoices } from './cv-editor.mjs';
 import { chartCsvRows } from './cv-chart-data.mjs';
+import { confirmCvMembers, cancelCvConfirmation } from './cv-access.mjs';
 import printStyles from '../cv-studio.css';
 
 const ENDPOINT = '/.netlify/functions/cv-profiles';
@@ -11,6 +12,7 @@ let initialized = false;
 let editing = null;
 let sessionReady = false;
 let returnFocus = null;
+let editorRequestId = 0;
 const byId = id => document.getElementById(id);
 const context = () => ({ university: config.university_name || 'جامعة الطائف', college: config.college_name || 'كلية الشريعة', formatDate, yearLabel: formatCustomStatsYearLabel });
 const options = () => ({ mode: byId('cvStudioMode')?.value || 'public', personal: !!byId('cvStudioPersonal')?.checked, generatedAt: cvStudioReport?.generatedAt });
@@ -39,6 +41,7 @@ async function api(path = '', body) {
 }
 
 async function signIn(employeeId, password) {
+  cancelCvConfirmation();
   try {
     await api('', { action: 'login', employeeId, password });
     sessionReady = true;
@@ -49,6 +52,8 @@ async function signIn(employeeId, password) {
 }
 
 async function signOut() {
+  editorRequestId += 1;
+  cancelCvConfirmation();
   sessionReady = false;
   profiles.clear();
   cvStudioClearReport();
@@ -67,6 +72,15 @@ async function load(ids, force = false) {
   }
   sessionReady = true;
   message('الحفظ الدائم متصل. تجمع السيرة البيانات المحفوظة وسجلات النشاط من جميع السنوات.');
+}
+
+function confirmMembers(ids) {
+  return confirmCvMembers(ids.map(id => getCvStudioMemberRecord(id, 'all')));
+}
+
+function cancelConfirmation() {
+  editorRequestId += 1;
+  cancelCvConfirmation();
 }
 
 function documentFor(bundle) {
@@ -298,7 +312,12 @@ async function openEditor(id) {
   const target = id || (members.some(member => String(member.id) === getLoggedInEmployeeId()) ? getLoggedInEmployeeId() : String(members[0]?.id || ''));
   const member = getCvStudioMemberRecord(target, 'all');
   if (!member) return;
+  const requestId = ++editorRequestId;
+  const alreadyOpen = !byId('cvStudioResults')?.classList.contains('hidden') && cvStudioReport?.members.some(bundle => String(bundle.member.id) === target);
+  if (!alreadyOpen && !await confirmMembers([target])) return;
+  if (requestId !== editorRequestId) return;
   try { await load([target], true); } catch (error) { message(error.message, true); if (error.status === 401) { sessionReady = false; openSession(); } return; }
+  if (requestId !== editorRequestId) return;
   if (editing) closeEditor();
   returnFocus = document.activeElement;
   editing = { id: target, member, etag: profiles.get(target)?.etag || '', saving: false, step: 0, removedChoices: new Map() };
@@ -532,4 +551,4 @@ async function setup() {
   catch (error) { message(error.message, true); }
 }
 
-window.AcademicCv = { setup, signIn, signOut, load, getProfile, renderMember, renderSummary, exportPdf, exportWord, exportCsv };
+window.AcademicCv = { setup, signIn, signOut, load, getProfile, renderMember, renderSummary, exportPdf, exportWord, exportCsv, confirmMembers, cancelConfirmation };
