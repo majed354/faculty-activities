@@ -7,7 +7,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 export function createDataReader({ fetchImpl = (...args) => fetch(...args), sleep = pause, now = Date.now, baseUrl = () => document.baseURI } = {}) {
   const csvRequests = new Map();
 
-  async function readData(url, { type = 'json', timeoutMs = 12000, attempts = 3, maxWaitMs = 40000, onRetry, ...options } = {}) {
+  async function readData(url, { type = 'json', timeoutMs = 12000, attempts = 3, maxWaitMs = 30000, onRetry, ...options } = {}) {
     const started = now();
     const canRetry = (options.method || 'GET').toUpperCase() === 'GET';
     for (let attempt = 1; ; attempt++) {

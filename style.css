@@ -1274,22 +1274,25 @@ body {
    مؤشر التحميل
 ======================================== */
 .loading-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(12, 25, 41, 0.95);
-    display: flex;
+    position: relative;
+    margin: 32px auto;
+    padding: 28px;
+    width: min(560px, calc(100% - 32px));
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: var(--radius-lg);
+    display: none;
     align-items: center;
     justify-content: center;
-    /* يجب أن يبقى فوق شاشة الدخول حتى لا يرى المستخدم أصفارًا مؤقتة. */
-    z-index: 20000;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
+    text-align: center;
 }
 
 .loading-overlay.active {
-    opacity: 1;
-    pointer-events: all;
+    display: flex;
+}
+
+#activityWorkspace[hidden] {
+    display: none;
 }
 
 .loading-spinner {
@@ -1315,12 +1318,7 @@ body {
 }
 
 .loading-overlay.has-error .loading-spinner {
-    width: min(520px, calc(100vw - 32px));
-    padding: 28px;
-    text-align: center;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(212, 175, 55, 0.45);
-    border-radius: var(--radius-lg);
+    width: 100%;
 }
 
 .loading-retry-button {

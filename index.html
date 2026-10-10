@@ -9,13 +9,13 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     
     <!-- Core libraries are shipped with the site, with versions fixed by package-lock. -->
-    <script src="assets/site-runtime.js?v=20261011-stability-v1"></script>
+    <script defer src="assets/site-runtime.js?v=20261011-startup-v2"></script>
     
     <!-- Styles -->
-    <link rel="stylesheet" href="style.css?v=20260910-promotions-v1">
+    <link rel="stylesheet" href="style.css?v=20261011-startup-v2">
     <link rel="stylesheet" href="style-additions.css?v=20261009-cv-open-v1">
     <link rel="stylesheet" href="teaching-styles.css">
     <link rel="stylesheet" href="cv-studio.css?v=20261011-stability-v1">
@@ -92,16 +92,30 @@
                 </div>
                 <div class="year-selector">
                     <label for="deptSelect">القسم</label>
-                    <select id="deptSelect"></select>
+                    <select id="deptSelect" disabled></select>
                 </div>
                 <div class="year-selector">
                     <label for="yearSelect">السنة الأكاديمية</label>
-                    <select id="yearSelect"></select>
+                    <select id="yearSelect" disabled></select>
                 </div>
             </div>
         </div>
     </header>
 
+    <!-- انتظار النشاط لا يحجب تسجيل الدخول أو رأس الموقع. -->
+    <div class="loading-overlay active" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="loading-rings" aria-hidden="true">
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+            </div>
+            <span id="loadingMessage" role="status" aria-live="polite">جارٍ تحميل بيانات النشاط...</span>
+            <button type="button" id="loadingRetryButton" class="loading-retry-button" onclick="window.location.reload()" hidden>إعادة المحاولة</button>
+        </div>
+    </div>
+
+    <div id="activityWorkspace" hidden>
     <!-- التنقل الرئيسي - الهيكل الجديد -->
     <nav class="main-nav">
         <div class="nav-container">
@@ -908,6 +922,7 @@
         </section>
 
     </main>
+    </div><!-- نهاية activityWorkspace: يظهر بعد تحقق البيانات فقط -->
 
     <!-- الفوتر -->
     <footer class="main-footer">
@@ -923,19 +938,6 @@
         </div>
     </footer>
     </div><!-- نهاية mainApp -->
-
-    <!-- مؤشر التحميل -->
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="loading-spinner">
-            <div class="loading-rings" aria-hidden="true">
-                <div class="spinner-ring"></div>
-                <div class="spinner-ring"></div>
-                <div class="spinner-ring"></div>
-            </div>
-            <span id="loadingMessage" role="status" aria-live="polite">جارٍ تحميل البيانات المحدثة...</span>
-            <button type="button" id="loadingRetryButton" class="loading-retry-button" onclick="window.location.reload()" hidden>إعادة المحاولة</button>
-        </div>
-    </div>
 
     <script>
     // ========================================
@@ -1067,9 +1069,9 @@
         });
     });
     </script>
-    <script src="app.js?v=20261011-stability-v1"></script>
-    <script src="assets/cv-studio.js?v=20261011-stability-v1"></script>
-    <script src="teaching.js?v=20261011-stability-v1"></script>
+    <script defer src="app.js?v=20261011-startup-v2"></script>
+    <script defer src="assets/cv-studio.js?v=20261011-startup-v2"></script>
+    <script defer src="teaching.js?v=20261011-startup-v2"></script>
 
     <!-- Modal تفاصيل الرسالة -->
     <div id="thesisModal" class="modal">

@@ -64,6 +64,9 @@ let lastSheetsSyncAt = 0;
 let sheetsRefreshPromise = null;
 let sheetsForcedRefreshPending = false;
 let sheetsSyncInfo = null;
+let startupReady = false;
+let startupSlowTimer = null;
+let startupIsSlow = false;
 
 const SHEETS_DATA_ENDPOINT = '/.netlify/functions/sheets-data';
 const SHEETS_REQUEST_TIMEOUT_MS = 12000;
@@ -90,15 +93,30 @@ function setLoadingState(message, allowRetry = false) {
 }
 
 function showLoading(message = 'جارٍ تحميل البيانات المحدثة...') {
+    clearTimeout(startupSlowTimer);
+    startupIsSlow = false;
     setLoadingState(message, false);
     document.getElementById('loadingOverlay')?.classList.add('active');
+    if (!startupReady) {
+        startupSlowTimer = setTimeout(() => {
+            startupIsSlow = true;
+            setLoadingState('تحميل بيانات النشاط أبطأ من المعتاد؛ لا يزال الاتصال جاريًا.');
+            document.querySelector('#loadingOverlay .loading-rings')?.setAttribute('hidden', '');
+        }, 12000);
+    }
 }
 
 function hideLoading() {
+    clearTimeout(startupSlowTimer);
     document.getElementById('loadingOverlay')?.classList.remove('active');
+    document.getElementById('activityWorkspace').hidden = false;
+    document.getElementById('deptSelect').disabled = false;
+    document.getElementById('yearSelect').disabled = false;
+    startupReady = true;
 }
 
 function showLoadingError(message) {
+    clearTimeout(startupSlowTimer);
     setLoadingState(message, true);
     document.getElementById('loadingOverlay')?.classList.add('active');
 }
@@ -218,7 +236,8 @@ async function loadConfig() {
     try {
         config = await SiteData.readData(`${DATA_BASE_URL}/config.json?_=${Date.now()}`, {
             cache: 'no-store',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json' },
+            timeoutMs: 8000, attempts: 2, maxWaitMs: 18000
         });
         // يبدأ الموقع دائمًا بالسنة الهجرية الحالية، مع بقاء خيار "الكل"
         // متاحًا للمستخدم بعد التحميل.
@@ -289,11 +308,11 @@ async function loadFromGoogleSheets({ initial = true } = {}) {
             cache: 'no-store',
             headers: { 'Accept': 'application/json' },
             timeoutMs: SHEETS_REQUEST_TIMEOUT_MS,
-            attempts: initial ? 24 : SHEETS_REQUEST_ATTEMPTS,
-            maxWaitMs: initial ? 130000 : 27000,
+            attempts: initial ? 4 : SHEETS_REQUEST_ATTEMPTS,
+            maxWaitMs: initial ? 30000 : 27000,
             onRetry: ({ error }) => {
-                if (initial) setLoadingState(error.status === 503
-                    ? 'جارٍ تجهيز نسخة النشاط المؤكدة؛ ستُفتح الصفحة تلقائيًا عند اكتمالها...'
+                if (initial && !startupIsSlow) setLoadingState(error.status === 503
+                    ? 'جارٍ تجهيز نسخة النشاط المؤكدة...'
                     : 'تعثر الاتصال مؤقتًا؛ جارٍ إعادة تحميل بيانات النشاط تلقائيًا...', false);
             }
         });
@@ -322,14 +341,14 @@ async function loadFromGoogleSheets({ initial = true } = {}) {
         lastSheetsSyncAt = syncedAt;
         sheetsSyncInfo = sheetsData.sync;
         renderSheetsSyncStatus();
-        return true;
+        return sheetsData;
     } catch (error) {
         console.warn('⚠️ تعذر تحميل بيانات النشاط:', error.message);
         if (sheetsDataLoaded) {
             sheetsSyncInfo = { ...sheetsSyncInfo, refreshing: false, lastAttemptFailed: true };
             renderSheetsSyncStatus();
         }
-        throw new Error('تعذر تحميل نسخة مؤكدة من بيانات النشاط. تحقق من الاتصال ثم أعد المحاولة.');
+        throw new Error('تعذر تحميل نسخة مؤكدة من بيانات النشاط الآن. اضغط «إعادة المحاولة».');
     }
 }
 
@@ -541,36 +560,31 @@ function buildCourseToPrograms() {
 }
 
 async function loadAllData() {
-    showLoading('جارٍ تحميل البيانات المحدثة...');
-
     // بيانات الأعضاء والطلاب محلية؛ نسخة النشاط مصدرها الشيت وحده.
     // ملف الترقيات نسخة احتياطية صغيرة إلى أن تضيف واجهة Apps Script التبويب الجديد.
-    const [faculty, students, academicPromotions] = await Promise.all([
-        loadCSV(`${DATA_BASE_URL}/faculty.csv`, { required: true }),
-        loadCSV(`${DATA_BASE_URL}/students_count.csv`),
-        loadCSV(`${DATA_BASE_URL}/academic_promotions.csv`)
+    const [[faculty, students, academicPromotions, plans], sheetsData] = await Promise.all([
+        Promise.all([
+            loadCSV(`${DATA_BASE_URL}/faculty.csv`, { required: true }),
+            loadCSV(`${DATA_BASE_URL}/students_count.csv`),
+            loadCSV(`${DATA_BASE_URL}/academic_promotions.csv`),
+            loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`)
+        ]),
+        loadFromGoogleSheets()
     ]);
 
-    const plans = await loadCSV(`${DATA_BASE_URL}/new_all_plans.csv`);
     if (!plans || plans.length === 0) {
         throw new Error('تعذر تحميل data/new_all_plans.csv أو الملف فارغ. هذا الملف أصبح المصدر المعتمد الوحيد لربط المقررات بالبرامج.');
     }
 
     allData = {
+        ...allData,
         faculty: normalizeFacultyMemberCollection(faculty),
         students,
-        theses: [],
-        participations: [],
-        academicPromotions: normalizeAcademicPromotionRows(academicPromotions),
-        publications: []
+        academicPromotions: Array.isArray(sheetsData.academic_promotions)
+            ? allData.academicPromotions : normalizeAcademicPromotionRows(academicPromotions)
     };
     allPlansData = plans;
     buildCourseToPrograms();
-
-    // لا تُستخدم ملفات النشاط المحلية أو أصفار بديلة عند تعذر الاتصال.
-    await loadFromGoogleSheets();
-
-    await loadYearData(currentYear);
 }
 
 async function loadYearData(year) {
@@ -632,9 +646,9 @@ async function loadYearData(year) {
     // إعادة تعيين عرض المتصدرين
     showAllLeaderboard = false;
 
-    hideLoading();
     populateThesesFilters();
     renderAll();
+    hideLoading();
 }
 
 // ========================================
@@ -9638,11 +9652,13 @@ window.syncMainNavOffset = syncMainNavOffset;
 // التهيئة
 // ========================================
 async function init() {
+    showLoading('جارٍ تحميل بيانات النشاط...');
     const hijriYear = getCurrentHijriYearNumber();
     document.getElementById('currentYear').textContent = formatArabicDigits(hijriYear);
 
     try {
-        await loadConfig();
+        // تبدأ القراءات المستقلة معًا، ولا تحجب شاشة تسجيل الدخول.
+        await Promise.all([loadConfig(), loadAllData()]);
         populateYearSelector();
         populateDepartmentSelector();
         populateProgramSelector();
@@ -9656,7 +9672,7 @@ async function init() {
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', syncMainNavOffset);
         }
-        await loadAllData();
+        await loadYearData(currentYear);
         setupAnalyticsStudio();
         if (sheetsSyncInfo?.state === 'stale' || sheetsSyncInfo?.refreshing) refreshLiveActivityData();
     } catch (error) {
@@ -9671,7 +9687,7 @@ async function init() {
 document.addEventListener('DOMContentLoaded', init);
 
 async function refreshLiveActivityData({ force = false } = {}) {
-    if (!sheetsDataLoaded) return null;
+    if (!startupReady || !sheetsDataLoaded) return null;
     if (sheetsRefreshPromise) {
         if (force) sheetsForcedRefreshPending = true;
         return sheetsRefreshPromise;
