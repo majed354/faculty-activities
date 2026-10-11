@@ -30,19 +30,23 @@ export function createBrowserSnapshotStore(sourceId) {
   };
 }
 
-export function createActivityReader({ readData, sourceId, store = createBrowserSnapshotStore(sourceId), now = () => Date.now(), storageTimeoutMs = 1000 }) {
+export function createActivityReader({ readData, sourceId, bundledSnapshot, store = createBrowserSnapshotStore(sourceId), now = () => Date.now(), storageTimeoutMs = 1000 }) {
   const inFlight = new Map();
   let initialLive;
   const clone = payload => JSON.parse(JSON.stringify(payload));
   async function savedRead() {
     let timer;
+    let bundled;
+    try { bundled = validateConfirmedActivity(bundledSnapshot, sourceId, now()); } catch { /* A deploy snapshot expires like a browser snapshot. */ }
     try {
-      const payload = await Promise.race([
+      let payload = await Promise.race([
         Promise.resolve().then(() => store.read()),
         new Promise(resolve => { timer = setTimeout(() => resolve(null), storageTimeoutMs); })
       ]);
-      return validateConfirmedActivity(payload, sourceId, now());
-    } catch { return null; }
+      try { payload = validateConfirmedActivity(payload, sourceId, now()); } catch { payload = null; }
+      if (bundled && (!payload || Date.parse(bundled.sync.syncedAt) > Date.parse(payload.sync.syncedAt))) return { ...bundled, sync: { ...bundled.sync, delivery: 'page' } };
+      return payload;
+    } catch { return bundled ? { ...bundled, sync: { ...bundled.sync, delivery: 'page' } } : null; }
     finally { clearTimeout(timer); }
   }
   function liveRead(bypassCache, options) {
@@ -80,7 +84,7 @@ export function createActivityReader({ readData, sourceId, store = createBrowser
       ]);
       if (result.live) initialLive = null;
       const payload = clone(result.payload);
-      if (!result.live) payload.sync = { ...payload.sync, state: 'stale', delivery: 'browser', refreshing: true, lastAttemptFailed: false };
+      if (!result.live) payload.sync = { ...payload.sync, state: 'stale', delivery: payload.sync.delivery === 'page' ? 'page' : 'browser', refreshing: true, lastAttemptFailed: false };
       return payload;
     }
     return clone(await live);

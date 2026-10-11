@@ -38,6 +38,27 @@ test('a saved confirmed read opens while the live request is unresolved, then sh
   assert.equal(written.sync.syncedAt, next.sync.syncedAt);
 });
 
+test('first visits can use a confirmed deploy snapshot when live reads and browser storage fail', async () => {
+  const bundled = snapshot();
+  const load = setup(async () => { throw new Error('Network unavailable'); }, { read: async () => { throw new Error('Storage blocked'); } }, { bundledSnapshot: bundled });
+  const result = await load();
+  assert.equal(result.sync.delivery, 'page');
+  assert.equal(result.sync.syncedAt, bundled.sync.syncedAt);
+  result.publications[0].id = 'changed';
+  assert.equal(bundled.publications[0].id, 'confirmed');
+});
+
+test('deploy fallback refuses expired and foreign data and prefers a newer browser snapshot', async () => {
+  const bundled = snapshot();
+  const browser = snapshot(); browser.sync.syncedAt = new Date(clock).toISOString();
+  const load = setup(() => new Promise(() => {}), { read: async () => browser }, { bundledSnapshot: bundled });
+  assert.equal((await load()).sync.delivery, 'browser');
+  for (const invalid of [{ ...bundled, sync: { ...bundled.sync, sourceId: 'other' } }, { ...bundled, sync: { ...bundled.sync, syncedAt: new Date(clock - MAX_SNAPSHOT_AGE_MS - 1).toISOString() } }]) {
+    const badLoad = setup(async () => { throw new Error('Offline'); }, { read: async () => null }, { bundledSnapshot: invalid });
+    await assert.rejects(badLoad(), /Offline/);
+  }
+});
+
 test('failed live refresh preserves the saved timestamp without an unhandled rejection', async () => {
   const live = deferred(); const saved = snapshot();
   const load = setup(() => live.promise, { read: async () => saved });

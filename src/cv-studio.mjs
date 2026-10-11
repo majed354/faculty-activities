@@ -5,6 +5,7 @@ import { EDITOR_STEPS, CHOICE_IDENTITIES, entryHtml, editorStepsHtml, syncChoice
 import { chartCsvRows } from './cv-chart-data.mjs';
 import { confirmCvMembers, cancelCvConfirmation } from './cv-access.mjs';
 import { readData } from './site-data.mjs';
+import { createWordBlob } from './cv-word.mjs';
 import printStyles from '../cv-studio.css';
 
 const ENDPOINT = '/.netlify/functions/cv-profiles';
@@ -15,6 +16,13 @@ let sessionReady = false;
 let returnFocus = null;
 let editorRequestId = 0;
 let sessionPrompt = null;
+let sessionOperations = Promise.resolve();
+let sessionVersion = 0;
+function queueSession(body) {
+  const operation = sessionOperations.catch(() => {}).then(() => api('', body));
+  sessionOperations = operation.catch(() => {});
+  return operation;
+}
 const byId = id => document.getElementById(id);
 const context = () => ({ university: config.university_name || 'جامعة الطائف', college: config.college_name || 'كلية الشريعة', formatDate, yearLabel: formatCustomStatsYearLabel });
 const options = () => ({ mode: byId('cvStudioMode')?.value || 'public', personal: !!byId('cvStudioPersonal')?.checked, generatedAt: cvStudioReport?.generatedAt });
@@ -35,17 +43,20 @@ async function api(path = '', body, isCurrent = () => true) {
 }
 
 async function signIn(employeeId, password) {
+  const version = ++sessionVersion;
   cancelCvConfirmation();
   try {
-    await api('', { action: 'login', employeeId, password });
+    await queueSession({ action: 'login', employeeId, password });
+    if (version !== sessionVersion) return false;
     sessionReady = true;
     profiles.clear();
     message('الحفظ الدائم متصل. بيانات السيرة مرتبطة بالعضو وتبقى محفوظة بين السنوات والأجهزة.');
     return true;
-  } catch (error) { sessionReady = false; message(error.message, true); return false; }
+  } catch (error) { if (version === sessionVersion) { sessionReady = false; message(error.message, true); } return false; }
 }
 
 async function signOut() {
+  const version = ++sessionVersion;
   editorRequestId += 1;
   cancelCvConfirmation();
   sessionReady = false;
@@ -53,8 +64,8 @@ async function signOut() {
   cvStudioClearReport();
   if (editing) closeEditor();
   sessionPrompt?.finish(false);
-  try { await api('', { action: 'logout' }); } catch { /* The current app still signs out when offline. */ }
-  message('أعد تسجيل الدخول لتفعيل بيانات السيرة المحفوظة.');
+  try { await queueSession({ action: 'logout' }); } catch { /* The current app still signs out when offline. */ }
+  if (version === sessionVersion) message('أعد تسجيل الدخول لتفعيل بيانات السيرة المحفوظة.');
 }
 
 async function load(ids, force = false, { isCurrent = () => true } = {}) {
@@ -62,6 +73,8 @@ async function load(ids, force = false, { isCurrent = () => true } = {}) {
     if (isCurrent()) return;
     const error = new Error('تم إلغاء فتح السيرة.'); error.name = 'CancelledError'; throw error;
   };
+  checkCurrent();
+  await sessionOperations;
   checkCurrent();
   const required = [...new Set(ids.map(String))].filter(id => force || !profiles.has(id));
   if (!required.length) return;
@@ -213,7 +226,6 @@ async function exportWord(id, propagateError = false) {
   if (!documents.length) return;
   try {
     message('جارٍ إعداد ملف Word…');
-    const { createWordBlob } = await import('/assets/cv-word.js');
     download(await createWordBlob(documents), `${fileName(documents)}.docx`);
     message('تم إعداد Word بالبيانات الظاهرة في المعاينة.');
   } catch (error) { message(`تعذر إعداد Word: ${error.message}`, true); if (propagateError) throw error; }
