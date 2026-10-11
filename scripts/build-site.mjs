@@ -2,6 +2,7 @@ import { mkdir, cp, readFile, writeFile, rm, readdir } from 'node:fs/promises';
 import { build } from 'esbuild';
 import Papa from 'papaparse';
 import { createHash } from 'node:crypto';
+import { standalonePage, readDeploySnapshot } from './standalone-page.mjs';
 
 await rm('public', { recursive: true, force: true });
 await mkdir('public/assets', { recursive: true });
@@ -24,4 +25,15 @@ const activitySourceId = createHash('sha256').update(siteConfig.google_sheets_ap
 await build({ entryPoints: ['src/site-runtime.mjs'], outfile: 'public/assets/site-runtime.js', bundle: true, minify: true, target: 'es2020', format: 'iife', define: { __ACTIVITY_SOURCE_ID__: JSON.stringify(activitySourceId) } });
 await build({ entryPoints: ['src/cv-studio.mjs'], outfile: 'public/assets/cv-studio.js', bundle: true, minify: true, target: 'es2020', format: 'iife', loader: { '.css': 'text' } });
 await build({ entryPoints: ['src/cv-word.mjs'], outfile: 'public/assets/cv-word.js', bundle: true, minify: true, target: 'es2020', format: 'esm' });
+const csvDocuments = {};
+for (const name of ['faculty', 'students_count', 'academic_promotions', 'new_all_plans']) {
+  csvDocuments[`/data/${name}.csv`] = await readFile(`data/${name}.csv`, 'utf8');
+}
+const members = [...new Map(rows.filter(row => ids.includes(row.id) && row.name).map(row => [row.id, { id: row.id, name: row.name }])).values()];
+if (members.length !== ids.length) throw new Error('The login roster is incomplete.');
+const activity = await readDeploySnapshot({ origin: process.env.URL || 'https://faculty-activities.netlify.app', sourceId: activitySourceId });
+const source = await readFile('index.html', 'utf8');
+const page = await standalonePage({ source, bootstrap: { members, config: siteConfig, csv: csvDocuments, activity }, readAsset: path => readFile(`public/${path}`, 'utf8') });
+await writeFile('public/index.html', page);
+console.log(`Self-contained entry page (${Buffer.byteLength(page)} bytes, ${members.length} members, activity snapshot ${activity ? activity.sync.syncedAt : 'unavailable — live reads remain enabled'}).`);
 console.log(`Built site and academic CV exports (${ids.length} faculty IDs, ${fontFiles.length} embedded fonts).`);

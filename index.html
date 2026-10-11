@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>كلية الشريعة | لوحة الأنشطة العلمية</title>
+    <!-- Site bootstrap -->
     <script>if (location.protocol === 'file:') location.replace('https://faculty-activities.netlify.app/');</script>
     
     <!-- Fonts -->
@@ -945,6 +946,12 @@
     // ========================================
     let facultyListForLogin = [];
     let loginPending = false;
+    const sessionMemory = new Map();
+    window.SiteSession = {
+        getItem(key) { if (sessionMemory.has(key)) return sessionMemory.get(key); try { return sessionStorage.getItem(key); } catch { return null; } },
+        setItem(key, value) { sessionMemory.set(key, value); try { sessionStorage.setItem(key, value); } catch { /* The current page can still be used without browser storage. */ } },
+        removeItem(key) { sessionMemory.set(key, null); try { sessionStorage.removeItem(key); } catch { /* Optional browser storage. */ } }
+    };
 
     function normalizeArabicDigitsForLogin(value) {
         if (value === null || value === undefined) return '';
@@ -954,18 +961,18 @@
             '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
             '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
         };
-        return String(value).replace(/[٠-٩۰-۹]/g, ch => map[ch] || ch);
+        return String(value).replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/[٠-٩۰-۹]/g, ch => map[ch] || ch);
     }
 
     async function loadFacultyForLogin() {
-        const rows = await SiteData.loadCsv('./data/faculty.csv', { requiredFields: ['id', 'name'] });
+        const rows = window.SiteBootstrap?.members || await SiteData.loadCsv('./data/faculty.csv', { requiredFields: ['id', 'name'] });
         facultyListForLogin = rows.filter(m => m.id && m.name);
         if (!facultyListForLogin.length) throw new Error('لا توجد قائمة أعضاء صالحة.');
     }
 
     async function handleLogin() {
         if (loginPending) return;
-        const empId = normalizeArabicDigitsForLogin(document.getElementById('loginEmployeeId').value.trim());
+        const empId = normalizeArabicDigitsForLogin(document.getElementById('loginEmployeeId').value).trim();
         const pass = normalizeArabicDigitsForLogin(document.getElementById('loginPassword').value);
         const errorMsg = document.getElementById('loginErrorMsg');
         errorMsg.textContent = '';
@@ -1004,14 +1011,14 @@
                 return;
             }
 
-            // جلسة السير تستخدم ملف ارتباط موقعًا؛ تعطلها لا يمنع استعراض الأنشطة.
-            if (window.AcademicCv) await AcademicCv.signIn(empId, pass);
             // حفظ بيانات الجلسة
-            sessionStorage.setItem('loggedIn', 'true');
-            sessionStorage.setItem('employeeId', empId);
-            sessionStorage.setItem('employeeName', member.name);
+            window.SiteSession.setItem('loggedIn', 'true');
+            window.SiteSession.setItem('employeeId', empId);
+            window.SiteSession.setItem('employeeName', member.name);
 
             showMainApp(member.name);
+            // The separate CV service must never hold the login screen open.
+            if (window.AcademicCv) await window.AcademicCv.signIn(empId, pass);
         } finally {
             loginPending = false;
             button.disabled = false;
@@ -1036,9 +1043,9 @@
 
     function handleLogout() {
         window.AcademicCv?.signOut();
-        sessionStorage.removeItem('loggedIn');
-        sessionStorage.removeItem('employeeId');
-        sessionStorage.removeItem('employeeName');
+        window.SiteSession.removeItem('loggedIn');
+        window.SiteSession.removeItem('employeeId');
+        window.SiteSession.removeItem('employeeName');
         document.getElementById('mainApp').style.display = 'none';
         document.getElementById('loginOverlay').style.display = 'flex';
         document.getElementById('loginEmployeeId').value = '';
@@ -1053,8 +1060,8 @@
     // التحقق عند تحميل الصفحة
     document.addEventListener('DOMContentLoaded', async function() {
         // التحقق من وجود جلسة سابقة
-        if (sessionStorage.getItem('loggedIn') === 'true') {
-            const name = sessionStorage.getItem('employeeName');
+        if (window.SiteSession.getItem('loggedIn') === 'true') {
+            const name = window.SiteSession.getItem('employeeName');
             showMainApp(name);
         } else {
             document.getElementById('loginOverlay').style.display = 'flex';

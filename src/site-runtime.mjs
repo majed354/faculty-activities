@@ -5,4 +5,4 @@ import { createActivityReader } from './activity-data.mjs';
 
 window.Chart = Chart;
 window.Papa = Papa;
-window.SiteData = { readData, loadCsv, loadActivity: createActivityReader({ readData, sourceId: __ACTIVITY_SOURCE_ID__ }) };
+window.SiteData = { readData, loadCsv, loadActivity: createActivityReader({ readData, sourceId: __ACTIVITY_SOURCE_ID__, bundledSnapshot: window.SiteBootstrap?.activity }) };

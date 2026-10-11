@@ -234,7 +234,7 @@ function normalizeFacultyMemberCollection(rows) {
 async function loadConfig() {
     const defaultHijriYear = getCurrentHijriYearNumber();
     try {
-        config = await SiteData.readData(`${DATA_BASE_URL}/config.json?_=${Date.now()}`, {
+        config = window.SiteBootstrap?.config ? JSON.parse(JSON.stringify(window.SiteBootstrap.config)) : await SiteData.readData(`${DATA_BASE_URL}/config.json?_=${Date.now()}`, {
             cache: 'no-store',
             headers: { 'Accept': 'application/json' },
             timeoutMs: 8000, attempts: 2, maxWaitMs: 18000
@@ -357,7 +357,9 @@ function renderSheetsSyncStatus() {
     const bar = document.getElementById('sheetsSyncBar');
     if (!bar || !sheetsSyncInfo?.syncedAt) return;
     const date = new Date(sheetsSyncInfo.syncedAt).toLocaleString('ar-SA', { calendar: 'gregory', dateStyle: 'short', timeStyle: 'short' });
-    let message = sheetsSyncInfo.delivery === 'browser'
+    let message = sheetsSyncInfo.delivery === 'page'
+        ? `تظهر نسخة مؤكدة مرفقة بالموقع؛ آخر تحديث من الشيت: ${date}.`
+        : sheetsSyncInfo.delivery === 'browser'
         ? `تظهر نسخة محفوظة في هذا المتصفح؛ آخر تحديث مؤكد من الشيت: ${date}.`
         : `آخر تحديث مؤكد من الشيت: ${date}.`;
     if (sheetsSyncInfo.refreshing) message += ' جارٍ التحقق من التحديثات…';
@@ -1870,11 +1872,11 @@ function getRecentActivities(limit = 10) {
 }
 
 function getLoggedInEmployeeId() {
-    return String(sessionStorage.getItem('employeeId') || '').trim();
+    return String(window.SiteSession.getItem('employeeId') || '').trim();
 }
 
 function getLoggedInEmployeeName() {
-    return String(sessionStorage.getItem('employeeName') || '').trim();
+    return String(window.SiteSession.getItem('employeeName') || '').trim();
 }
 
 function splitIds(value) {

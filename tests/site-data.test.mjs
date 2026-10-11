@@ -70,3 +70,12 @@ test('failed or malformed rosters are not cached as empty membership lists', asy
   await assert.rejects(load()); await assert.rejects(load(), /غير صالح/);
   assert.equal((await load())[0].id, '4280548'); assert.equal(calls, 5);
 });
+
+test('bundled static data loads without network access and cannot replace another origin', async () => {
+  let calls = 0;
+  const reader = createDataReader({ baseUrl: () => 'https://faculty.test/', bundledCsv: { '/data/faculty.csv': 'id,name\n4280548,ماجد\n' }, sleep: async () => {}, fetchImpl: async () => { calls++; throw new Error('Network unavailable'); } });
+  assert.equal((await reader.loadCsv('./data/faculty.csv', { requiredFields: ['id', 'name'] }))[0].name, 'ماجد');
+  assert.equal(calls, 0);
+  await assert.rejects(reader.loadCsv('https://other.test/data/faculty.csv'));
+  assert.equal(calls, 3);
+});

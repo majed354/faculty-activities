@@ -4,7 +4,7 @@ const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Retry reads only. A timed-out write may already have reached the server.
-export function createDataReader({ fetchImpl = (...args) => fetch(...args), sleep = pause, now = Date.now, baseUrl = () => document.baseURI } = {}) {
+export function createDataReader({ fetchImpl = (...args) => fetch(...args), sleep = pause, now = Date.now, baseUrl = () => document.baseURI, bundledCsv = globalThis.SiteBootstrap?.csv || {} } = {}) {
   const csvRequests = new Map();
 
   async function readData(url, { type = 'json', timeoutMs = 12000, attempts = 3, maxWaitMs = 30000, onRetry, ...options } = {}) {
@@ -47,7 +47,9 @@ export function createDataReader({ fetchImpl = (...args) => fetch(...args), slee
   async function loadCsv(url, { requiredFields = [] } = {}) {
     const key = new URL(url, baseUrl()).href;
     if (!csvRequests.has(key)) {
-      const request = readData(key, { type: 'text' }).then(text => {
+      const localPath = new URL(key).origin === new URL(baseUrl()).origin ? new URL(key).pathname : '';
+      const textRead = Object.prototype.hasOwnProperty.call(bundledCsv, localPath) ? Promise.resolve(bundledCsv[localPath]) : readData(key, { type: 'text' });
+      const request = textRead.then(text => {
         const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: header => header.trim() });
         return { rows: parsed.data, fields: parsed.meta.fields || [] };
       }).catch(error => { csvRequests.delete(key); throw error; });
