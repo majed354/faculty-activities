@@ -1,5 +1,7 @@
 export function normalizeEmployeeId(value) {
-  const digits = String(value ?? '').normalize('NFKC').trim()
+  const digits = String(value ?? '').normalize('NFKC')
+    // Copied Arabic numbers can contain invisible bidi formatting characters.
+    .replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim()
     .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
     .replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
   return /^\d{1,12}$/.test(digits) ? digits : '';
@@ -24,7 +26,7 @@ export function confirmCvMembers(members) {
     modal.innerHTML = `<div class="modal-content cv-session-dialog cv-member-access-dialog" role="dialog" aria-modal="true" aria-labelledby="cvMemberAccessTitle" aria-describedby="cvMemberAccessHelp">
       <h3 id="cvMemberAccessTitle">فتح سيرة العضو</h3><p id="cvMemberAccessName"></p><p id="cvMemberAccessProgress"></p>
       <p id="cvMemberAccessHelp">أدخل الرقم الوظيفي للعضو المختار بالأرقام العربية أو الإنجليزية.</p>
-      <form novalidate><label for="cvMemberAccessId">الرقم الوظيفي</label><input id="cvMemberAccessId" class="form-input" type="text" inputmode="numeric" autocomplete="off" maxlength="12" dir="ltr" aria-describedby="cvMemberAccessError">
+      <form novalidate><label for="cvMemberAccessId">الرقم الوظيفي</label><input id="cvMemberAccessId" class="form-input" type="text" inputmode="numeric" autocomplete="off" maxlength="64" dir="ltr" aria-describedby="cvMemberAccessError">
       <p id="cvMemberAccessError" class="cv-form-error" role="alert"></p><div class="cv-dialog-actions"><button type="button" data-cancel-access>إلغاء</button><button type="submit" class="cv-primary" id="cvMemberAccessSubmit">فتح السيرة</button></div></form></div>`;
     let index = 0;
     const input = modal.querySelector('#cvMemberAccessId');
