@@ -318,7 +318,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>نطاق الاستشهادات <span style="color: var(--rose-500);">*</span></label>
+                    <label>نطاق الاستشهادات (تقريبي) <span style="color: var(--rose-500);">*</span></label>
                     <select id="pub_citations">
                         <option value="أقل من 10">أقل من 10</option>
                         <option value="11-20">11-20</option>
@@ -326,6 +326,25 @@
                         <option value="51-100">51-100</option>
                         <option value="أكثر من 100">أكثر من 100</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label for="pub_citations_exact">عدد الاقتباسات الفعلي (اختياري)</label>
+                    <input type="text" id="pub_citations_exact" inputmode="numeric" autocomplete="off" placeholder="مثال: 7">
+                    <small style="color: var(--gray-400);">النطاق تقريبي ولا يحسب به مؤشر الاقتباسات؛ اكتب العدد كما يظهر في المصدر إن توفر.</small>
+                </div>
+                <div class="form-group">
+                    <label for="pub_citations_source">مصدر العدد</label>
+                    <select id="pub_citations_source">
+                        <option value="">-- اختر عند إدخال العدد --</option>
+                        <option value="Google Scholar">Google Scholar</option>
+                        <option value="Scopus">Scopus</option>
+                        <option value="Web of Science">Web of Science</option>
+                        <option value="أخرى">أخرى</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pub_citations_checked_at">تاريخ الاطلاع على العدد</label>
+                    <input type="date" id="pub_citations_checked_at">
                 </div>
                 <div class="form-group">
                     <label>مشاركة طالب؟</label>
@@ -1352,6 +1371,27 @@
                     }
                 });
                 
+                // العدد الفعلي اختياري؛ إن أُدخل يلزم أن يكون عددًا صحيحًا وأن يذكر مصدره وتاريخ الاطلاع.
+                const exactCitations = document.getElementById('pub_citations_exact');
+                const exactValue = normalizeArabicDigits(exactCitations?.value || '').trim();
+                if (exactValue !== '') {
+                    if (!/^\d+$/.test(exactValue)) {
+                        errors.push('عدد الاقتباسات الفعلي (عدد صحيح)');
+                        exactCitations.classList.add('error-field');
+                        if (!firstErrorField) firstErrorField = exactCitations;
+                    }
+                    ['pub_citations_source', 'pub_citations_checked_at'].forEach((id, index) => {
+                        const el = document.getElementById(id);
+                        if (!el || !el.value) {
+                            errors.push(index === 0 ? 'مصدر عدد الاقتباسات' : 'تاريخ الاطلاع على العدد');
+                            if (el) {
+                                el.classList.add('error-field');
+                                if (!firstErrorField) firstErrorField = el;
+                            }
+                        }
+                    });
+                }
+
                 // التحقق من اختيار الاسم
                 const authorsHidden = document.getElementById('pub_authors_hidden');
                 if (!authorsHidden || !authorsHidden.value || authorsHidden.value === '') {
@@ -1577,10 +1617,19 @@
             statusMsg.textContent = wasVerified
                 ? `✅ تم الحفظ والتأكد من وجود السجل في الشيت.${recordId}`
                 : `✅ تم الحفظ بنجاح!${recordId}`;
+            // إذا رجع السجل من الشيت بلا العدد الفعلي فالعمود citations_exact غير موجود أو لا يكتبه السكربت.
+            if (lastSubmittedCitationsExact && record && Object.prototype.hasOwnProperty.call(record, 'title')
+                && !String(record.citations_exact ?? '').trim()) {
+                statusMsg.style.color = 'var(--gold-500)';
+                statusMsg.textContent += ' ⚠️ لم يُحفظ عدد الاقتباسات الفعلي في الشيت؛ يلزم إضافة العمود citations_exact.';
+            }
+            lastSubmittedCitationsExact = '';
             btn.disabled = false;
             btn.textContent = '📤 حفظ وإرسال البيانات';
             clearInputsAfterSuccess();
         }
+
+        let lastSubmittedCitationsExact = '';
 
         async function submitData() {
             // التحقق من الحقول الإلزامية أولاً
@@ -1619,6 +1668,11 @@
                 formData.journal = document.getElementById('pub_journal').value;
                 formData.publish_date = convertToHijri(document.getElementById('pub_date').value, formData.year);
                 formData.citations_range = document.getElementById('pub_citations').value;
+                // العدد الفعلي يُحفظ مستقلًا عن الفئة؛ منه وحده يقاس مؤشر الاقتباسات.
+                formData.citations_exact = normalizeArabicDigits(document.getElementById('pub_citations_exact').value || '').trim();
+                formData.citations_source = formData.citations_exact ? document.getElementById('pub_citations_source').value : '';
+                formData.citations_checked_at = formData.citations_exact ? document.getElementById('pub_citations_checked_at').value : '';
+                lastSubmittedCitationsExact = formData.citations_exact;
                 formData.student_author = document.getElementById('pub_student').value;
             }
             else if (currentTargetSheet === 'theses') {

@@ -89,8 +89,10 @@ id | year | name | rank | email | active | department
 
 ورقة `publications`:
 ```
-id | year | title | authors_ids | journal | publish_date | citations_range | student_author
+id | year | title | authors_ids | journal | publish_date | citations_range | student_author | citations_exact | citations_source | citations_checked_at
 ```
+
+الأعمدة الثلاثة الأخيرة اختيارية (من 1448): `citations_exact` عدد الاقتباسات الفعلي كما في المصدر، و`citations_source` مصدره (Google Scholar أو Scopus أو Web of Science أو أخرى)، و`citations_checked_at` تاريخ الاطلاع. `citations_range` فئة تقريبية، وقيمتها الرقمية في `data/config.json` منتصف الفئة وليست عددًا؛ فلا يحسب منها مؤشر الاقتباسات في موقع مؤشرات الأداء. أضف الأعمدة الثلاثة إلى الشيت وتأكد أن `doPost` يكتب الحقول بأسماء رؤوس الأعمدة، وإلا يظهر في النموذج تنبيه بأن العدد لم يُحفظ.
 
 ورقة `theses`:
 ```

@@ -1398,6 +1398,12 @@ function getCitationsEstimate(range) {
     return parseCitationValue(range);
 }
 
+// العدد الفعلي (citations_exact) يتقدم على منتصف الفئة التقريبي في citations_range.
+function getPublicationCitations(publication) {
+    const exact = normalizeArabicDigits(String(publication?.citations_exact ?? '')).trim();
+    return /^\d+$/.test(exact) ? Number(exact) : getCitationsEstimate(publication?.citations_range);
+}
+
 function escapeHtml(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -1739,7 +1745,7 @@ function calculateKPIs() {
 
     let totalCitations = 0;
     publications.forEach(p => {
-        totalCitations += getCitationsEstimate(p.citations_range);
+        totalCitations += getPublicationCitations(p);
     });
     const citationsPerPublication = publications.length > 0 ? (totalCitations / publications.length) : 0;
 
@@ -1943,6 +1949,9 @@ function getFieldLabel(field) {
         journal: 'المجلة',
         publish_date: 'تاريخ النشر',
         citations_range: 'الاقتباسات',
+        citations_exact: 'عدد الاقتباسات الفعلي',
+        citations_source: 'مصدر عدد الاقتباسات',
+        citations_checked_at: 'تاريخ الاطلاع على العدد',
         student_author: 'مشاركة طالب',
         authors_ids: 'المؤلفون',
         participant_ids: 'المشاركون',
@@ -1998,7 +2007,9 @@ function formatRecordFieldValue(field, value, context) {
 function getDisplayFieldsForContext(context) {
     const record = context?.record || {};
     if (context?.entity === 'publications') {
-        return ['year', 'publish_date', 'journal', 'citations_range', 'student_author', 'authors_ids'];
+        const citationFields = String(record.citations_exact ?? '').trim()
+            ? ['citations_exact', 'citations_source', 'citations_checked_at'] : [];
+        return ['year', 'publish_date', 'journal', 'citations_range', ...citationFields, 'student_author', 'authors_ids'];
     }
     if (context?.entity === 'participations') {
         const base = ['year', 'category', 'participation_type', 'date', 'location', 'participant_ids', 'organized_by_department'];
@@ -2208,7 +2219,7 @@ function submitPrivilegePassword() {
 function getEditorFieldsForContext(context) {
     const record = context?.record || {};
     const preferred = {
-        publications: ['year', 'title', 'journal', 'publish_date', 'citations_range', 'student_author', 'authors_ids'],
+        publications: ['year', 'title', 'journal', 'publish_date', 'citations_range', 'citations_exact', 'citations_source', 'citations_checked_at', 'student_author', 'authors_ids'],
         participations: ['year', 'category', 'participation_type', 'title', 'location', 'date', 'participant_ids', 'organized_by_department', 'student_details', 'consulting_hours', 'notes'],
         theses: ['year', 'type', 'specialization', 'student_name', 'title', 'supervisor_id', 'co_supervisor_id', 'examiner1_id', 'examiner2_id', 'status', 'defense_date']
     }[context?.entity] || [];

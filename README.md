@@ -257,6 +257,9 @@ id,type,specialization,student_name,title,supervisor_id,co_supervisor_id,examine
 | `journal` | اسم المجلة | |
 | `publish_date` | تاريخ النشر | YYYY-MM-DD |
 | `citations_range` | نطاق الاقتباسات | أقل من 10 / 11-20 / 21-50 / 51-100 / أكثر من 100 |
+| `citations_exact` | عدد الاقتباسات الفعلي (اختياري) | عدد صحيح كما في المصدر، مثل 7 |
+| `citations_source` | مصدر العدد | Google Scholar / Scopus / Web of Science / أخرى |
+| `citations_checked_at` | تاريخ الاطلاع على العدد | YYYY-MM-DD |
 | `student_author` | هل المؤلف طالب؟ | نعم / لا |
 
 ```csv
