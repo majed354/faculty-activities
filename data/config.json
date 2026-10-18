@@ -45,7 +45,7 @@
     "consulting": 8,
     "media": 5
   },
-  "citations_ranges_note": "قيم منتصف الفئة تقريبية للعرض فقط وليست أعداد اقتباسات؛ العدد الفعلي يسجل في citations_exact (مثل Google Scholar) مع citations_source وcitations_checked_at.",
+  "citations_ranges_note": "قيم منتصف الفئة تقريبية للعرض فقط وليست أعداد اقتباسات؛ العدد الفعلي يسجل في citations_exact (مثل Google Scholar) مع citations_source و citations_checked_at.",
   "citations_ranges": {
     "أقل من 10": 5,
     "11-20": 15,
