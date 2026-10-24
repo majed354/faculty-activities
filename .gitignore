@@ -11,3 +11,4 @@ parse_teaching.py
 update_faculty.py
 src/cv-fonts.generated.mjs
 .preview/
+src/cv-names.generated.mjs

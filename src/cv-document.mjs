@@ -1,5 +1,6 @@
 import { normalizeProfile, safeUrl } from './cv-schema.mjs';
 import { term, phrase, digits, isEnglish, LOCALES, draftEnglishSummary } from './cv-i18n.mjs';
+import { publishedEnglishName } from './cv-names.mjs';
 import { buildCvMetrics, buildExpertise, sectionLayout, hoistSharedDetails, detectProgramme, classifyThesis } from './cv-metrics.mjs';
 import { renderCvCharts } from './cv-charts.mjs';
 
@@ -213,7 +214,10 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   if (internal || options.personal) profileItems.push(['الجنسية', member.nationality], ['الجنس', member.gender]);
   return {
     name: profile.displayName || member.name,
-    englishName: profile.englishName,
+    // The member's own entry wins; otherwise an evidenced spelling from the
+    // register. A member with neither keeps their Arabic name rather than a
+    // guessed Latin one.
+    englishName: publishedEnglishName(member, profile.englishName),
     locale,
     subtitle: join([t(member.rank), t(context.university), t(context.college),
       member.department && (english ? `Department of ${t(member.department)}` : `قسم ${member.department}`)]),

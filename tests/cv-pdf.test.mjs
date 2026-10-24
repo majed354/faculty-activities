@@ -10,6 +10,7 @@ import { term, hijriYear, bilingual } from '../src/cv-i18n.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
 import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, planPdfBatches, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES, MAX_BODY_BYTES } from '../src/cv-pdf-service.mjs';
 import { matchesSupervisorCode, matchesEmployeeId } from '../src/cv-access.mjs';
+import { registerEnglishNames, publishedEnglishName, englishNameFor } from '../src/cv-names.mjs';
 
 const context = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || ''), yearLabel: value => `${value}هـ` };
 
@@ -514,4 +515,64 @@ test('the supervisor code releases the whole selection; a wrong code does not', 
   // authorisation boundary: an employee id that happens to be 2008 still
   // matches its own member, and the server session still governs access.
   assert.ok(matchesEmployeeId('٢٠٠٨', '2008'));
+});
+
+test('an unproven Latin name never reaches the published CV on its own', () => {
+  registerEnglishNames([
+    { id: '10', english: 'Majed Aljuhani', status: 'verified', source: 'https://orcid.org/example' },
+    { id: '11', english: 'Afnan Alsawat', status: 'transliterated' },
+    { id: '12', english: 'Approved Spelling', status: 'confirmed', source: 'college' }
+  ]);
+
+  // Evidenced and human-approved names publish; a transliteration does not,
+  // because an accreditation file must not assert a spelling the person never
+  // used. The same rule the project applies to nationality in AGENTS.md.
+  assert.equal(publishedEnglishName({ id: '10' }), 'Majed Aljuhani');
+  assert.equal(publishedEnglishName({ id: '12' }), 'Approved Spelling');
+  assert.equal(publishedEnglishName({ id: '11' }), '', 'a transliteration is withheld by default');
+  assert.equal(publishedEnglishName({ id: '11' }, '', { includeUnverified: true }), 'Afnan Alsawat');
+  // A sourced name with an unresolved discrepancy is evidence, not an answer.
+  registerEnglishNames([{ id: '15', english: 'Salma al-Ghamdi', status: 'review', note: 'surname disagrees with the record' }]);
+  assert.equal(publishedEnglishName({ id: '15' }), '', 'a flagged discrepancy does not publish');
+  assert.equal(publishedEnglishName({ id: '15' }, '', { includeUnverified: true }), 'Salma al-Ghamdi');
+  assert.equal(publishedEnglishName({ id: '999' }), '', 'an unknown member yields nothing, never a guess');
+
+  // The member's own profile outranks anything gathered about them.
+  assert.equal(publishedEnglishName({ id: '10' }, 'How I Spell It'), 'How I Spell It');
+  assert.equal(englishNameFor({ id: '10' }, 'How I Spell It').status, 'confirmed');
+
+  // A weaker status cannot overwrite a stronger one on a later import.
+  registerEnglishNames([{ id: '10', english: 'Guessed Name', status: 'transliterated' }]);
+  assert.equal(publishedEnglishName({ id: '10' }), 'Majed Aljuhani', 'a guess cannot displace evidence');
+  registerEnglishNames([{ id: '11', english: 'Afnan M. Alsawat', status: 'verified', source: 'paper' }]);
+  assert.equal(publishedEnglishName({ id: '11' }), 'Afnan M. Alsawat', 'evidence does displace a guess');
+
+  // Malformed records are ignored rather than stored half-complete.
+  registerEnglishNames([{ id: '13', english: 'X' }, { id: '', english: 'Y', status: 'verified' }, { id: '14', status: 'verified' }]);
+  assert.equal(publishedEnglishName({ id: '13' }), '');
+  assert.equal(publishedEnglishName({ id: '14' }), '');
+});
+
+test('an English CV falls back to the Arabic name rather than inventing a Latin one', () => {
+  registerEnglishNames([
+    { id: '20', english: 'Hisham bin Saleh Al-Zeir', status: 'verified', source: 'tu.edu.sa staff table' },
+    { id: '21', english: 'Someone Al-Suleiman', status: 'review', note: 'no affiliation in the source' }
+  ]);
+  const base = {
+    publications: [], theses: [], researchSupport: [], scientificEvents: [], communityActivities: [],
+    academicPromotions: [], teachingDetails: [], monitorings: [], otherActivities: [], profile: {}
+  };
+  const ctx = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || '') };
+  const docFor = (id, name) => buildCvDocument(
+    { ...base, member: { id, name, rank: 'أستاذ', department: 'الشريعة', email: '' } },
+    { mode: 'public', locale: 'en' }, ctx);
+
+  assert.equal(docFor('20', 'أ.د. هشام الزير').englishName, 'Hisham bin Saleh Al-Zeir');
+  // Under review, and unknown: both keep the Arabic name. The document must
+  // never assert a spelling the person has not been shown to use.
+  assert.equal(docFor('21', 'عبدالسلام السليمان').englishName, '');
+  assert.equal(docFor('999', 'عضو غير مسجل').englishName, '');
+  // The member's own entry still overrides the register.
+  const own = buildCvDocument({ ...base, member: { id: '21', name: 'x', rank: 'أستاذ', department: 'الشريعة', email: '' }, profile: { englishName: 'As I Sign It' } }, { mode: 'public', locale: 'en' }, ctx);
+  assert.equal(own.englishName, 'As I Sign It');
 });
