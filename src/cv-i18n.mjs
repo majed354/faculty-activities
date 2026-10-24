@@ -415,8 +415,11 @@ export function bilingual(original, translation, locale) {
 // Arabic drafter. Nothing is translated and nothing is inferred — every clause
 // restates a value that is elsewhere in the document. Used only when the member
 // has not written an English summary themselves.
-export function draftEnglishSummary(profile, member, university = '', college = '') {
-  const name = clean(profile.englishName) || clean(profile.displayName) || clean(member?.name);
+export function draftEnglishSummary(profile, member, university = '', college = '', resolvedName = '') {
+  // The caller resolves the Latin name (own entry, then the reviewed
+  // register); reading profile.englishName here opened the summary with the
+  // Arabic name whenever the member had not filled that field themselves.
+  const name = clean(resolvedName) || clean(profile.englishName) || clean(profile.displayName) || clean(member?.name);
   const rank = term(member?.rank, 'en');
   const place = [term(university, 'en'), term(college, 'en')].filter(Boolean).join(', ');
   const dept = member?.department ? `the Department of ${term(member.department, 'en')}` : '';

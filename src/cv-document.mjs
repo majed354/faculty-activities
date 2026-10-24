@@ -64,6 +64,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   // Controlled vocabulary translates; member free text does not. A term the
   // glossary lacks stays Arabic rather than being guessed at.
   const t = value => term(value, locale);
+  const resolvedEnglishName = publishedEnglishName(member, profile.englishName);
   const tp = value => phrase(value, locale);
   const formatDate = context.formatDate || (value => clean(value));
   const sections = [];
@@ -106,7 +107,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   // translated. For an English CV a summary is composed instead from the same
   // structured fields the rest of the document already shows.
   const summary = english
-    ? (clean(profile.biographyEn) || draftEnglishSummary(profile, member, context.university, context.college))
+    ? (clean(profile.biographyEn) || draftEnglishSummary(profile, member, context.university, context.college, resolvedEnglishName))
     : profile.biography;
   if (clean(summary)) sections.push({ key: 'النبذة العلمية', title: t('النبذة العلمية'), text: short && summary.length > 800 ? `${summary.slice(0, 800)}…` : summary });
   // When the chart plots domain against duration, repeating it as a list of
@@ -223,7 +224,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     // The member's own entry wins; otherwise an evidenced spelling from the
     // register. A member with neither keeps their Arabic name rather than a
     // guessed Latin one.
-    englishName: publishedEnglishName(member, profile.englishName),
+    englishName: resolvedEnglishName,
     locale,
     subtitle: join([t(member.rank), t(context.university), t(context.college),
       member.department && (english ? `Department of ${t(member.department)}` : `قسم ${member.department}`)]),
