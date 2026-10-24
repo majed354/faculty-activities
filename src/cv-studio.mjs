@@ -141,7 +141,9 @@ function selectedDocuments(id) {
 }
 
 function fileName(documents) {
-  return analyticsStudioSafeFileName(documents.length === 1 ? `${documents[0].modeLabel}-${documents[0].name}` : `${options().mode === 'internal' ? 'التقارير-الداخلية' : 'السير-الأكاديمية'}-${cvStudioReport.departmentLabel}`);
+  return analyticsStudioSafeFileName(documents.length === 1 ? `${documents[0].modeLabel}-${documents[0].name}` : (options().locale === 'en'
+      ? `${options().mode === 'internal' ? 'Internal-Reports' : 'Academic-CVs'}-${cvStudioReport.departmentLabel}`
+      : `${options().mode === 'internal' ? 'التقارير-الداخلية' : 'السير-الأكاديمية'}-${cvStudioReport.departmentLabel}`));
 }
 
 function download(blob, name) {
@@ -212,7 +214,7 @@ async function exportPdf(id) {
 function printFallback(documents, name) {
   const popup = window.open('', '_blank');
   if (!popup) { alert('تعذر توليد PDF. اسمح بفتح نافذة الطباعة لاستخدام البديل.'); return; }
-  popup.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(name)}</title><style>${printStyles}</style></head><body class="cv-print-body"><div class="cv-print-hint">اختر «حفظ بصيغة PDF» من نافذة الطباعة، وأوقف خيار ترويسة الصفحة وتذييلها.</div>${documents.map(renderCvDocument).join('')}</body></html>`);
+  popup.document.write(`<!doctype html><html lang="${documents[0]?.locale === 'en' ? 'en' : 'ar'}" dir="${documents[0]?.locale === 'en' ? 'ltr' : 'rtl'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(name)}</title><style>${printStyles}</style></head><body class="cv-print-body"><div class="cv-print-hint">اختر «حفظ بصيغة PDF» من نافذة الطباعة، وأوقف خيار ترويسة الصفحة وتذييلها.</div>${documents.map(renderCvDocument).join('')}</body></html>`);
   popup.addEventListener('load', async () => {
     await popup.document.fonts.ready;
     await Promise.all([...popup.document.images].map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = () => { img.remove(); resolve(); }; setTimeout(resolve, 4000); })));

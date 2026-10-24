@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import { buildCvDocument } from '../src/cv-document.mjs';
 import { renderCvDocument } from '../src/cv-document.mjs';
 import { createWordBlob } from '../src/cv-word.mjs';
-import { chartCsvRows } from '../src/cv-chart-data.mjs';
+import { chartCsvRows, chartTable } from '../src/cv-chart-data.mjs';
 import { buildCvMetrics, sectionLayout, classifyThesis } from '../src/cv-metrics.mjs';
 import { term, hijriYear, bilingual } from '../src/cv-i18n.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
@@ -430,4 +430,51 @@ test('an unglossed term stays Arabic rather than being guessed at', () => {
   // The bibliographic convention: original title, bracketed rendering.
   assert.equal(bilingual('قواعد التفسير', 'Principles of Exegesis', 'en'), 'Principles of Exegesis [قواعد التفسير]');
   assert.equal(bilingual('قواعد التفسير', '', 'en'), 'قواعد التفسير');
+});
+
+test('Word and CSV follow the document language too', async () => {
+  const data = {
+    member: { id: '1', name: 'د. ماجد الجهني', rank: 'أستاذ مشارك', department: 'القراءات', email: 'm@tu.edu.sa' },
+    publications: [], researchSupport: [], scientificEvents: [], communityActivities: [],
+    academicPromotions: [], teachingDetails: [], monitorings: [], otherActivities: [],
+    theses: [
+      { role: 'مشرف', type: 'دكتوراه', degreeLabel: 'رسالة علمية', title: 'د' },
+      { role: 'مناقش', type: 'ماجستير', degreeLabel: 'مشروع بحثي', title: 'م' }
+    ],
+    profile: {}
+  };
+  const ctx = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || '') };
+  const read = async locale => {
+    const doc = buildCvDocument(data, { mode: 'public', locale }, ctx);
+    const zip = await JSZip.loadAsync(await (await createWordBlob([doc])).arrayBuffer());
+    return {
+      doc,
+      body: await zip.file('word/document.xml').async('string'),
+      footer: await zip.file('word/footer1.xml').async('string'),
+      core: await zip.file('docProps/core.xml').async('string')
+    };
+  };
+  const en = await read('en');
+  const ar = await read('ar');
+
+  // docx inverts jc under bidirectional, so direction is read from the bidi
+  // flag rather than from the alignment value.
+  assert.ok(!en.body.includes('<w:bidi/>'), 'an English CV is not laid out right-to-left');
+  assert.ok(ar.body.includes('<w:bidi/>'), 'the Arabic CV stays right-to-left');
+
+  assert.match(en.footer, /<w:t[^>]*>Page <\/w:t>/);
+  assert.match(ar.footer, /<w:t[^>]*>صفحة <\/w:t>/);
+  assert.match(en.core, /<dc:title>Academic Curriculum Vitae/);
+
+  // The grouped supervision chart reaches the editable exports; it was absent
+  // from chartTable entirely while two removed chart kinds lingered there.
+  assert.match(en.body, /Supervision and Examination by Degree/);
+  assert.match(en.body, /Doctoral Thesis/);
+  const table = chartTable(en.doc.charts.find(chart => chart.id === 'supervision'), 'en');
+  assert.deepEqual(table.headings, ['Degree', 'Supervision', 'Examination']);
+  // A group drops a zero bar, so columns must be filled by legend order.
+  assert.deepEqual(table.rows, [['Doctoral Thesis', '1', '0'], ["Master's Research Project", '0', '1']]);
+
+  assert.ok(chartCsvRows(en.doc).some(row => /Supervision: 1/.test(row[3])));
+  assert.ok(chartCsvRows(ar.doc).some(row => /إشراف: ١/.test(row[3])));
 });
