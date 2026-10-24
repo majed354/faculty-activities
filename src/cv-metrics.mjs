@@ -12,8 +12,11 @@ export const PALETTE = {
   muted: '#6f9c99', soft: '#bcd6d2'
 };
 
+import { term, digits, isEnglish } from './cv-i18n.mjs';
+
 const clean = value => String(value ?? '').trim();
 const arabic = value => Number(value || 0).toLocaleString('ar-SA');
+const L = (locale, ar, en) => (isEnglish(locale) ? en : ar);
 // Years are labels, not quantities: grouping renders ١٤٤٧ as ١٬٤٤٧.
 const arabicYear = value => /^\d{3,4}$/.test(clean(value))
   ? Number(value).toLocaleString('ar-SA', { useGrouping: false })
@@ -54,19 +57,19 @@ export function classifyThesis(row) {
 // titles say less than the counts do. The counts are kept and the list is not,
 // split by degree because supervising a doctorate is not the same claim as
 // supervising a master's project.
-export function buildSupervisionSplit(parts) {
+export function buildSupervisionSplit(parts, locale = 'ar') {
   const tally = kind => ({
     supervised: parts.supervisions.filter(row => classifyThesis(row) === kind).length,
     examined: parts.discussions.filter(row => classifyThesis(row) === kind).length
   });
   const groups = THESIS_KINDS
-    .map(kind => ({ label: kind.label, ...tally(kind.id) }))
+    .map(kind => ({ label: term(kind.label, locale), ...tally(kind.id) }))
     .filter(group => group.supervised || group.examined)
     .map(group => ({
       label: group.label,
       bars: [
-        { label: 'إشراف', value: group.supervised, color: 'primary' },
-        { label: 'مناقشة', value: group.examined, color: 'accent' }
+        { label: term('إشراف', locale), value: group.supervised, color: 'primary' },
+        { label: term('مناقشة', locale), value: group.examined, color: 'accent' }
       ].filter(bar => bar.value > 0)
     }));
   if (!groups.length) return null;
@@ -74,28 +77,28 @@ export function buildSupervisionSplit(parts) {
   if (!max) return null;
   const total = groups.reduce((sum, group) => sum + group.bars.reduce((inner, bar) => inner + bar.value, 0), 0);
   return {
-    kind: 'grouped-bars', id: 'supervision', title: 'الإشراف والمناقشة حسب الدرجة',
-    note: `الإجمالي: ${arabic(total)} رسالة ومشروعًا.`,
-    legend: [{ label: 'إشراف', color: 'primary' }, { label: 'مناقشة', color: 'accent' }],
+    kind: 'grouped-bars', id: 'supervision', title: term('الإشراف والمناقشة حسب الدرجة', locale),
+    note: L(locale, `الإجمالي: ${arabic(total)} رسالة ومشروعًا.`, `Total: ${digits(total, locale)} theses and projects.`),
+    legend: [{ label: term('إشراف', locale), color: 'primary' }, { label: term('مناقشة', locale), color: 'accent' }],
     groups, max
   };
 }
 
-export function buildExpertise(profile) {
+export function buildExpertise(profile, locale = 'ar') {
   // Expertise durations are the clearest quantitative claim a member makes about
   // themselves, and the flat list wastes a page on them.
   const rows = (profile.expertise || [])
-    .map(row => ({ label: clean(row.domain), value: Number(row.years) || 0 }))
+    .map(row => ({ key: clean(row.domain), label: term(clean(row.domain), locale), value: Number(row.years) || 0 }))
     .filter(row => row.label && row.value > 0)
     .sort((a, b) => b.value - a.value);
   if (rows.length < 3) return null;
   return {
-    kind: 'bars', id: 'expertise', title: 'مجالات الخبرة ومدتها',
-    unit: 'سنة', rows: rows.slice(0, 12), max: Math.max(...rows.map(row => row.value))
+    kind: 'bars', id: 'expertise', title: term('مجالات الخبرة ومدتها', locale),
+    unit: term('سنة', locale), rows: rows.slice(0, 12), max: Math.max(...rows.map(row => row.value))
   };
 }
 
-export function buildTeachingLoad(bundle) {
+export function buildTeachingLoad(bundle, locale = 'ar') {
   const rows = bundle.teachingDetails || [];
   const byYear = new Map();
   for (const row of rows) {
@@ -108,18 +111,20 @@ export function buildTeachingLoad(bundle) {
   }
   if (byYear.size < 2) return null;
   const years = [...byYear.keys()].sort((a, b) => Number(a) - Number(b));
-  const series = years.map(year => ({ label: arabicYear(year), value: byYear.get(year).sections, extra: byYear.get(year).students }));
+  // Arabic-Indic year labels inside an English document read as noise.
+  const series = years.map(year => ({ label: isEnglish(locale) ? String(year) : arabicYear(year), value: byYear.get(year).sections, extra: byYear.get(year).students }));
   const max = Math.max(...series.map(row => row.value));
   if (!max) return null;
   const students = years.reduce((sum, year) => sum + byYear.get(year).students, 0);
   return {
-    kind: 'bars', id: 'teaching', title: 'العبء التدريسي عبر السنوات',
-    unit: 'شعبة', note: students ? `إجمالي الطلاب المسجلين: ${arabic(students)}.` : '',
+    kind: 'bars', id: 'teaching', title: term('العبء التدريسي عبر السنوات', locale),
+    unit: term('شعبة', locale),
+    note: students ? L(locale, `إجمالي الطلاب المسجلين: ${arabic(students)}.`, `Total enrolled students: ${digits(students, locale)}.`) : '',
     rows: series, max
   };
 }
 
-export function buildCareerTimeline(bundle, profile) {
+export function buildCareerTimeline(bundle, profile, locale = 'ar') {
   const events = [
     ...(profile.education || []).map(row => ({ year: clean(row.year), title: clean(row.degree), detail: clean(row.institution), kind: 'education' })),
     ...(profile.appointments || []).map(row => ({ year: clean(row.start), title: clean(row.role), detail: clean(row.institution), kind: 'appointment', end: clean(row.end) })),
@@ -128,11 +133,16 @@ export function buildCareerTimeline(bundle, profile) {
   if (events.length < 3) return null;
   events.sort((a, b) => Number(a.year) - Number(b.year) || a.title.localeCompare(b.title, 'ar'));
   return {
-    kind: 'timeline', id: 'career', title: 'المسار العلمي والوظيفي',
+    kind: 'timeline', id: 'career', title: term('المسار العلمي والوظيفي', locale),
     events: events.map(event => ({
-      ...event, yearLabel: arabicYear(event.year),
+      ...event, title: term(event.title, locale), detail: term(event.detail, locale),
+      yearLabel: isEnglish(locale) ? String(event.year) : arabicYear(event.year),
       // An open-ended post already reads "حتى الآن"; prefixing again stutters.
-      endLabel: event.end ? (/^حتى/.test(event.end) ? event.end : `حتى ${arabicYear(event.end)}`) : ''
+      endLabel: event.end
+        ? (/^حتى/.test(event.end)
+          ? L(locale, event.end, 'to present')
+          : L(locale, `حتى ${arabicYear(event.end)}`, `to ${event.end}`))
+        : ''
     }))
   };
 }
@@ -148,7 +158,9 @@ const CITED = new Set([
 export function sectionLayout(section) {
   const entries = section.entries || [];
   if (!entries.length) return section.text ? 'prose' : 'empty';
-  if (CITED.has(section.title)) return 'cited';
+  // Keyed on the canonical Arabic title, not the displayed one, so layout
+  // does not change when the document is rendered in English.
+  if (CITED.has(section.key ?? section.title)) return 'cited';
   // Bare labels with no supporting detail read as tags, not as records; a
   // bullet each would spend a page on fifteen one-word skills.
   const bare = entries.every(row => !row.details && !row.url && !row.source);
@@ -260,11 +272,11 @@ export function detectProgramme(entries, { minimum = 6 } = {}) {
 // charts count exactly what the sections list — no second, divergent pass.
 // `parts.expertiseChart` is passed in because the caller needs the same verdict
 // to decide whether the expertise list still earns its place.
-export function buildCvMetrics(bundle, profile, parts) {
+export function buildCvMetrics(bundle, profile, parts, locale = 'ar') {
   return [
-    buildSupervisionSplit(parts),
-    parts.expertiseChart ?? buildExpertise(profile),
-    buildTeachingLoad(bundle),
-    buildCareerTimeline(bundle, profile)
+    buildSupervisionSplit(parts, locale),
+    parts.expertiseChart ?? buildExpertise(profile, locale),
+    buildTeachingLoad(bundle, locale),
+    buildCareerTimeline(bundle, profile, locale)
   ].filter(Boolean);
 }

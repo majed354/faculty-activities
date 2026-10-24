@@ -4,8 +4,9 @@ import JSZip from 'jszip';
 import { buildCvDocument } from '../src/cv-document.mjs';
 import { renderCvDocument } from '../src/cv-document.mjs';
 import { createWordBlob } from '../src/cv-word.mjs';
-import { chartCsvRows } from '../src/cv-chart-data.mjs';
+import { chartCsvRows, chartTable } from '../src/cv-chart-data.mjs';
 import { buildCvMetrics, sectionLayout, classifyThesis } from '../src/cv-metrics.mjs';
+import { term, hijriYear, bilingual } from '../src/cv-i18n.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
 import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES } from '../src/cv-pdf-service.mjs';
 
@@ -362,4 +363,118 @@ test('equal values draw equal bars regardless of their labels', () => {
   const chart = doc.charts.find(item => item.id === 'supervision');
   const [supervised, examined] = chart.groups[0].bars.map(bar => bar.value);
   assert.equal(supervised, examined, 'the fixture itself must hold equal values for this to test anything');
+});
+
+test('the English CV translates its structure and leaves member prose in Arabic', () => {
+  const data = {
+    member: { id: '1', name: 'د. ماجد الجهني', rank: 'أستاذ مشارك', department: 'القراءات', email: 'm@tu.edu.sa' },
+    publications: [{ title: 'قواعد التفسير', journal: 'مجلة الراسخون', year: '1446', kind: 'بحث', status: 'منشور', volume: '12', issue: '3', pages: '45-67' }],
+    theses: [{ role: 'مشرف', type: 'دكتوراه', degreeLabel: 'رسالة علمية', title: 'ر' }],
+    researchSupport: [], scientificEvents: [], communityActivities: [], academicPromotions: [],
+    teachingDetails: [], monitorings: [], otherActivities: [],
+    profile: {
+      englishName: 'Majed Aljuhani',
+      expertise: [{ domain: 'قياس نواتج التعلم', years: '5' }, { domain: 'التعلم الإلكتروني', years: '6' }, { domain: 'الاعتماد البرامجي', years: '4' }],
+      appointments: [{ role: 'أستاذ مشارك', institution: 'جامعة الطائف', start: '1445', end: 'حتى الآن' }],
+      education: [{ degree: 'دكتوراه', specialization: 'التفسير وعلوم القرآن', institution: 'جامعة أم القرى', country: 'السعودية', year: '1440' }],
+      skills: [{ name: 'التعلم النشط' }, { name: 'تطوير المقررات' }, { name: 'إدارة الجودة' }, { name: 'إعداد التقارير' }]
+    }
+  };
+  const ctx = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || '') };
+  const en = buildCvDocument(data, { mode: 'public', locale: 'en' }, ctx);
+  const ar = buildCvDocument(data, { mode: 'public', locale: 'ar' }, ctx);
+
+  // Structure is English.
+  assert.equal(en.locale, 'en');
+  assert.equal(en.modeLabel, 'Academic Curriculum Vitae');
+  assert.match(en.subtitle, /Associate Professor · Taif University · College of Sharia · Department of Quranic Readings/);
+  assert.ok(en.sections.some(section => section.title === 'Publications'));
+  assert.ok(en.counts.some(([, label]) => label === 'Doctoral Supervision'));
+  assert.ok(en.charts.some(chart => chart.title === 'Supervision and Examination by Degree'));
+
+  // Layout keys stay Arabic, so rendering in English cannot change the shape.
+  const cited = en.sections.find(section => section.title === 'Publications');
+  assert.equal(cited.key, 'البحوث المنشورة');
+  assert.equal(sectionLayout(cited), 'cited');
+  // Every Arabic axis survives into English. English may carry one more: a
+  // composed summary stands in where the member wrote only an Arabic one.
+  for (const key of ar.sections.map(section => section.key)) {
+    assert.ok(en.sections.some(section => section.key === key), `missing in English: ${key}`);
+  }
+  const extra = en.sections.map(s => s.key).filter(key => !ar.sections.some(s => s.key === key));
+  assert.deepEqual(extra, ['النبذة العلمية'], 'the only added axis is the composed summary');
+  assert.match(en.sections.find(s => s.key === 'النبذة العلمية').text,
+    /^Majed Aljuhani is an Associate Professor/, 'the summary opens with the English name');
+  assert.ok(!/[\u0600-\u06ff]/.test(en.sections.find(s => s.key === 'النبذة العلمية').text.split('.')[0]),
+    'its opening clause carries no Arabic');
+
+  // Composed labels are translated, not left half-Arabic.
+  assert.match(cited.entries[0].details, /Vol\. 12 · No\. 3 · pp\. 45-67/);
+  assert.match(en.sections.find(s => s.key === 'المسار الوظيفي').entries[0].details, /1445 — present/);
+
+  // Member prose is never translated; the original stands.
+  assert.match(cited.entries[0].title, /قواعد التفسير/);
+
+  // Numerals follow the document, not the data.
+  assert.equal(en.charts.find(c => c.id === 'supervision').note, 'Total: 1 theses and projects.');
+  assert.match(ar.charts.find(c => c.id === 'supervision').note, /١/);
+});
+
+test('an unglossed term stays Arabic rather than being guessed at', () => {
+  assert.equal(term('مصطلح لا وجود له في المعجم', 'en'), 'مصطلح لا وجود له في المعجم');
+  assert.equal(term('أستاذ مشارك', 'en'), 'Associate Professor');
+  assert.equal(term('أستاذ مشارك', 'ar'), 'أستاذ مشارك', 'Arabic output is untouched');
+  // A Hijri year is labelled, never silently presented as Gregorian.
+  assert.equal(hijriYear('1447', 'en'), '1447 AH / 2026');
+  assert.equal(hijriYear('1447', 'ar'), '١٤٤٧هـ', 'a year is a label, not a grouped quantity');
+  // The bibliographic convention: original title, bracketed rendering.
+  assert.equal(bilingual('قواعد التفسير', 'Principles of Exegesis', 'en'), 'Principles of Exegesis [قواعد التفسير]');
+  assert.equal(bilingual('قواعد التفسير', '', 'en'), 'قواعد التفسير');
+});
+
+test('Word and CSV follow the document language too', async () => {
+  const data = {
+    member: { id: '1', name: 'د. ماجد الجهني', rank: 'أستاذ مشارك', department: 'القراءات', email: 'm@tu.edu.sa' },
+    publications: [], researchSupport: [], scientificEvents: [], communityActivities: [],
+    academicPromotions: [], teachingDetails: [], monitorings: [], otherActivities: [],
+    theses: [
+      { role: 'مشرف', type: 'دكتوراه', degreeLabel: 'رسالة علمية', title: 'د' },
+      { role: 'مناقش', type: 'ماجستير', degreeLabel: 'مشروع بحثي', title: 'م' }
+    ],
+    profile: {}
+  };
+  const ctx = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || '') };
+  const read = async locale => {
+    const doc = buildCvDocument(data, { mode: 'public', locale }, ctx);
+    const zip = await JSZip.loadAsync(await (await createWordBlob([doc])).arrayBuffer());
+    return {
+      doc,
+      body: await zip.file('word/document.xml').async('string'),
+      footer: await zip.file('word/footer1.xml').async('string'),
+      core: await zip.file('docProps/core.xml').async('string')
+    };
+  };
+  const en = await read('en');
+  const ar = await read('ar');
+
+  // docx inverts jc under bidirectional, so direction is read from the bidi
+  // flag rather than from the alignment value.
+  assert.ok(!en.body.includes('<w:bidi/>'), 'an English CV is not laid out right-to-left');
+  assert.ok(ar.body.includes('<w:bidi/>'), 'the Arabic CV stays right-to-left');
+
+  assert.match(en.footer, /<w:t[^>]*>Page <\/w:t>/);
+  assert.match(ar.footer, /<w:t[^>]*>صفحة <\/w:t>/);
+  assert.match(en.core, /<dc:title>Academic Curriculum Vitae/);
+
+  // The grouped supervision chart reaches the editable exports; it was absent
+  // from chartTable entirely while two removed chart kinds lingered there.
+  assert.match(en.body, /Supervision and Examination by Degree/);
+  assert.match(en.body, /Doctoral Thesis/);
+  const table = chartTable(en.doc.charts.find(chart => chart.id === 'supervision'), 'en');
+  assert.deepEqual(table.headings, ['Degree', 'Supervision', 'Examination']);
+  // A group drops a zero bar, so columns must be filled by legend order.
+  assert.deepEqual(table.rows, [['Doctoral Thesis', '1', '0'], ["Master's Research Project", '0', '1']]);
+
+  assert.ok(chartCsvRows(en.doc).some(row => /Supervision: 1/.test(row[3])));
+  assert.ok(chartCsvRows(ar.doc).some(row => /إشراف: ١/.test(row[3])));
 });

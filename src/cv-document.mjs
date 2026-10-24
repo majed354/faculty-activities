@@ -1,4 +1,5 @@
 import { normalizeProfile, safeUrl } from './cv-schema.mjs';
+import { term, phrase, digits, isEnglish, LOCALES, draftEnglishSummary } from './cv-i18n.mjs';
 import { buildCvMetrics, buildExpertise, sectionLayout, hoistSharedDetails, detectProgramme, classifyThesis } from './cv-metrics.mjs';
 import { renderCvCharts } from './cv-charts.mjs';
 
@@ -8,7 +9,7 @@ const clean = value => String(value ?? '').trim();
 const join = (values, separator = ' · ') => values.map(clean).filter(Boolean).join(separator);
 const key = value => clean(value).normalize('NFKC').replace(/[\u064b-\u065f\u0640]/g, '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
 const courseKey = value => key(value).replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي');
-const period = row => join([row.start, row.end], ' — ');
+const periodOf = (row, t) => join([row.start, t(row.end)], ' — ');
 const unique = (entries, identity) => {
   const seen = new Set();
   return entries.filter(row => { const id = identity(row); if (seen.has(id)) return false; seen.add(id); return true; });
@@ -57,13 +58,19 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   const profile = normalizeProfile(bundle.profile || {});
   const internal = options.mode === 'internal';
   const short = options.mode === 'short';
+  const locale = LOCALES.includes(options.locale) ? options.locale : 'ar';
+  const english = isEnglish(locale);
+  // Controlled vocabulary translates; member free text does not. A term the
+  // glossary lacks stays Arabic rather than being guessed at.
+  const t = value => term(value, locale);
+  const tp = value => phrase(value, locale);
   const formatDate = context.formatDate || (value => clean(value));
   const sections = [];
   const add = (title, entries, extra = {}) => {
     entries = entries.filter(row => row.title || row.details || row.url || row.source);
     const total = entries.length;
     if (!total) {
-      if (internal) sections.push({ title, text: 'لا توجد سجلات أو بيانات مضافة في هذا المحور.' });
+      if (internal) sections.push({ key: title, title: t(title), text: english ? 'No records or supplied data in this section.' : 'لا توجد سجلات أو بيانات مضافة في هذا المحور.' });
       return;
     }
     const kept = short ? entries.slice(0, 5) : entries;
@@ -72,38 +79,54 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     // its own metadata on every line.
     const hoisted = hoistSharedDetails(kept);
     const programme = detectProgramme(kept);
+    const selection = english
+      ? `${t(title)} — selected (${5} of ${total})`
+      : `${t(title)} — مختارات (${5} من ${total})`;
     sections.push({
-      title: short && total > 5 ? `${title} — مختارات (${5} من ${total})` : title,
+      // `key` is the canonical Arabic title. Layout and the cited-section set
+      // read it, so rendering in English never changes the document's shape.
+      key: title,
+      title: short && total > 5 ? selection : t(title),
       entries: hoisted.entries,
-      ...(hoisted.shared.length ? { shared: hoisted.shared } : {}),
+      ...(hoisted.shared.length ? { shared: hoisted.shared.map(value => t(value)) } : {}),
       ...(programme ? { programme } : {}),
       ...extra
     });
   };
   // A partially completed record still exports its supplied facts. Promote
   // details when the primary field was left blank, without adding placeholders.
-  const entry = (title, details = '', row = {}) => ({ title: clean(title) || clean(details), details: clean(title) ? clean(details) : '', url: safeUrl(row.url), source: internal ? clean(row.source) : '' });
+  const entry = (title, details = '', row = {}) => ({
+    title: tp(clean(title) || clean(details)),
+    details: clean(title) ? tp(clean(details)) : '',
+    url: safeUrl(row.url), source: internal ? clean(row.source) : ''
+  });
 
-  if (profile.biography) sections.push({ title: 'النبذة العلمية', text: short && profile.biography.length > 800 ? `${profile.biography.slice(0, 800)}…` : profile.biography });
+  // The Arabic summary is prose the member wrote; it is never machine
+  // translated. For an English CV a summary is composed instead from the same
+  // structured fields the rest of the document already shows.
+  const summary = english
+    ? (clean(profile.biographyEn) || draftEnglishSummary(profile, member, context.university, context.college))
+    : profile.biography;
+  if (clean(summary)) sections.push({ key: 'النبذة العلمية', title: t('النبذة العلمية'), text: short && summary.length > 800 ? `${summary.slice(0, 800)}…` : summary });
   // When the chart plots domain against duration, repeating it as a list of
   // one-line bullets spends a page restating the chart. Keep descriptions and
   // domains absent from the plotted rows, including optional, unfilled years.
-  const expertiseChart = buildExpertise(profile);
-  const plottedExpertise = new Set((expertiseChart?.rows || []).map(row => JSON.stringify([row.label, row.value])));
+  const expertiseChart = buildExpertise(profile, locale);
+  const plottedExpertise = new Set((expertiseChart?.rows || []).map(row => JSON.stringify([row.key ?? row.label, row.value])));
   add('مجالات الخبرة الأكاديمية والإدارية', profile.expertise
     .filter(row => !plottedExpertise.has(JSON.stringify([row.domain, Number(row.years)])) || clean(row.description) || (internal && clean(row.source)))
-    .map(row => entry(row.domain, join([row.years && `مدة الخبرة: ${Number(row.years).toLocaleString('ar-SA')} سنة`, row.description]), row)));
+    .map(row => entry(row.domain, join([row.years && (english ? `${digits(row.years, locale)} yrs of experience` : `مدة الخبرة: ${digits(row.years, locale)} سنة`), row.description]), row)));
   add('المهارات', profile.skills.map(row => entry(row.name, join([row.level, row.details]), row)));
-  add('المؤهلات العلمية', profile.education.map(row => entry(join([row.degree, row.specialization]), join([row.institution, row.country, row.year, row.thesisTitle && `عنوان الرسالة: ${row.thesisTitle}`]), row)));
-  add('المسار الوظيفي', profile.appointments.map(row => entry(row.role, join([row.institution, period(row)]), row)));
+  add('المؤهلات العلمية', profile.education.map(row => entry(join([row.degree, row.specialization]), join([row.institution, row.country, row.year, row.thesisTitle && (english ? `Thesis: ${row.thesisTitle}` : `عنوان الرسالة: ${row.thesisTitle}`)]), row)));
+  add('المسار الوظيفي', profile.appointments.map(row => entry(row.role, join([row.institution, periodOf(row, t)]), row)));
   add('الترقيات الأكاديمية المسجلة', (bundle.academicPromotions || []).map(row => entry(row.title, join([row.location, formatDate(row.date)]), row)));
-  add('المناصب الإدارية', profile.administration.map(row => entry(row.role, join([row.institution, period(row)]), row)));
-  if (profile.researchInterests) sections.push({ title: 'الاهتمامات البحثية', entries: profile.researchInterests.split(/\n/).map(clean).filter(Boolean).map(title => entry(title)) });
+  add('المناصب الإدارية', profile.administration.map(row => entry(row.role, join([row.institution, periodOf(row, t)]), row)));
+  if (profile.researchInterests) sections.push({ key: 'الاهتمامات البحثية', title: t('الاهتمامات البحثية'), entries: profile.researchInterests.split(/\n/).map(clean).filter(Boolean).map(title => entry(title)) });
 
   const publications = mergePublications(bundle.publications || [], profile.publications);
   const bibliography = row => entry(row.title, join([
     unclassified(row) ? row.kind : '', row.authors, row.venue, row.date ? formatDate(row.date) : row.year,
-    row.volume && `المجلد ${row.volume}`, row.issue && `العدد ${row.issue}`, row.pages && `ص ${row.pages}`,
+    row.volume && `${t('المجلد')} ${row.volume}`, row.issue && `${t('العدد')} ${row.issue}`, row.pages && `${t('ص')} ${row.pages}`,
     row.status !== 'منشور' ? row.status : '', row.doi && `DOI: ${row.doi}`
   ]), { ...row, url: row.url || (row.doi && `https://doi.org/${row.doi.replace(/^https?:\/\/doi\.org\//i, '')}`) });
   const isBook = row => /كتاب|كتب|فصل|تحقيق|book|chapter/i.test(row.kind || '');
@@ -128,7 +151,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     const programme = clean(row.programLabel || row.specialization);
     return entry(row.title, join([
       row.role, programme.includes(kind) ? '' : kind, programme,
-      row.student_name && `الطالب: ${row.student_name}`, row.university || context.university,
+      row.student_name && (english ? `Student: ${row.student_name}` : `الطالب: ${row.student_name}`), row.university || context.university,
       row.status, formatDate(row.defense_date)
     ]), row);
   };
@@ -158,14 +181,14 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
       ...(teachingDetails.length ? { entries: short ? teachingDetails.slice(0, 5) : teachingDetails } : {})
     });
   } else add('الخبرة التدريسية', []);
-  if (profile.teachingStatement) sections.push({ title: 'تطوير التدريس والإرشاد الأكاديمي', text: profile.teachingStatement });
+  if (profile.teachingStatement) sections.push({ key: 'تطوير التدريس والإرشاد الأكاديمي', title: t('تطوير التدريس والإرشاد الأكاديمي'), text: profile.teachingStatement });
   add('المؤتمرات والفعاليات العلمية', (bundle.scientificEvents || []).map(row => entry(row.title, join([row.category, row.participation_type, row.location, formatDate(row.date)]), row)));
   add('الخدمة الأكاديمية والعضويات والتحكيم', [
-    ...profile.service.map(row => entry(row.role, join([row.organization, period(row), row.description]), row)),
+    ...profile.service.map(row => entry(row.role, join([row.organization, periodOf(row, t), row.description]), row)),
     ...(bundle.researchSupport || []).filter(row => row._cvType === 'تحكيم علمي').map(row => entry(row.title, join([row.location, formatDate(row.date)]), row))
   ]);
-  add('العمل في اللجان', profile.committees.map(row => entry(row.name, join([row.role, row.organization, period(row), row.description]), row)));
-  add('المنح والمشروعات البحثية', profile.grants.map(row => entry(row.title, join([row.role, row.funder, period(row), row.description]), row)));
+  add('العمل في اللجان', profile.committees.map(row => entry(row.name, join([row.role, row.organization, periodOf(row, t), row.description]), row)));
+  add('المنح والمشروعات البحثية', profile.grants.map(row => entry(row.title, join([row.role, row.funder, periodOf(row, t), row.description]), row)));
   const awards = (bundle.communityActivities || []).filter(row => row.category === 'جائزة' || row.category === 'براءة اختراع');
   add('الجوائز والتكريم والابتكارات', [
     ...profile.awards.map(row => entry(row.title, join([row.organization, row.year, row.description]), row)),
@@ -177,10 +200,10 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   add('الإجازات العلمية', profile.licenses.map(row => entry(row.title, join([row.issuer, row.year, row.details]), row)));
   add('اللغات', profile.languages.map(row => entry(row.name, row.level, row)));
   if (internal) {
-    sections.push({ title: 'تفاصيل التقييم الداخلي', text: `إجمالي النقاط: ${bundle.points ?? 0}`, entries: (bundle.breakdownEntries || []).map(row => entry(row.label, `العدد: ${row.count}`)) });
+    sections.push({ key: 'تفاصيل التقييم الداخلي', title: t('تفاصيل التقييم الداخلي'), text: `إجمالي النقاط: ${bundle.points ?? 0}`, entries: (bundle.breakdownEntries || []).map(row => entry(row.label, `العدد: ${row.count}`)) });
     add('المراقبات والمهام المشابهة', (bundle.monitorings || []).map(row => entry(row.title, join([row.category, row.location, formatDate(row.date)]), row)));
     add('أنشطة أخرى مسجلة', (bundle.otherActivities || []).map(row => entry(row.title, join([row.category, row.location, formatDate(row.date)]), row)));
-    if (profile.notes) sections.push({ title: 'ملاحظات المصادر الداخلية', text: profile.notes });
+    if (profile.notes) sections.push({ key: 'ملاحظات المصادر الداخلية', title: t('ملاحظات المصادر الداخلية'), text: profile.notes });
   }
   const profileItems = [
     ['التخصص العام', profile.generalSpecialization], ['التخصص الدقيق', profile.specialization],
@@ -191,11 +214,13 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   return {
     name: profile.displayName || member.name,
     englishName: profile.englishName,
-    subtitle: join([member.rank, context.university, context.college, member.department && `قسم ${member.department}`]),
-    modeLabel: internal ? 'تقرير أكاديمي داخلي' : short ? 'سيرة أكاديمية مختصرة' : 'السيرة الأكاديمية',
+    locale,
+    subtitle: join([t(member.rank), t(context.university), t(context.college),
+      member.department && (english ? `Department of ${t(member.department)}` : `قسم ${member.department}`)]),
+    modeLabel: t(internal ? 'تقرير أكاديمي داخلي' : short ? 'سيرة أكاديمية مختصرة' : 'السيرة الأكاديمية'),
     photo: safeUrl(profile.photo),
-    profileItems: profileItems.filter(([, value]) => clean(value)),
-    links: [['الصفحة الجامعية / الشخصية', profile.website], ['ORCID', profile.orcid], ['Google Scholar', profile.scholar], ['Scopus', profile.scopus]].filter(([, url]) => safeUrl(url)),
+    profileItems: profileItems.filter(([, value]) => clean(value)).map(([label, value]) => [t(label), t(value)]),
+    links: [[t('الصفحة الجامعية / الشخصية'), profile.website], ['ORCID', profile.orcid], ['Google Scholar', profile.scholar], ['Scopus', profile.scopus]].filter(([, url]) => safeUrl(url)),
     sections, coverage: '',
     // The short CV trades detail for brevity, so it keeps the charts: they carry
     // the record in less space than the lists they stand in for.
@@ -203,7 +228,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
       published: publishedResearch, books: [...bookPublications, ...authoredBooks],
       supervisions, discussions,
       reviewing: (bundle.researchSupport || []).filter(row => row._cvType === 'تحكيم علمي'), expertiseChart
-    }),
+    }, locale),
     updatedAt: profile.updatedAt,
     generatedAt: options.generatedAt || new Date().toISOString(),
     // Supervising a doctorate is not the same claim as supervising a master's
@@ -216,19 +241,20 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
       [supervisions.filter(row => classifyThesis(row) === 'unspecified').length, 'إشراف غير محدد الدرجة'],
       [discussions.length, 'مناقشات'],
       [courseNames.length + profile.teaching.filter(row => !row.course && join([row.degree, row.program, row.years, row.contribution])).length, 'مقررات وخبرات تدريسية']
-    ].filter(([count]) => count > 0)
+    ].filter(([count]) => count > 0).map(([count, label]) => [count, t(label)])
   };
 }
 
 // Mirrors the layout the PDF chooses for the same section, so the preview is a
 // preview rather than a second, differently shaped document.
-function renderSectionHtml(section) {
-  const arabic = value => Number(value || 0).toLocaleString('ar-SA');
+function renderSectionHtml(section, locale = 'ar') {
+  const arabic = value => digits(value, locale);
+  const w = value => term(value, locale);
   const layout = sectionLayout(section);
   const entries = section.entries || [];
   const prose = section.text ? `<p class="cv-prose">${html(section.text)}</p>` : '';
-  const link = row => row.url ? `<a href="${html(row.url)}" target="_blank" rel="noopener noreferrer">رابط الوصول</a>` : '';
-  const source = row => row.source ? `<p class="cv-source">المصدر: ${html(row.source)}</p>` : '';
+  const link = row => row.url ? `<a href="${html(row.url)}" target="_blank" rel="noopener noreferrer">${html(w('رابط الوصول'))}</a>` : '';
+  const source = row => row.source ? `<p class="cv-source">${html(w('المصدر'))}: ${html(row.source)}</p>` : '';
   let body = '';
   if (layout === 'cited') {
     body = `<ol class="cv-cited">${entries.map(row => `<li>${row.title ? `<strong>${html(row.title)}</strong>` : ''}${row.details ? `<p>${html(row.details)}</p>` : ''}${link(row)}${source(row)}</li>`).join('')}</ol>`;
@@ -247,8 +273,9 @@ function renderSectionHtml(section) {
 }
 
 export function renderCvDocument(doc) {
-  const date = value => new Date(value).toLocaleDateString('ar-SA', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' });
-  return `<article class="cv-document" dir="rtl">
+  const locale = doc.locale === 'en' ? 'en' : 'ar';
+  const date = value => new Date(value).toLocaleDateString(locale === 'en' ? 'en-GB' : 'ar-SA', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' });
+  return `<article class="cv-document" dir="${locale === 'en' ? 'ltr' : 'rtl'}" lang="${locale}">
     <header class="cv-doc-header">
       ${doc.photo ? `<img class="cv-portrait" src="${html(doc.photo)}" alt="صورة ${html(doc.name)}" referrerpolicy="no-referrer">` : ''}
       <div><p class="cv-doc-kind">${html(doc.modeLabel)}</p><h2>${html(doc.name)}</h2>${doc.englishName ? `<p lang="en" dir="ltr" class="cv-english-name">${html(doc.englishName)}</p>` : ''}<p>${html(doc.subtitle)}</p></div>
@@ -257,7 +284,7 @@ export function renderCvDocument(doc) {
     ${doc.links.length ? `<nav class="cv-doc-links" aria-label="الروابط العلمية">${doc.links.map(([label, url]) => `<a href="${html(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${html(label)}</a>`).join('')}</nav>` : ''}
     ${doc.counts.length ? `<div class="cv-doc-counts">${doc.counts.map(([count, label]) => `<span><b>${count.toLocaleString('ar-SA')}</b> ${html(label)}</span>`).join('')}</div>` : ''}
     ${renderCvCharts(doc.charts)}
-    ${doc.sections.map(renderSectionHtml).join('')}
-    <footer class="cv-doc-footer"><p>${html(doc.coverage)}</p><p>${doc.updatedAt ? `آخر تحديث لبيانات السيرة: ${html(date(doc.updatedAt))} · ` : ''}تاريخ إعداد الملف: ${html(date(doc.generatedAt))}</p></footer>
+    ${doc.sections.map(section => renderSectionHtml(section, locale)).join('')}
+    <footer class="cv-doc-footer"><p>${html(doc.coverage)}</p><p>${doc.updatedAt ? `${locale === 'en' ? 'CV data last updated' : 'آخر تحديث لبيانات السيرة'}: ${html(date(doc.updatedAt))} · ` : ''}${locale === 'en' ? 'Document generated' : 'تاريخ إعداد الملف'}: ${html(date(doc.generatedAt))}</p></footer>
   </article>`;
 }
