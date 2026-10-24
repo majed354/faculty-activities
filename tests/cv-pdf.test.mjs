@@ -6,7 +6,7 @@ import { renderCvDocument } from '../src/cv-document.mjs';
 import { createWordBlob } from '../src/cv-word.mjs';
 import { chartCsvRows, chartTable } from '../src/cv-chart-data.mjs';
 import { buildCvMetrics, sectionLayout, classifyThesis } from '../src/cv-metrics.mjs';
-import { term, hijriYear, bilingual } from '../src/cv-i18n.mjs';
+import { term, hijriYear, bilingual, registerTranslations } from '../src/cv-i18n.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
 import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, planPdfBatches, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES, MAX_BODY_BYTES } from '../src/cv-pdf-service.mjs';
 import { matchesSupervisorCode, matchesEmployeeId } from '../src/cv-access.mjs';
@@ -370,7 +370,7 @@ test('equal values draw equal bars regardless of their labels', () => {
 test('the English CV translates its structure and leaves member prose in Arabic', () => {
   const data = {
     member: { id: '1', name: 'د. ماجد الجهني', rank: 'أستاذ مشارك', department: 'القراءات', email: 'm@tu.edu.sa' },
-    publications: [{ title: 'قواعد التفسير', journal: 'مجلة الراسخون', year: '1446', kind: 'بحث', status: 'منشور', volume: '12', issue: '3', pages: '45-67' }],
+    publications: [{ title: 'عنوان بحث لا ترجمة مراجَعة له', journal: 'مجلة الراسخون', year: '1446', kind: 'بحث', status: 'منشور', volume: '12', issue: '3', pages: '45-67' }],
     theses: [{ role: 'مشرف', type: 'دكتوراه', degreeLabel: 'رسالة علمية', title: 'ر' }],
     researchSupport: [], scientificEvents: [], communityActivities: [], academicPromotions: [],
     teachingDetails: [], monitorings: [], otherActivities: [],
@@ -414,8 +414,17 @@ test('the English CV translates its structure and leaves member prose in Arabic'
   assert.match(cited.entries[0].details, /Vol\. 12 · No\. 3 · pp\. 45-67/);
   assert.match(en.sections.find(s => s.key === 'المسار الوظيفي').entries[0].details, /1445 — present/);
 
-  // Member prose is never translated; the original stands.
-  assert.match(cited.entries[0].title, /قواعد التفسير/);
+  // Member free text is rendered in English where a reviewed translation
+  // exists, and falls back to the original where none does — never machine
+  // translated on the fly.
+  assert.equal(cited.entries[0].title, 'عنوان بحث لا ترجمة مراجَعة له', 'no reviewed translation: the original stands');
+  registerTranslations([{ arabic: 'عنوان بحث لا ترجمة مراجَعة له', english: 'An article title with a reviewed translation' }]);
+  const retitled = buildCvDocument(data, { mode: 'public', locale: 'en' }, ctx);
+  assert.equal(retitled.sections.find(section => section.key === 'البحوث المنشورة').entries[0].title,
+    'An article title with a reviewed translation', 'a reviewed translation is used');
+  assert.equal(buildCvDocument(data, { mode: 'public', locale: 'ar' }, ctx)
+    .sections.find(section => section.key === 'البحوث المنشورة').entries[0].title,
+    'عنوان بحث لا ترجمة مراجَعة له', 'the Arabic CV is untouched by the translation register');
 
   // Numerals follow the document, not the data.
   assert.equal(en.charts.find(c => c.id === 'supervision').note, 'Total: 1 theses and projects.');

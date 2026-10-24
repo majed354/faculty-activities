@@ -339,13 +339,41 @@ export const GLOSSARY = {
   'اللغة الأم': 'Native'
 };
 
+// Free text the members wrote — course names, committee names, thesis and
+// article titles — reviewed and translated separately from the fixed glossary.
+// Kept in its own layer because it is large, it grows, and unlike the glossary
+// it is not a closed vocabulary: a term absent here still falls through to
+// Arabic rather than being guessed at.
+const TRANSLATIONS = new Map();
+
+// Matching ignores the decorations that differ between records for the same
+// text: diacritics, alef and ya variants, tatweel and repeated spaces.
+const fold = value => clean(value).normalize('NFKC')
+  .replace(/[\u064b-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا')
+  .replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
+
+export function registerTranslations(entries) {
+  for (const entry of entries || []) {
+    const key = fold(entry?.arabic);
+    const english = clean(entry?.english);
+    if (key && english) TRANSLATIONS.set(key, english);
+  }
+  return TRANSLATIONS.size;
+}
+
+export function translated(value, locale) {
+  const text = clean(value);
+  if (!isEnglish(locale) || !text) return text;
+  return GLOSSARY[text] || TRANSLATIONS.get(fold(text)) || text;
+}
+
 // Arabic terms the glossary does not carry stay as written. Silence is the
 // honest outcome: a guessed translation in an accreditation file is worse than
 // a visible Arabic term a reviewer can ask about.
 export function term(value, locale) {
   const text = clean(value);
   if (!isEnglish(locale) || !text) return text;
-  return GLOSSARY[text] || text;
+  return GLOSSARY[text] || TRANSLATIONS.get(fold(text)) || text;
 }
 
 // Compound values arrive already joined with " · ". Translating each part keeps
@@ -413,3 +441,7 @@ export function draftEnglishSummary(profile, member, university = '', college = 
   if (interests.length) sentences.push(`Research interests: ${interests.map(value => term(value, 'en')).join(', ')}`);
   return sentences.filter(Boolean).join('. ').replace(/\.*$/, '') + '.';
 }
+
+// Registered at import time from the reviewed set the build emits.
+import GENERATED_TRANSLATIONS from './cv-translations.generated.mjs';
+registerTranslations(GENERATED_TRANSLATIONS);
