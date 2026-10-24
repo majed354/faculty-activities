@@ -370,6 +370,14 @@ export function translated(value, locale) {
 // Arabic terms the glossary does not carry stay as written. Silence is the
 // honest outcome: a guessed translation in an accreditation file is worse than
 // a visible Arabic term a reviewer can ask about.
+// Dates and counts arrive already formatted by the host app, which renders
+// them in Arabic-Indic digits. Inside an English document those read as noise,
+// so the numerals are converted wherever a formatted value passes through.
+const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+export const latinDigits = value => String(value ?? '')
+  .replace(/[٠-٩]/g, digit => String(ARABIC_DIGITS.indexOf(digit)))
+  .replace(/هـ/g, 'AH');
+
 export function term(value, locale) {
   const text = clean(value);
   if (!isEnglish(locale) || !text) return text;
@@ -381,7 +389,7 @@ export function term(value, locale) {
 export function phrase(value, locale, separator = ' · ') {
   const text = clean(value);
   if (!isEnglish(locale) || !text) return text;
-  return text.split(separator).map(part => term(part, locale)).join(separator);
+  return text.split(separator).map(part => latinDigits(term(part, locale))).join(separator);
 }
 
 export function digits(value, locale) {

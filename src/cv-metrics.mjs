@@ -202,7 +202,7 @@ const fold = word => word.normalize('NFKC')
 // Folding is for comparison only. The surface spelling is kept alongside it so
 // a detected phrase is shown as the member actually wrote it — a heading
 // reading "التفسيريه" would be the normaliser talking, not the CV.
-const tokenize = title => {
+export const tokenizeTitle = title => {
   const words = clean(title).replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
   return { words, keys: words.map(fold) };
 };
@@ -235,7 +235,7 @@ const runsOf = (keys, minimum = 2) => {
 // true of every record beats a longer one true of three quarters.
 export function detectProgramme(entries, { minimum = 6 } = {}) {
   if (entries.length < minimum) return null;
-  const parsed = entries.map(row => tokenize(row.title)).filter(item => item.keys.length);
+  const parsed = entries.map(row => tokenizeTitle(row.title)).filter(item => item.keys.length);
   if (parsed.length < minimum) return null;
   const maps = parsed.map(item => runsOf(item.keys));
 
@@ -259,11 +259,24 @@ export function detectProgramme(entries, { minimum = 6 } = {}) {
       phrases.push(parsed[0].words.slice(item.at, item.at + Math.min(length, BUDGET - spent)).join(' '));
       spent += length;
     }
+    // Naming the series is only half the saving: every record still repeats
+    // it in full. Measure the opening the majority share so it can be struck
+    // from those rows once the heading states it. Rows phrased differently
+    // keep their whole title rather than being cut at the wrong place.
+    const majority = parsed.filter(item => placed.every(run => item.keys.join(' ').includes(run.run)));
+    let lead = 0;
+    if (majority.length >= needed) {
+      while (lead < majority[0].keys.length - 2) {
+        const word = majority[0].keys[lead];
+        if (!majority.every(item => item.keys[lead] === word)) break;
+        lead += 1;
+      }
+    }
     const label = phrases.map(trimScope).filter(Boolean).join(' … ');
     if (label.replace(/[\s…]/g, '').length < 14) continue;
     const covered = maps.filter(map => placed.every(item => map.has(item.run))).length;
     if (covered < needed) continue;
-    return { label, covered, total: entries.length };
+    return { label, covered, total: entries.length, lead, runs: placed.map(item => item.run) };
   }
   return null;
 }

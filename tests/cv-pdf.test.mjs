@@ -585,3 +585,50 @@ test('an English CV falls back to the Arabic name rather than inventing a Latin 
   const own = buildCvDocument({ ...base, member: { id: '21', name: 'x', rank: 'أستاذ', department: 'الشريعة', email: '' }, profile: { englishName: 'As I Sign It' } }, { mode: 'public', locale: 'en' }, ctx);
   assert.equal(own.englishName, 'As I Sign It');
 });
+
+test('one supervised programme reads as one series in either language', () => {
+  // Real in-range titles from data/theses.csv, in the two phrasings the
+  // records actually use. Unifying the translations is what lets both be
+  // recognised as one series rather than two.
+  const titles = [
+    'تصنيفات الاختلافات التفسيرية عند ابن الجوزي في كتابه زاد المسير من بداية الآية 168 إلى نهاية 186 من سورة آل عمران: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية عند ابن الجوزي في كتابه زاد المسير من بداية الآية 24 إلى نهاية 34 من سورة النساء: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية عند ابن الجوزي في كتابه زاد المسير من بداية الآية 35 إلى نهاية 44 من سورة النساء: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية في زاد المسير في علم التفسير للإمام ابن الجوزي من سورة الأعراف آية 19 إلى سورة الأعراف آية 37: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية في زاد المسير في علم التفسير للإمام ابن الجوزي من سورة الأنعام آية 102 إلى سورة الأنعام آية 121: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية عند ابن الجوزي في كتابه زاد المسير من بداية الآية 59 إلى نهاية 77 من سورة النساء: جمعاً ودراسة'
+  ];
+  const theses = titles.map((title, index) => ({
+    role: 'مشرف رئيسي', type: 'ماجستير', degreeLabel: 'مشروع بحثي',
+    programLabel: 'مشروع بحثي دراسات قرآنية', student_name: `طالب ${index + 1}`,
+    university: 'جامعة الطائف', status: 'منجزة', defense_date: '١٤٤٧هـ', year: '1447', title
+  }));
+  const ctx = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || '') };
+  const base = {
+    member: { id: '1', name: 'د. فلان', rank: 'أستاذ', department: 'القراءات', email: '' },
+    publications: [], researchSupport: [], scientificEvents: [], communityActivities: [],
+    academicPromotions: [], teachingDetails: [], monitorings: [], otherActivities: [], profile: {}, theses
+  };
+  for (const locale of ['ar', 'en']) {
+    const section = buildCvDocument(base, { mode: 'internal', locale }, ctx)
+      .sections.find(item => item.key === 'الإشراف على الرسائل والمشروعات');
+    assert.equal(section.programme.covered, titles.length, `${locale}: both phrasings join one series`);
+    assert.equal(section.entries.length, titles.length, 'no record is folded away');
+    // The constants are stated once; the Hijri date follows the document's
+    // numerals rather than staying Arabic-Indic inside an English CV.
+    assert.deepEqual(section.shared, locale === 'en'
+      ? ['Principal Supervisor', 'Research Project in Quranic Studies', 'Taif University', 'Completed', '1447AH']
+      : ['مشرف رئيسي', 'مشروع بحثي دراسات قرآنية', 'جامعة الطائف', 'منجزة', '١٤٤٧هـ']);
+    // Each record keeps its own scope whole: the verse range is what tells one
+    // project in the programme from the next, so it is never trimmed away.
+    assert.match(section.entries[0].title, locale === 'en' ? /verse 168/ : /الآية 168/);
+  }
+
+  // A title with no reviewed translation stays Arabic and therefore falls
+  // outside the English series — withheld rather than guessed at.
+  const withGap = { ...base, theses: [...theses, { ...theses[0], title: 'عنوان رسالة لم تُراجَع ترجمته بعد', student_name: 'طالب ٩٩' }] };
+  const english = buildCvDocument(withGap, { mode: 'internal', locale: 'en' }, ctx)
+    .sections.find(item => item.key === 'الإشراف على الرسائل والمشروعات');
+  assert.equal(english.entries.length, titles.length + 1, 'the untranslated record is still listed');
+  assert.ok(english.entries.some(entry => /عنوان رسالة/.test(entry.title)), 'and keeps its Arabic title');
+});
