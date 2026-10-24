@@ -25,7 +25,7 @@ function queueSession(body) {
 }
 const byId = id => document.getElementById(id);
 const context = () => ({ university: config.university_name || 'جامعة الطائف', college: config.college_name || 'كلية الشريعة', formatDate, yearLabel: formatCustomStatsYearLabel });
-const options = () => ({ mode: byId('cvStudioMode')?.value || 'public', personal: !!byId('cvStudioPersonal')?.checked, generatedAt: cvStudioReport?.generatedAt });
+const options = () => ({ mode: byId('cvStudioMode')?.value || 'public', locale: byId('cvStudioLocale')?.value === 'en' ? 'en' : 'ar', personal: !!byId('cvStudioPersonal')?.checked, generatedAt: cvStudioReport?.generatedAt });
 const message = (text, error = false) => {
   const status = byId('cvStudioStorageStatus');
   if (status) { status.textContent = text; status.classList.toggle('is-error', error); }
@@ -309,7 +309,7 @@ function editorHtml(member, profile) {
     <form id="cvProfileForm" novalidate>
       ${editorStepsHtml(member, profile)}
       ${editing.id !== getLoggedInEmployeeId() ? '<label class="cv-privilege-field">كلمة مرور الصلاحيات لحفظ سيرة عضو آخر<input type="password" id="cvEditorPrivilege" autocomplete="off" required></label>' : ''}
-      <div class="cv-editor-footer"><div class="cv-step-controls"><button type="button" data-step-back disabled>السابق</button><p id="cvStepStatus" role="status">الخطوة ١ من ٤</p><button type="button" data-step-next>التالي</button></div><div class="cv-save-status"><p id="cvEditorSaveState">${profile.updatedAt ? 'التعديلات تُعتمد عند الحفظ.' : 'أكمل ما ينطبق عليك فقط.'}</p><p class="cv-form-error" id="cvEditorError" role="alert"></p></div><details class="cv-generation-settings"><summary id="cvEditorOutputLabel">إعدادات الملف: Word</summary><div class="cv-generation-options"><label>نوع السيرة<select id="cvEditorMode"><option value="public">كاملة للنشر</option><option value="short">مختصرة</option><option value="internal">تقرير داخلي</option></select></label><label>الملف بعد الحفظ<select id="cvEditorOutput"><option value="word">Word قابل للتحرير</option><option value="pdf">PDF احترافي بالمخططات</option><option value="preview">معاينة فقط</option></select></label></div></details><div class="cv-dialog-actions"><button type="button" id="cvReloadProfile">النسخة المحفوظة</button><button type="submit" id="cvProfileSave">حفظ</button><button type="submit" id="cvProfileSaveGenerate" data-save-generate class="cv-primary">حفظ وتوليد Word</button></div></div>
+      <div class="cv-editor-footer"><div class="cv-step-controls"><button type="button" data-step-back disabled>السابق</button><p id="cvStepStatus" role="status">الخطوة ١ من ٤</p><button type="button" data-step-next>التالي</button></div><div class="cv-save-status"><p id="cvEditorSaveState">${profile.updatedAt ? 'التعديلات تُعتمد عند الحفظ.' : 'أكمل ما ينطبق عليك فقط.'}</p><p class="cv-form-error" id="cvEditorError" role="alert"></p></div><details class="cv-generation-settings"><summary id="cvEditorOutputLabel">إعدادات الملف: Word</summary><div class="cv-generation-options"><label>نوع السيرة<select id="cvEditorMode"><option value="public">كاملة للنشر</option><option value="short">مختصرة</option><option value="internal">تقرير داخلي</option></select></label><label>اللغة<select id="cvEditorLocale"><option value="ar">العربية</option><option value="en">English</option></select></label><label>الملف بعد الحفظ<select id="cvEditorOutput"><option value="word">Word قابل للتحرير</option><option value="pdf">PDF احترافي بالمخططات</option><option value="preview">معاينة فقط</option></select></label></div></details><div class="cv-dialog-actions"><button type="button" id="cvReloadProfile">النسخة المحفوظة</button><button type="submit" id="cvProfileSave">حفظ</button><button type="submit" id="cvProfileSaveGenerate" data-save-generate class="cv-primary">حفظ وتوليد Word</button></div></div>
     </form></div>`;
 }
 
@@ -364,6 +364,7 @@ async function openEditor(id) {
   modal.innerHTML = editorHtml(member, getProfile(target)); document.body.appendChild(modal);
   document.body.classList.add('cv-editor-open');
   byId('cvEditorMode').value = options().mode;
+  byId('cvEditorLocale').value = options().locale;
   byId('cvEditorOutput').onchange = () => {
     const label = { word: 'Word', pdf: 'PDF', preview: 'المعاينة' }[byId('cvEditorOutput').value];
     byId('cvEditorOutputLabel').textContent = `إعدادات الملف: ${label}`;
@@ -501,10 +502,13 @@ function closeEditor() {
   document.body.classList.remove('cv-editor-open'); returnFocus?.focus();
 }
 
-function showSavedMember(id, mode) {
+function showSavedMember(id, mode, locale) {
   const bundle = buildCvStudioMemberBundle(id, 'all');
   if (!bundle) throw new Error('تعذر جمع سجلات العضو للتوليد. بياناتك محفوظة ويمكن إعادة المحاولة.');
   byId('cvStudioMode').value = mode;
+  // The editor's own language choice drives the generated file, so it is
+  // mirrored onto the studio control the generator reads.
+  if (locale) byId('cvStudioLocale').value = locale;
   byId('cvStudioDepartmentFilter').value = bundle.member.department || 'all';
   renderCvStudioMemberPicker(true);
   const checkboxes = [...byId('cvStudioMemberSelect').querySelectorAll('.cv-studio-member-options input[type="checkbox"]')];
@@ -538,6 +542,7 @@ async function saveEditor(event) {
   const button = byId('cvProfileSave'), errorLabel = byId('cvEditorError');
   const generate = !!event.submitter?.hasAttribute('data-save-generate');
   const output = byId('cvEditorOutput').value, mode = byId('cvEditorMode').value;
+  const locale = byId('cvEditorLocale').value === 'en' ? 'en' : 'ar';
   let confirmed = false;
   try {
     const profile = normalizeProfile(rawForm());
@@ -562,7 +567,7 @@ async function saveEditor(event) {
   }
   if (confirmed && generate) {
     try {
-      showSavedMember(state.id, mode);
+      showSavedMember(state.id, mode, locale);
       closeEditor();
       byId('cvStudioResults').scrollIntoView({ behavior: 'smooth', block: 'start' });
       if (output === 'word') await exportWord(state.id, true);
@@ -578,7 +583,7 @@ async function setup() {
   byId('cvStudioEditProfile')?.addEventListener('click', () => openEditor(getLoggedInEmployeeId()));
   byId('cvStudioActivate')?.addEventListener('click', openSession);
   byId('cvStudioExportWordBtn')?.addEventListener('click', () => exportWord());
-  ['cvStudioMode', 'cvStudioPersonal'].forEach(id => byId(id)?.addEventListener('change', () => { if (cvStudioReport) renderCvStudioResults(); }));
+  ['cvStudioMode', 'cvStudioLocale', 'cvStudioPersonal'].forEach(id => byId(id)?.addEventListener('change', () => { if (cvStudioReport) renderCvStudioResults(); }));
   byId('cvStudioMembersContainer')?.addEventListener('click', event => {
     const button = event.target.closest('[data-cv-action]'); if (!button) return;
     if (button.dataset.cvAction === 'edit') openEditor(button.dataset.cvId);

@@ -9,6 +9,7 @@
 // string literal via `lit()`, which is inert wherever it lands.
 
 import { sectionLayout, PALETTE } from './cv-metrics.mjs';
+import { term } from './cv-i18n.mjs';
 
 const clean = value => String(value ?? '').trim();
 
@@ -24,9 +25,14 @@ export function lit(value) {
 
 // A digit run ending an RTL line flips without a directional anchor; the spike
 // rendered "45-67." as "67-45.". Ranges get an en dash and a trailing mark.
-const bidi = value => clean(value)
-  .replace(/(\d)\s*-\s*(\d)/g, '$1–$2')
-  .replace(/([0-9A-Za-z–)\]])$/, '$1‏');
+const bidi = value => {
+  const text = clean(value).replace(/(\d)\s*-\s*(\d)/g, '$1–$2');
+  // The trailing mark repairs an RTL line; an LTR document needs no anchor,
+  // and an invisible character there would only pollute copied text. Arabic
+  // free text inside an English CV still gets it.
+  if (inEnglish() && !/[\u0600-\u06ff]/.test(text)) return text;
+  return text.replace(/([0-9A-Za-z–)\]])$/, '$1‏');
+};
 
 // `lit()` is a string literal only in code mode. Dropped bare into a markup
 // block it is plain text, and Typst would read constructs like `@tu.edu.sa` or
@@ -34,7 +40,12 @@ const bidi = value => clean(value)
 // markup never sees member-supplied characters.
 const say = (value, options = '') => `text(${options ? `${options}, ` : ''}${lit(value)})`;
 
-const num = value => Number(value || 0).toLocaleString('ar-SA');
+// Locale is read off the document the renderer was handed, so one call cannot
+// mix an English heading with Arabic-Indic numerals beside it.
+let LOCALE = 'ar';
+const inEnglish = () => LOCALE === 'en';
+const word = value => term(value, LOCALE);
+const num = value => Number(value || 0).toLocaleString(inEnglish() ? 'en-US' : 'ar-SA');
 // Addresses are shown without their scheme, and truncated rather than wrapped,
 // so a long profile URL cannot blow out the identity grid.
 const shortUrl = value => {
@@ -46,7 +57,8 @@ const color = name => `rgb("${PALETTE[name] || PALETTE.primary}")`;
 const arr = values => `(${values.join(', ')}${values.length === 1 ? ',' : ''})`;
 const date = value => {
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleDateString('ar-SA', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' });
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleDateString(inEnglish() ? 'en-GB' : 'ar-SA', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' });
 };
 
 
@@ -135,7 +147,7 @@ const PREAMBLE = `
     text(size: 8pt, fill: rgb(255, 255, 255, 170), tracking: 0.5pt, kind)
     v(3pt)
     text(size: 20pt, weight: 700, fill: white, name)
-    if english != "" { v(2pt); text(size: 10pt, fill: rgb(255, 255, 255, 200), dir: ltr, english) }
+    if english != "" { v(2pt); text(size: 10pt, fill: rgb(255, 255, 255, 200), english) }
     v(4pt)
     text(size: 9.5pt, fill: rgb(255, 255, 255, 215), subtitle)
   }
@@ -149,11 +161,11 @@ const PREAMBLE = `
   ]
 }
 
-#let record(title, details, url, source) = block(above: 5pt, below: 5pt, breakable: false)[
+#let record(title, details, url, source, linkword, sourceword) = block(above: 5pt, below: 5pt, breakable: false)[
   #if title != "" [#text(size: 9.5pt, weight: 600)[#title]]
   #if details != "" [#if title != "" [#linebreak()] #text(size: 8.5pt, fill: DIM)[#details]]
-  #if url != "" [ #h(3pt) #text(size: 8pt)[#link(url)[#text(fill: PRIMARY)[رابط الوصول]]]]
-  #if source != "" [#linebreak() #text(size: 7.5pt, fill: DIM, style: "italic")[المصدر: #source]]
+  #if url != "" [ #h(3pt) #text(size: 8pt)[#link(url)[#text(fill: PRIMARY)[#linkword]]]]
+  #if source != "" [#linebreak() #text(size: 7.5pt, fill: DIM, style: "italic")[#sourceword: #source]]
 ]
 `;
 
@@ -196,8 +208,8 @@ function renderSection(section) {
       const details = clean(row.details);
       const parts = [`#${say(bidi(title || details), 'size: 9.5pt, weight: 600')}`];
       if (title && details) parts.push(`#linebreak() #${say(bidi(details), 'size: 8.5pt, fill: DIM')}`);
-      if (row.url) parts.push(`#h(3pt) #text(size: 8pt)[#link(${lit(row.url)})[#text(fill: PRIMARY)[رابط]]]`);
-      if (row.source) parts.push(`#linebreak() #${say(`المصدر: ${bidi(row.source)}`, 'size: 7.5pt, fill: DIM, style: "italic"')}`);
+      if (row.url) parts.push(`#h(3pt) #text(size: 8pt)[#link(${lit(row.url)})[#${say(word('رابط'), 'fill: PRIMARY')}]]`);
+      if (row.source) parts.push(`#linebreak() #${say(`${word('المصدر')}: ${bidi(row.source)}`, 'size: 7.5pt, fill: DIM, style: "italic"')}`);
       return `[${parts.join(' ')}]`;
     });
     body.push(`#enum(numbering: "١.", indent: 0pt, body-indent: 6pt, spacing: 7pt, ${items.join(', ')})`);
@@ -206,7 +218,7 @@ function renderSection(section) {
   } else if (layout === 'columns') {
     body.push(`#columns(2, gutter: 12pt)[${entries.map(row => `#${say(`• ${bidi(row.title)}`, 'size: 9pt')}#linebreak()`).join('')}]`);
   } else if (entries.length) {
-    body.push(entries.map(row => `#record(${lit(bidi(row.title))}, ${lit(bidi(row.details))}, ${lit(row.url || '')}, ${lit(bidi(row.source))})`).join('\n'));
+    body.push(entries.map(row => `#record(${lit(bidi(row.title))}, ${lit(bidi(row.details))}, ${lit(row.url || '')}, ${lit(bidi(row.source))}, ${lit(word('رابط الوصول'))}, ${lit(word('المصدر'))})`).join('\n'));
   }
   return body.join('\n');
 }
@@ -214,7 +226,10 @@ function renderSection(section) {
 function renderDocument(doc) {
   const out = [];
   const english = clean(doc.englishName);
-  out.push(`#masthead(${lit(doc.modeLabel)}, ${lit(doc.name)}, ${lit(english)}, ${lit(bidi(doc.subtitle))}, ${doc.portraitPath ? lit(doc.portraitPath) : 'none'})`);
+  // An English CV leads with the name as the awarding and indexing bodies hold
+  // it; the Arabic form stays beneath, since it is the name on the records.
+  const [headline, secondary] = inEnglish() && english ? [english, doc.name] : [doc.name, english];
+  out.push(`#masthead(${lit(doc.modeLabel)}, ${lit(headline)}, ${lit(secondary)}, ${lit(bidi(doc.subtitle))}, ${doc.portraitPath ? lit(doc.portraitPath) : 'none'})`);
 
   if (doc.profileItems.length || doc.links.length) {
     const items = doc.profileItems.map(([label, value]) =>
@@ -234,7 +249,9 @@ function renderDocument(doc) {
   for (const chart of doc.charts || []) out.push(renderChart(chart));
   for (const section of doc.sections) out.push(renderSection(section));
 
-  const stamp = [doc.updatedAt && `آخر تحديث لبيانات السيرة: ${date(doc.updatedAt)}`, `تاريخ إعداد الملف: ${date(doc.generatedAt)}`].filter(Boolean).join(' · ');
+  const stamp = inEnglish()
+    ? [doc.updatedAt && `CV data last updated: ${date(doc.updatedAt)}`, `Document generated: ${date(doc.generatedAt)}`].filter(Boolean).join(' · ')
+    : [doc.updatedAt && `آخر تحديث لبيانات السيرة: ${date(doc.updatedAt)}`, `تاريخ إعداد الملف: ${date(doc.generatedAt)}`].filter(Boolean).join(' · ');
   out.push(`#v(12pt)\n#line(length: 100%, stroke: 0.5pt + LINE)\n#v(5pt)
 #${say(bidi(doc.coverage), 'size: 7.5pt, fill: DIM')}
 #linebreak()
@@ -245,16 +262,23 @@ function renderDocument(doc) {
 export function renderCvTypst(documents, options = {}) {
   const list = Array.isArray(documents) ? documents : [documents];
   if (!list.length) throw new Error('لا توجد سيرة لتوليدها.');
+  LOCALE = list[0]?.locale === 'en' ? 'en' : 'ar';
+  const ltr = inEnglish();
   const font = options.font || 'Readex Pro';
-  const title = list.length === 1 ? `${list[0].modeLabel} — ${list[0].name}` : 'السير الأكاديمية';
+  const title = list.length === 1
+    ? `${list[0].modeLabel} — ${list[0].name}`
+    : (ltr ? 'Academic Curriculum Vitae' : 'السير الأكاديمية');
+  // Arabic stays in the fallback stack for an English document: publication
+  // titles remain in their own script and must still have a face to render in.
+  const stack = `(${lit(font)}, "Noto Naskh Arabic", "Arial")`;
   return `#set document(title: ${lit(title)}, author: ${lit(list[0].name)})
 #set page(
   paper: "a4", margin: (top: 16mm, bottom: 17mm, x: 16mm),
   footer: context align(center, text(size: 8pt, fill: rgb("#5f7678"))[
-    صفحة #numbering("١", ..counter(page).get())
+    ${ltr ? 'Page #numbering("1", ..counter(page).get())' : 'صفحة #numbering("١", ..counter(page).get())'}
   ]),
 )
-#set text(font: (${lit(font)}, "Noto Naskh Arabic", "Arial"), lang: "ar", dir: rtl, size: 10pt, fill: rgb("#1d2f31"))
+#set text(font: ${stack}, lang: ${ltr ? '"en"' : '"ar"'}, dir: ${ltr ? 'ltr' : 'rtl'}, size: 10pt, fill: rgb("#1d2f31"))
 #set par(justify: true, leading: 0.68em, spacing: 0.75em)
 #show link: it => it
 ${PREAMBLE}
