@@ -1,5 +1,6 @@
 import { normalizeProfile, safeUrl } from './cv-schema.mjs';
 import { term, phrase, digits, isEnglish, LOCALES, draftEnglishSummary } from './cv-i18n.mjs';
+import { publishedEnglishName } from './cv-names.mjs';
 import { buildCvMetrics, buildExpertise, sectionLayout, hoistSharedDetails, detectProgramme, classifyThesis } from './cv-metrics.mjs';
 import { renderCvCharts } from './cv-charts.mjs';
 
@@ -63,6 +64,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   // Controlled vocabulary translates; member free text does not. A term the
   // glossary lacks stays Arabic rather than being guessed at.
   const t = value => term(value, locale);
+  const resolvedEnglishName = publishedEnglishName(member, profile.englishName);
   const tp = value => phrase(value, locale);
   const formatDate = context.formatDate || (value => clean(value));
   const sections = [];
@@ -105,7 +107,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   // translated. For an English CV a summary is composed instead from the same
   // structured fields the rest of the document already shows.
   const summary = english
-    ? (clean(profile.biographyEn) || draftEnglishSummary(profile, member, context.university, context.college))
+    ? (clean(profile.biographyEn) || draftEnglishSummary(profile, member, context.university, context.college, resolvedEnglishName))
     : profile.biography;
   if (clean(summary)) sections.push({ key: 'النبذة العلمية', title: t('النبذة العلمية'), text: short && summary.length > 800 ? `${summary.slice(0, 800)}…` : summary });
   // When the chart plots domain against duration, repeating it as a list of
@@ -171,13 +173,19 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   add('الإشراف على بحوث الطلاب', (bundle.researchSupport || []).filter(row => row._cvType === 'بحوث الطلاب').map(row => entry(row.title, join([row.location, formatDate(row.date)]), row)));
 
   const courses = groupTeaching(bundle.teachingDetails || []);
-  const courseNames = unique([...courses.map(row => row.title), ...profile.teaching.map(row => clean(row.course)).filter(Boolean)], courseKey);
+  const courseNames = unique([...courses.map(row => row.title), ...profile.teaching.map(row => clean(row.course)).filter(Boolean)], courseKey)
+    .map(title => t(title));
   const teachingDetails = profile.teaching.map(row => entry(row.course, join([row.degree, row.program, row.years, row.contribution]), row))
     .filter((row, index) => (row.title || row.url || row.source) && (!profile.teaching[index].course || row.details || row.url || row.source));
   if (courseNames.length || teachingDetails.length) {
     sections.push({
-      title: short && teachingDetails.length > 5 ? `الخبرة التدريسية — تفاصيل مختارة (5 من ${teachingDetails.length})` : 'الخبرة التدريسية',
-      ...(courseNames.length ? { text: `المقررات ومجالات التدريس: ${courseNames.join('؛ ')}.` } : {}),
+      key: 'الخبرة التدريسية',
+      title: short && teachingDetails.length > 5
+        ? (english
+          ? `${t('الخبرة التدريسية')} — selected detail (5 of ${teachingDetails.length})`
+          : `الخبرة التدريسية — تفاصيل مختارة (5 من ${teachingDetails.length})`)
+        : t('الخبرة التدريسية'),
+      ...(courseNames.length ? { text: `${english ? 'Courses and teaching areas' : 'المقررات ومجالات التدريس'}: ${courseNames.join(english ? '; ' : '؛ ')}.` } : {}),
       ...(teachingDetails.length ? { entries: short ? teachingDetails.slice(0, 5) : teachingDetails } : {})
     });
   } else add('الخبرة التدريسية', []);
@@ -195,7 +203,7 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
     ...awards.map(row => entry(row.title, join([row.category, row.location, formatDate(row.date)]), row))
   ]);
   add('خدمة المجتمع والاستشارات والمشاركات المهنية', (bundle.communityActivities || []).filter(row => !awards.includes(row)).map(row => entry(row.title, join([row.category, row.participation_type, row.location, formatDate(row.date)]), row)));
-  add('الدورات والشهادات المهنية', profile.training.map(row => entry(row.title, join([row.organization, row.year, row.hours && `${row.hours} ساعة`]), row)));
+  add('الدورات والشهادات المهنية', profile.training.map(row => entry(row.title, join([row.organization, row.year, row.hours && (english ? `${row.hours} hours` : `${row.hours} ساعة`)]), row)));
   add('الشهادات المهنية والتخصصية واختبارات الكفاءة', profile.certifications.map(row => entry(row.title, join([row.domain, row.kind, row.issuer, row.year, row.expires && `الانتهاء: ${row.expires}`, row.score && `النتيجة: ${row.score}`, internal && row.credentialId ? `رقم الشهادة: ${row.credentialId}` : '']), row)));
   add('الإجازات العلمية', profile.licenses.map(row => entry(row.title, join([row.issuer, row.year, row.details]), row)));
   add('اللغات', profile.languages.map(row => entry(row.name, row.level, row)));
@@ -213,7 +221,10 @@ export function buildCvDocument(bundle, options = {}, context = {}) {
   if (internal || options.personal) profileItems.push(['الجنسية', member.nationality], ['الجنس', member.gender]);
   return {
     name: profile.displayName || member.name,
-    englishName: profile.englishName,
+    // The member's own entry wins; otherwise an evidenced spelling from the
+    // register. A member with neither keeps their Arabic name rather than a
+    // guessed Latin one.
+    englishName: resolvedEnglishName,
     locale,
     subtitle: join([t(member.rank), t(context.university), t(context.college),
       member.department && (english ? `Department of ${t(member.department)}` : `قسم ${member.department}`)]),

@@ -3,6 +3,7 @@ import { buildCvDocument, renderCvDocument, html } from './cv-document.mjs';
 import { CERTIFICATE_CHOICES, chooseEntry, chooseInterest, draftBiography } from './cv-choices.mjs';
 import { EDITOR_STEPS, CHOICE_IDENTITIES, entryHtml, editorStepsHtml, syncChoices, filterChoices } from './cv-editor.mjs';
 import { chartCsvRows } from './cv-chart-data.mjs';
+import { planPdfBatches } from './cv-pdf-service.mjs';
 import { confirmCvMembers, cancelCvConfirmation } from './cv-access.mjs';
 import { readData } from './site-data.mjs';
 import { createWordBlob } from './cv-word.mjs';
@@ -25,7 +26,15 @@ function queueSession(body) {
 }
 const byId = id => document.getElementById(id);
 const context = () => ({ university: config.university_name || 'جامعة الطائف', college: config.college_name || 'كلية الشريعة', formatDate, yearLabel: formatCustomStatsYearLabel });
-const options = () => ({ mode: byId('cvStudioMode')?.value || 'public', locale: byId('cvStudioLocale')?.value === 'en' ? 'en' : 'ar', personal: !!byId('cvStudioPersonal')?.checked, generatedAt: cvStudioReport?.generatedAt });
+// 'both' is a choice about the file, not about one document: it renders each
+// member twice, Arabic then English, so an accreditation folder holds one file
+// per department rather than two to keep in step.
+const chosenLocale = () => {
+  const value = byId('cvStudioLocale')?.value;
+  return value === 'en' || value === 'both' ? value : 'ar';
+};
+const localesToRender = () => (chosenLocale() === 'both' ? ['ar', 'en'] : [chosenLocale()]);
+const options = (locale) => ({ mode: byId('cvStudioMode')?.value || 'public', locale: locale || (chosenLocale() === 'both' ? 'ar' : chosenLocale()), personal: !!byId('cvStudioPersonal')?.checked, generatedAt: cvStudioReport?.generatedAt });
 const message = (text, error = false) => {
   const status = byId('cvStudioStorageStatus');
   if (status) { status.textContent = text; status.classList.toggle('is-error', error); }
@@ -109,8 +118,8 @@ function cancelConfirmation() {
   sessionPrompt?.finish(false);
 }
 
-function documentFor(bundle) {
-  return buildCvDocument({ ...bundle, profile: getProfile(bundle.member.id), breakdownEntries: getCvStudioBreakdownEntries(bundle) }, options(), context());
+function documentFor(bundle, locale) {
+  return buildCvDocument({ ...bundle, profile: getProfile(bundle.member.id), breakdownEntries: getCvStudioBreakdownEntries(bundle) }, options(locale), context());
 }
 
 function getProfile(id) { return profiles.get(String(id))?.profile || normalizeProfile(); }
@@ -137,11 +146,14 @@ function renderSummary(report) {
 
 function selectedDocuments(id) {
   if (!cvStudioReport) return [];
-  return cvStudioReport.members.filter(bundle => !id || String(bundle.member.id) === String(id)).map(documentFor);
+  const chosen = cvStudioReport.members.filter(bundle => !id || String(bundle.member.id) === String(id));
+  // Each member's languages stay adjacent, so a reviewer reading the file finds
+  // the pair together instead of the whole roster twice over.
+  return chosen.flatMap(bundle => localesToRender().map(locale => documentFor(bundle, locale)));
 }
 
 function fileName(documents) {
-  return analyticsStudioSafeFileName(documents.length === 1 ? `${documents[0].modeLabel}-${documents[0].name}` : (options().locale === 'en'
+  return analyticsStudioSafeFileName(documents.length <= localesToRender().length ? `${documents[0].modeLabel}-${documents[0].name}` : (options().locale === 'en'
       ? `${options().mode === 'internal' ? 'Internal-Reports' : 'Academic-CVs'}-${cvStudioReport.departmentLabel}`
       : `${options().mode === 'internal' ? 'التقارير-الداخلية' : 'السير-الأكاديمية'}-${cvStudioReport.departmentLabel}`));
 }
@@ -178,30 +190,43 @@ async function withPortrait(doc) {
   } catch { return doc; }
 }
 
+async function requestPdf(documents, name, signal) {
+  const response = await fetch(PDF_ENDPOINT, {
+    method: 'POST', credentials: 'same-origin', cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ documents, fileName: name }),
+    signal
+  });
+  if (!response.ok) {
+    let detail = 'تعذر توليد الملف.';
+    try { detail = (await response.json()).message || detail; } catch { /* Not every failure returns JSON. */ }
+    throw new Error(detail);
+  }
+  const blob = await response.blob();
+  if (!blob.size) throw new Error('وصل ملف فارغ من الخادم');
+  return blob;
+}
+
 async function exportPdf(id) {
   const selected = selectedDocuments(id);
   if (!selected.length) return;
   const documents = await Promise.all(selected.map(withPortrait));
   const name = fileName(documents);
+  const batches = planPdfBatches(documents);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
+  // A whole roster takes longer than one CV, so the budget follows the work.
+  const timeout = setTimeout(() => controller.abort(), 45000 + batches.length * 30000);
   try {
-    message('جارٍ توليد ملف PDF…');
-    const response = await fetch(PDF_ENDPOINT, {
-      method: 'POST', credentials: 'same-origin', cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documents, fileName: name }),
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      let detail = 'تعذر توليد الملف.';
-      try { detail = (await response.json()).message || detail; } catch { /* Not every failure returns JSON. */ }
-      throw new Error(detail);
+    for (const [index, batch] of batches.entries()) {
+      message(batches.length > 1
+        ? `جارٍ توليد ملف PDF… الجزء ${(index + 1).toLocaleString('ar-SA')} من ${batches.length.toLocaleString('ar-SA')}`
+        : 'جارٍ توليد ملف PDF…');
+      const part = batches.length > 1 ? `${name}-${index + 1}-من-${batches.length}` : name;
+      download(await requestPdf(batch, part, controller.signal), `${part}.pdf`);
     }
-    const blob = await response.blob();
-    if (!blob.size) throw new Error('وصل ملف فارغ من الخادم');
-    download(blob, `${name}.pdf`);
-    message('تم تنزيل ملف PDF.');
+    message(batches.length > 1
+      ? `تم تنزيل ${batches.length.toLocaleString('ar-SA')} ملفات PDF تغطي الاختيار كاملًا.`
+      : 'تم تنزيل ملف PDF.');
   } catch (error) {
     // Printing still yields a usable file offline or while the service is
     // down, so the member is never left without a way to export.
@@ -311,7 +336,7 @@ function editorHtml(member, profile) {
     <form id="cvProfileForm" novalidate>
       ${editorStepsHtml(member, profile)}
       ${editing.id !== getLoggedInEmployeeId() ? '<label class="cv-privilege-field">كلمة مرور الصلاحيات لحفظ سيرة عضو آخر<input type="password" id="cvEditorPrivilege" autocomplete="off" required></label>' : ''}
-      <div class="cv-editor-footer"><div class="cv-step-controls"><button type="button" data-step-back disabled>السابق</button><p id="cvStepStatus" role="status">الخطوة ١ من ٤</p><button type="button" data-step-next>التالي</button></div><div class="cv-save-status"><p id="cvEditorSaveState">${profile.updatedAt ? 'التعديلات تُعتمد عند الحفظ.' : 'أكمل ما ينطبق عليك فقط.'}</p><p class="cv-form-error" id="cvEditorError" role="alert"></p></div><details class="cv-generation-settings"><summary id="cvEditorOutputLabel">إعدادات الملف: Word</summary><div class="cv-generation-options"><label>نوع السيرة<select id="cvEditorMode"><option value="public">كاملة للنشر</option><option value="short">مختصرة</option><option value="internal">تقرير داخلي</option></select></label><label>اللغة<select id="cvEditorLocale"><option value="ar">العربية</option><option value="en">English</option></select></label><label>الملف بعد الحفظ<select id="cvEditorOutput"><option value="word">Word قابل للتحرير</option><option value="pdf">PDF احترافي بالمخططات</option><option value="preview">معاينة فقط</option></select></label></div></details><div class="cv-dialog-actions"><button type="button" id="cvReloadProfile">النسخة المحفوظة</button><button type="submit" id="cvProfileSave">حفظ</button><button type="submit" id="cvProfileSaveGenerate" data-save-generate class="cv-primary">حفظ وتوليد Word</button></div></div>
+      <div class="cv-editor-footer"><div class="cv-step-controls"><button type="button" data-step-back disabled>السابق</button><p id="cvStepStatus" role="status">الخطوة ١ من ٤</p><button type="button" data-step-next>التالي</button></div><div class="cv-save-status"><p id="cvEditorSaveState">${profile.updatedAt ? 'التعديلات تُعتمد عند الحفظ.' : 'أكمل ما ينطبق عليك فقط.'}</p><p class="cv-form-error" id="cvEditorError" role="alert"></p></div><details class="cv-generation-settings"><summary id="cvEditorOutputLabel">إعدادات الملف: Word</summary><div class="cv-generation-options"><label>نوع السيرة<select id="cvEditorMode"><option value="public">كاملة للنشر</option><option value="short">مختصرة</option><option value="internal">تقرير داخلي</option></select></label><label>اللغة<select id="cvEditorLocale"><option value="ar">العربية</option><option value="en">English</option><option value="both">العربية والإنجليزية</option></select></label><label>الملف بعد الحفظ<select id="cvEditorOutput"><option value="word">Word قابل للتحرير</option><option value="pdf">PDF احترافي بالمخططات</option><option value="preview">معاينة فقط</option></select></label></div></details><div class="cv-dialog-actions"><button type="button" id="cvReloadProfile">النسخة المحفوظة</button><button type="submit" id="cvProfileSave">حفظ</button><button type="submit" id="cvProfileSaveGenerate" data-save-generate class="cv-primary">حفظ وتوليد Word</button></div></div>
     </form></div>`;
 }
 
@@ -544,7 +569,7 @@ async function saveEditor(event) {
   const button = byId('cvProfileSave'), errorLabel = byId('cvEditorError');
   const generate = !!event.submitter?.hasAttribute('data-save-generate');
   const output = byId('cvEditorOutput').value, mode = byId('cvEditorMode').value;
-  const locale = byId('cvEditorLocale').value === 'en' ? 'en' : 'ar';
+  const locale = ['en', 'both'].includes(byId('cvEditorLocale').value) ? byId('cvEditorLocale').value : 'ar';
   let confirmed = false;
   try {
     const profile = normalizeProfile(rawForm());

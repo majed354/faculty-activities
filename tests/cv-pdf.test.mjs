@@ -6,9 +6,11 @@ import { renderCvDocument } from '../src/cv-document.mjs';
 import { createWordBlob } from '../src/cv-word.mjs';
 import { chartCsvRows, chartTable } from '../src/cv-chart-data.mjs';
 import { buildCvMetrics, sectionLayout, classifyThesis } from '../src/cv-metrics.mjs';
-import { term, hijriYear, bilingual } from '../src/cv-i18n.mjs';
+import { term, hijriYear, bilingual, registerTranslations } from '../src/cv-i18n.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
-import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES } from '../src/cv-pdf-service.mjs';
+import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, planPdfBatches, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES, MAX_BODY_BYTES } from '../src/cv-pdf-service.mjs';
+import { matchesSupervisorCode, matchesEmployeeId } from '../src/cv-access.mjs';
+import { registerEnglishNames, publishedEnglishName, englishNameFor } from '../src/cv-names.mjs';
 
 const context = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || ''), yearLabel: value => `${value}هـ` };
 
@@ -368,7 +370,7 @@ test('equal values draw equal bars regardless of their labels', () => {
 test('the English CV translates its structure and leaves member prose in Arabic', () => {
   const data = {
     member: { id: '1', name: 'د. ماجد الجهني', rank: 'أستاذ مشارك', department: 'القراءات', email: 'm@tu.edu.sa' },
-    publications: [{ title: 'قواعد التفسير', journal: 'مجلة الراسخون', year: '1446', kind: 'بحث', status: 'منشور', volume: '12', issue: '3', pages: '45-67' }],
+    publications: [{ title: 'عنوان بحث لا ترجمة مراجَعة له', journal: 'مجلة الراسخون', year: '1446', kind: 'بحث', status: 'منشور', volume: '12', issue: '3', pages: '45-67' }],
     theses: [{ role: 'مشرف', type: 'دكتوراه', degreeLabel: 'رسالة علمية', title: 'ر' }],
     researchSupport: [], scientificEvents: [], communityActivities: [], academicPromotions: [],
     teachingDetails: [], monitorings: [], otherActivities: [],
@@ -412,8 +414,17 @@ test('the English CV translates its structure and leaves member prose in Arabic'
   assert.match(cited.entries[0].details, /Vol\. 12 · No\. 3 · pp\. 45-67/);
   assert.match(en.sections.find(s => s.key === 'المسار الوظيفي').entries[0].details, /1445 — present/);
 
-  // Member prose is never translated; the original stands.
-  assert.match(cited.entries[0].title, /قواعد التفسير/);
+  // Member free text is rendered in English where a reviewed translation
+  // exists, and falls back to the original where none does — never machine
+  // translated on the fly.
+  assert.equal(cited.entries[0].title, 'عنوان بحث لا ترجمة مراجَعة له', 'no reviewed translation: the original stands');
+  registerTranslations([{ arabic: 'عنوان بحث لا ترجمة مراجَعة له', english: 'An article title with a reviewed translation' }]);
+  const retitled = buildCvDocument(data, { mode: 'public', locale: 'en' }, ctx);
+  assert.equal(retitled.sections.find(section => section.key === 'البحوث المنشورة').entries[0].title,
+    'An article title with a reviewed translation', 'a reviewed translation is used');
+  assert.equal(buildCvDocument(data, { mode: 'public', locale: 'ar' }, ctx)
+    .sections.find(section => section.key === 'البحوث المنشورة').entries[0].title,
+    'عنوان بحث لا ترجمة مراجَعة له', 'the Arabic CV is untouched by the translation register');
 
   // Numerals follow the document, not the data.
   assert.equal(en.charts.find(c => c.id === 'supervision').note, 'Total: 1 theses and projects.');
@@ -477,4 +488,144 @@ test('Word and CSV follow the document language too', async () => {
 
   assert.ok(chartCsvRows(en.doc).some(row => /Supervision: 1/.test(row[3])));
   assert.ok(chartCsvRows(ar.doc).some(row => /إشراف: ١/.test(row[3])));
+});
+
+test('a whole roster is split into batches that fit the response cap, losing nothing', () => {
+  // A synchronous Netlify response is capped at 6 MB and measured output runs
+  // about 50 KB per document, so a department in both languages must be split.
+  const documents = Array.from({ length: 212 }, (_, index) => ({ name: `عضو ${index}`, filler: 'x'.repeat(9000) }));
+  const batches = planPdfBatches(documents);
+  assert.ok(batches.length > 1, 'a 212-document roster cannot go in one request');
+  assert.equal(batches.flat().length, documents.length, 'every document survives the split');
+  assert.deepEqual(batches.flat().map(row => row.name), documents.map(row => row.name), 'order is preserved');
+  for (const batch of batches) {
+    assert.ok(batch.length <= MAX_DOCUMENTS, 'a batch never exceeds the service document ceiling');
+    assert.ok(JSON.stringify(batch).length <= MAX_BODY_BYTES, 'a batch never exceeds the service byte ceiling');
+  }
+
+  // A small selection stays a single file; batching must not fragment it.
+  assert.equal(planPdfBatches(documents.slice(0, 3)).length, 1);
+  assert.equal(planPdfBatches([]).length, 0);
+
+  // One document larger than the budget still goes out, so the service can
+  // answer with a reason instead of the client silently dropping it.
+  const huge = [{ name: 'ضخم', filler: 'x'.repeat(2_000_000) }];
+  assert.equal(planPdfBatches(huge).flat().length, 1);
+});
+
+test('the supervisor code releases the whole selection; a wrong code does not', () => {
+  assert.ok(matchesSupervisorCode('2008'));
+  assert.ok(matchesSupervisorCode('٢٠٠٨'), 'Arabic-Indic digits are accepted');
+  assert.ok(matchesSupervisorCode(' 2008 '));
+  for (const wrong of ['', '2007', '20080', 'abcd', null, undefined]) {
+    assert.ok(!matchesSupervisorCode(wrong), `refused: ${wrong}`);
+  }
+  // The code is a convenience gate over a confirmation prompt, not an
+  // authorisation boundary: an employee id that happens to be 2008 still
+  // matches its own member, and the server session still governs access.
+  assert.ok(matchesEmployeeId('٢٠٠٨', '2008'));
+});
+
+test('a proposal publishes but a contradiction does not, and evidence always wins', () => {
+  registerEnglishNames([
+    { id: '10', english: 'Majed Aljuhani', status: 'verified', source: 'https://orcid.org/example' },
+    { id: '11', english: 'Afnan Alsawat', status: 'transliterated' },
+    { id: '12', english: 'Approved Spelling', status: 'confirmed', source: 'college' },
+    { id: '15', english: 'Salma al-Ghamdi', status: 'review', note: 'surname disagrees with the record' }
+  ]);
+
+  // The college asked for a Latin name on every CV, so a careful proposal
+  // built from the university's own spellings publishes.
+  assert.equal(publishedEnglishName({ id: '10' }), 'Majed Aljuhani');
+  assert.equal(publishedEnglishName({ id: '12' }), 'Approved Spelling');
+  assert.equal(publishedEnglishName({ id: '11' }), 'Afnan Alsawat', 'a proposal is published');
+  // A contradiction is not a gap: it stays withheld until someone resolves it.
+  assert.equal(publishedEnglishName({ id: '15' }), '', 'a flagged discrepancy does not publish');
+  assert.equal(publishedEnglishName({ id: '999' }), '', 'an unknown member yields nothing, never a guess');
+
+  // The member's own profile outranks anything gathered about them.
+  assert.equal(publishedEnglishName({ id: '10' }, 'How I Spell It'), 'How I Spell It');
+  assert.equal(englishNameFor({ id: '10' }, 'How I Spell It').status, 'confirmed');
+
+  // Status still ranks, so a proposal cannot displace evidence on re-import.
+  registerEnglishNames([{ id: '10', english: 'Guessed Name', status: 'transliterated' }]);
+  assert.equal(publishedEnglishName({ id: '10' }), 'Majed Aljuhani', 'a proposal cannot displace evidence');
+  registerEnglishNames([{ id: '11', english: 'Afnan M. Alsawat', status: 'verified', source: 'paper' }]);
+  assert.equal(publishedEnglishName({ id: '11' }), 'Afnan M. Alsawat', 'evidence does displace a proposal');
+
+  // Malformed records are ignored rather than stored half-complete.
+  registerEnglishNames([{ id: '13', english: 'X' }, { id: '', english: 'Y', status: 'verified' }, { id: '14', status: 'verified' }]);
+  assert.equal(publishedEnglishName({ id: '13' }), '');
+  assert.equal(publishedEnglishName({ id: '14' }), '');
+});
+
+test('an English CV falls back to the Arabic name rather than inventing a Latin one', () => {
+  registerEnglishNames([
+    { id: '20', english: 'Hisham bin Saleh Al-Zeir', status: 'verified', source: 'tu.edu.sa staff table' },
+    { id: '21', english: 'Someone Al-Suleiman', status: 'review', note: 'no affiliation in the source' }
+  ]);
+  const base = {
+    publications: [], theses: [], researchSupport: [], scientificEvents: [], communityActivities: [],
+    academicPromotions: [], teachingDetails: [], monitorings: [], otherActivities: [], profile: {}
+  };
+  const ctx = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || '') };
+  const docFor = (id, name) => buildCvDocument(
+    { ...base, member: { id, name, rank: 'أستاذ', department: 'الشريعة', email: '' } },
+    { mode: 'public', locale: 'en' }, ctx);
+
+  assert.equal(docFor('20', 'أ.د. هشام الزير').englishName, 'Hisham bin Saleh Al-Zeir');
+  // Under review, and unknown: both keep the Arabic name. The document must
+  // never assert a spelling the person has not been shown to use.
+  assert.equal(docFor('21', 'عبدالسلام السليمان').englishName, '');
+  assert.equal(docFor('999', 'عضو غير مسجل').englishName, '');
+  // The member's own entry still overrides the register.
+  const own = buildCvDocument({ ...base, member: { id: '21', name: 'x', rank: 'أستاذ', department: 'الشريعة', email: '' }, profile: { englishName: 'As I Sign It' } }, { mode: 'public', locale: 'en' }, ctx);
+  assert.equal(own.englishName, 'As I Sign It');
+});
+
+test('one supervised programme reads as one series in either language', () => {
+  // Real in-range titles from data/theses.csv, in the two phrasings the
+  // records actually use. Unifying the translations is what lets both be
+  // recognised as one series rather than two.
+  const titles = [
+    'تصنيفات الاختلافات التفسيرية عند ابن الجوزي في كتابه زاد المسير من بداية الآية 168 إلى نهاية 186 من سورة آل عمران: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية عند ابن الجوزي في كتابه زاد المسير من بداية الآية 24 إلى نهاية 34 من سورة النساء: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية عند ابن الجوزي في كتابه زاد المسير من بداية الآية 35 إلى نهاية 44 من سورة النساء: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية في زاد المسير في علم التفسير للإمام ابن الجوزي من سورة الأعراف آية 19 إلى سورة الأعراف آية 37: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية في زاد المسير في علم التفسير للإمام ابن الجوزي من سورة الأنعام آية 102 إلى سورة الأنعام آية 121: جمعاً ودراسة',
+    'تصنيفات الاختلافات التفسيرية عند ابن الجوزي في كتابه زاد المسير من بداية الآية 59 إلى نهاية 77 من سورة النساء: جمعاً ودراسة'
+  ];
+  const theses = titles.map((title, index) => ({
+    role: 'مشرف رئيسي', type: 'ماجستير', degreeLabel: 'مشروع بحثي',
+    programLabel: 'مشروع بحثي دراسات قرآنية', student_name: `طالب ${index + 1}`,
+    university: 'جامعة الطائف', status: 'منجزة', defense_date: '١٤٤٧هـ', year: '1447', title
+  }));
+  const ctx = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || '') };
+  const base = {
+    member: { id: '1', name: 'د. فلان', rank: 'أستاذ', department: 'القراءات', email: '' },
+    publications: [], researchSupport: [], scientificEvents: [], communityActivities: [],
+    academicPromotions: [], teachingDetails: [], monitorings: [], otherActivities: [], profile: {}, theses
+  };
+  for (const locale of ['ar', 'en']) {
+    const section = buildCvDocument(base, { mode: 'internal', locale }, ctx)
+      .sections.find(item => item.key === 'الإشراف على الرسائل والمشروعات');
+    assert.equal(section.programme.covered, titles.length, `${locale}: both phrasings join one series`);
+    assert.equal(section.entries.length, titles.length, 'no record is folded away');
+    // The constants are stated once; the Hijri date follows the document's
+    // numerals rather than staying Arabic-Indic inside an English CV.
+    assert.deepEqual(section.shared, locale === 'en'
+      ? ['Principal Supervisor', 'Research Project in Quranic Studies', 'Taif University', 'Completed', '1447AH']
+      : ['مشرف رئيسي', 'مشروع بحثي دراسات قرآنية', 'جامعة الطائف', 'منجزة', '١٤٤٧هـ']);
+    // Each record keeps its own scope whole: the verse range is what tells one
+    // project in the programme from the next, so it is never trimmed away.
+    assert.match(section.entries[0].title, locale === 'en' ? /verse 168/ : /الآية 168/);
+  }
+
+  // A title with no reviewed translation stays Arabic and therefore falls
+  // outside the English series — withheld rather than guessed at.
+  const withGap = { ...base, theses: [...theses, { ...theses[0], title: 'عنوان رسالة لم تُراجَع ترجمته بعد', student_name: 'طالب ٩٩' }] };
+  const english = buildCvDocument(withGap, { mode: 'internal', locale: 'en' }, ctx)
+    .sections.find(item => item.key === 'الإشراف على الرسائل والمشروعات');
+  assert.equal(english.entries.length, titles.length + 1, 'the untranslated record is still listed');
+  assert.ok(english.entries.some(entry => /عنوان رسالة/.test(entry.title)), 'and keeps its Arabic title');
 });
