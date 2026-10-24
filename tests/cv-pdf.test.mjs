@@ -629,3 +629,17 @@ test('one supervised programme reads as one series in either language', () => {
   assert.equal(english.entries.length, titles.length + 1, 'the untranslated record is still listed');
   assert.ok(english.entries.some(entry => /عنوان رسالة/.test(entry.title)), 'and keeps its Arabic title');
 });
+
+test('HTML entities in the source data do not reach the page as text', () => {
+  // One course name in teaching_data.json carries literal &quot; entities.
+  const ctx = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || '') };
+  const doc = buildCvDocument({
+    member: { id: '1', name: 'د. فلان', rank: 'أستاذ', department: 'القراءات', email: '' },
+    publications: [], theses: [], researchSupport: [], scientificEvents: [], communityActivities: [],
+    academicPromotions: [], monitorings: [], otherActivities: [], profile: {},
+    teachingDetails: [{ courseName: 'الفقه (8) &quot;فقه الحدود&quot;', year: '1447', courseCode: 'X' }]
+  }, { mode: 'public', locale: 'ar' }, ctx);
+  const teaching = doc.sections.find(section => section.key === 'الخبرة التدريسية');
+  assert.ok(!teaching.text.includes('&quot;'), 'the entity is decoded, not printed');
+  assert.match(teaching.text, /"فقه الحدود"/);
+});

@@ -6,7 +6,10 @@ import { renderCvCharts } from './cv-charts.mjs';
 
 import { html } from './cv-html.mjs';
 export { html };
-const clean = value => String(value ?? '').trim();
+const ENTITIES = { '&quot;': '"', '&apos;': "'", '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ' };
+const clean = value => String(value ?? '')
+  .replace(/&(?:quot|apos|amp|lt|gt|nbsp);/g, entity => ENTITIES[entity])
+  .trim();
 const join = (values, separator = ' · ') => values.map(clean).filter(Boolean).join(separator);
 const key = value => clean(value).normalize('NFKC').replace(/[\u064b-\u065f\u0640]/g, '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
 const courseKey = value => key(value).replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي');

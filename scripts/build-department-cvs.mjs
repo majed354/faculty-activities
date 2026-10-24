@@ -12,30 +12,28 @@ import { buildCvDocument } from '../src/cv-document.mjs';
 import { planPdfBatches } from '../src/cv-pdf-service.mjs';
 import handler from '../netlify/functions/cv-pdf.mjs';
 
-const YEARS = new Set(['1446', '1447', '1448']);
+// Who gets a CV: the members on the 1447 roster. What goes in it: their whole
+// record. A CV covers a career, not a window — the year only decides whose.
+const ROSTER_YEAR = '1447';
 const csv = name => Papa.parse(readFileSync(`data/${name}.csv`, 'utf8').trim(), { header: true, skipEmptyLines: true }).data;
 const text = value => String(value ?? '').trim();
 const ids = value => text(value).split(/[,;|]/).map(text).filter(Boolean);
-const inRange = row => YEARS.has(text(row.year));
 
 const [department = 'القراءات', locale = 'en', out = '/tmp/department-cvs.pdf'] = process.argv.slice(2);
 
 // Latest record per member, within the years the accreditation file covers.
 const roster = new Map();
 for (const row of csv('faculty')) {
-  if (!inRange(row) || text(row.department) !== department) continue;
+  if (text(row.year) !== ROSTER_YEAR || text(row.department) !== department) continue;
   const id = text(row.id);
-  if (!id) continue;
-  const held = roster.get(id);
-  if (!held || Number(row.year) > Number(held.year)) roster.set(id, row);
+  if (id) roster.set(id, row);
 }
 
-const theses = csv('theses').filter(inRange);
-const publications = csv('publications').filter(inRange);
-const participations = csv('participations').filter(inRange);
+const theses = csv('theses');
+const publications = csv('publications');
+const participations = csv('participations');
 const promotions = csv('academic_promotions');
-const teaching = JSON.parse(readFileSync('data/teaching_data.json', 'utf8')).records
-  .filter(record => YEARS.has(String(record.y)));
+const teaching = JSON.parse(readFileSync('data/teaching_data.json', 'utf8')).records;
 
 // app.js owns the rule that a master's is a رسالة علمية only before 1441 or
 // in العقيدة; it is mirrored here so the degree labels match the site's.
