@@ -24,8 +24,13 @@
 //                rendering, NOT the person's own spelling. Not published.
 export const NAME_STATUS = ['confirmed', 'verified', 'review', 'transliterated'];
 
-// Only these assert that the person spells their name this way.
-const PUBLISHABLE = new Set(['confirmed', 'verified']);
+// `transliterated` publishes by the college's decision: an accreditation file
+// needs a Latin name for every member, and a careful rendering built from the
+// university's own published spellings serves better than a blank. The status
+// is kept so each member can be shown their proposed name and correct it, and
+// so a reviewer can tell evidence from proposal. `review` stays withheld —
+// those are contradictions, not gaps.
+const PUBLISHABLE = new Set(['confirmed', 'verified', 'transliterated']);
 
 const clean = value => String(value ?? '').trim();
 

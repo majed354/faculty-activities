@@ -22,7 +22,7 @@ const fontBlobs = await Promise.all(fontFiles.map(async name => (await readFile(
 // member with no row at all, must not reach the English CV as a fact.
 const nameRegister = await readFile('data/faculty-english-names.csv', 'utf8').catch(() => '');
 const nameRows = Papa.parse(nameRegister.trim(), { header: true, skipEmptyLines: true }).data
-  .filter(row => (row.id || '').trim() && (row.english || '').trim() && ['verified', 'confirmed'].includes((row.status || '').trim()))
+  .filter(row => (row.id || '').trim() && (row.english || '').trim() && ['verified', 'confirmed', 'transliterated'].includes((row.status || '').trim()))
   .map(row => ({ id: row.id.trim(), english: row.english.trim(), status: row.status.trim(), source: (row.source || '').trim() }));
 await writeFile('src/cv-names.generated.mjs', `export default ${JSON.stringify(nameRows)};\n`);
 

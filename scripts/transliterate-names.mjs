@@ -92,7 +92,10 @@ if (process.argv[1]?.endsWith('transliterate-names.mjs')) {
   // reading for every token the university's own names never covered.
   for (const row of Papa.parse(readFileSync('data/name-lexicon-supplement.csv', 'utf8').trim(), { header: true, skipEmptyLines: true }).data) {
     const arabic = (row.arabic || '').trim();
-    if (arabic && !lexicon.has(arabic)) lexicon.set(arabic, { english: (row.english || '').trim(), variants: '' });
+    // The supplement is curated, so it overrides a spelling learned from the
+    // university pages where those disagree: الثبيتي is printed "Al-Thamiti"
+    // on one of them, which is a typo in the source.
+    if (arabic) lexicon.set(arabic, { english: (row.english || '').trim(), variants: '' });
   }
   const known = new Set(register.filter(row => row.english).map(row => row.id));
 

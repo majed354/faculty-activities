@@ -526,35 +526,32 @@ test('the supervisor code releases the whole selection; a wrong code does not', 
   assert.ok(matchesEmployeeId('٢٠٠٨', '2008'));
 });
 
-test('an unproven Latin name never reaches the published CV on its own', () => {
+test('a proposal publishes but a contradiction does not, and evidence always wins', () => {
   registerEnglishNames([
     { id: '10', english: 'Majed Aljuhani', status: 'verified', source: 'https://orcid.org/example' },
     { id: '11', english: 'Afnan Alsawat', status: 'transliterated' },
-    { id: '12', english: 'Approved Spelling', status: 'confirmed', source: 'college' }
+    { id: '12', english: 'Approved Spelling', status: 'confirmed', source: 'college' },
+    { id: '15', english: 'Salma al-Ghamdi', status: 'review', note: 'surname disagrees with the record' }
   ]);
 
-  // Evidenced and human-approved names publish; a transliteration does not,
-  // because an accreditation file must not assert a spelling the person never
-  // used. The same rule the project applies to nationality in AGENTS.md.
+  // The college asked for a Latin name on every CV, so a careful proposal
+  // built from the university's own spellings publishes.
   assert.equal(publishedEnglishName({ id: '10' }), 'Majed Aljuhani');
   assert.equal(publishedEnglishName({ id: '12' }), 'Approved Spelling');
-  assert.equal(publishedEnglishName({ id: '11' }), '', 'a transliteration is withheld by default');
-  assert.equal(publishedEnglishName({ id: '11' }, '', { includeUnverified: true }), 'Afnan Alsawat');
-  // A sourced name with an unresolved discrepancy is evidence, not an answer.
-  registerEnglishNames([{ id: '15', english: 'Salma al-Ghamdi', status: 'review', note: 'surname disagrees with the record' }]);
+  assert.equal(publishedEnglishName({ id: '11' }), 'Afnan Alsawat', 'a proposal is published');
+  // A contradiction is not a gap: it stays withheld until someone resolves it.
   assert.equal(publishedEnglishName({ id: '15' }), '', 'a flagged discrepancy does not publish');
-  assert.equal(publishedEnglishName({ id: '15' }, '', { includeUnverified: true }), 'Salma al-Ghamdi');
   assert.equal(publishedEnglishName({ id: '999' }), '', 'an unknown member yields nothing, never a guess');
 
   // The member's own profile outranks anything gathered about them.
   assert.equal(publishedEnglishName({ id: '10' }, 'How I Spell It'), 'How I Spell It');
   assert.equal(englishNameFor({ id: '10' }, 'How I Spell It').status, 'confirmed');
 
-  // A weaker status cannot overwrite a stronger one on a later import.
+  // Status still ranks, so a proposal cannot displace evidence on re-import.
   registerEnglishNames([{ id: '10', english: 'Guessed Name', status: 'transliterated' }]);
-  assert.equal(publishedEnglishName({ id: '10' }), 'Majed Aljuhani', 'a guess cannot displace evidence');
+  assert.equal(publishedEnglishName({ id: '10' }), 'Majed Aljuhani', 'a proposal cannot displace evidence');
   registerEnglishNames([{ id: '11', english: 'Afnan M. Alsawat', status: 'verified', source: 'paper' }]);
-  assert.equal(publishedEnglishName({ id: '11' }), 'Afnan M. Alsawat', 'evidence does displace a guess');
+  assert.equal(publishedEnglishName({ id: '11' }), 'Afnan M. Alsawat', 'evidence does displace a proposal');
 
   // Malformed records are ignored rather than stored half-complete.
   registerEnglishNames([{ id: '13', english: 'X' }, { id: '', english: 'Y', status: 'verified' }, { id: '14', status: 'verified' }]);
