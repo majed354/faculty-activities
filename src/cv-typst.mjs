@@ -224,6 +224,10 @@ function renderSection(section) {
 }
 
 function renderDocument(doc) {
+  // A file may hold both languages for the same member, so direction is set
+  // per document inside its own scope. Reading it once from the first document
+  // laid every English page out right-to-left.
+  LOCALE = doc.locale === 'en' ? 'en' : 'ar';
   const out = [];
   const english = clean(doc.englishName);
   // An English CV leads with the name as the awarding and indexing bodies hold
@@ -282,6 +286,11 @@ export function renderCvTypst(documents, options = {}) {
 #set par(justify: true, leading: 0.68em, spacing: 0.75em)
 #show link: it => it
 ${PREAMBLE}
-${list.map(renderDocument).join('\n#pagebreak()\n')}
+${list.map(document => {
+  const ltrDoc = document.locale === 'en';
+  // A content block scopes its `set` rules, so each document carries its own
+  // direction and language without leaking into the next.
+  return `#[\n#set text(lang: ${ltrDoc ? '"en"' : '"ar"'}, dir: ${ltrDoc ? 'ltr' : 'rtl'})\n${renderDocument(document)}\n]`;
+}).join('\n#pagebreak()\n')}
 `;
 }

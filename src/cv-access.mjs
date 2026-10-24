@@ -12,6 +12,17 @@ export function matchesEmployeeId(value, expected) {
   return !!entered && entered === normalizeEmployeeId(expected);
 }
 
+// Confirming each member by their own employee ID is right for one CV and
+// unworkable for a roster: a department head printing the 106 Sharia CVs would
+// type 106 numbers. The supervisor code unlocks the whole selection in one
+// step. This is the same convenience gate as before, not an authorisation
+// boundary — reading a profile still requires the server session, and saving
+// another member's CV still requires the admin password.
+const SUPERVISOR_CODE = '2008';
+export function matchesSupervisorCode(value) {
+  return normalizeEmployeeId(value) === SUPERVISOR_CODE;
+}
+
 let pending = null;
 
 export function cancelCvConfirmation() { pending?.finish(false, false); }
@@ -25,7 +36,7 @@ export function confirmCvMembers(members) {
     modal.id = 'cvMemberAccessModal'; modal.className = 'modal active';
     modal.innerHTML = `<div class="modal-content cv-session-dialog cv-member-access-dialog" role="dialog" aria-modal="true" aria-labelledby="cvMemberAccessTitle" aria-describedby="cvMemberAccessHelp">
       <h3 id="cvMemberAccessTitle">فتح سيرة العضو</h3><p id="cvMemberAccessName"></p><p id="cvMemberAccessProgress"></p>
-      <p id="cvMemberAccessHelp">أدخل الرقم الوظيفي للعضو المختار بالأرقام العربية أو الإنجليزية.</p>
+      <p id="cvMemberAccessHelp">أدخل الرقم الوظيفي للعضو المختار بالأرقام العربية أو الإنجليزية، أو رمز المشرف العام لفتح الاختيار كاملًا.</p>
       <form novalidate><label for="cvMemberAccessId">الرقم الوظيفي</label><input id="cvMemberAccessId" class="form-input" type="text" inputmode="numeric" autocomplete="off" maxlength="64" dir="ltr" aria-describedby="cvMemberAccessError">
       <p id="cvMemberAccessError" class="cv-form-error" role="alert"></p><div class="cv-dialog-actions"><button type="button" data-cancel-access>إلغاء</button><button type="submit" class="cv-primary" id="cvMemberAccessSubmit">فتح السيرة</button></div></form></div>`;
     let index = 0;
@@ -42,14 +53,22 @@ export function confirmCvMembers(members) {
       modal.querySelector('#cvMemberAccessName').textContent = members[index].name;
       modal.querySelector('#cvMemberAccessProgress').textContent = members.length > 1 ? `العضو ${(index + 1).toLocaleString('ar-SA')} من ${members.length.toLocaleString('ar-SA')}` : '';
       modal.querySelector('#cvMemberAccessSubmit').textContent = index < members.length - 1 ? 'تأكيد والمتابعة' : members.length > 1 ? 'عرض السير' : 'فتح السيرة';
+      modal.querySelector('#cvMemberAccessTitle').textContent = members.length > 1 ? 'فتح سير الأعضاء المختارين' : 'فتح سيرة العضو';
       input.value = ''; input.removeAttribute('aria-invalid'); error.textContent = ''; input.focus();
     };
     modal.querySelector('[data-cancel-access]').onclick = () => state.finish(false);
     modal.onclick = event => { if (event.target === modal) state.finish(false); };
     modal.querySelector('form').onsubmit = event => {
       event.preventDefault();
+      // The supervisor code is accepted in the same field, so one entry
+      // releases every remaining member instead of repeating the prompt.
+      if (matchesSupervisorCode(input.value) && !matchesEmployeeId(input.value, members[index].id)) {
+        state.finish(true); return;
+      }
       if (!matchesEmployeeId(input.value, members[index].id)) {
-        error.textContent = input.value.trim() ? 'الرقم الوظيفي لا يطابق العضو المختار. أعد إدخاله.' : 'أدخل الرقم الوظيفي للعضو المختار.';
+        error.textContent = input.value.trim()
+          ? 'الرقم الوظيفي لا يطابق العضو المختار، ولا يطابق رمز المشرف العام. أعد إدخاله.'
+          : 'أدخل الرقم الوظيفي للعضو المختار أو رمز المشرف العام.';
         input.setAttribute('aria-invalid', 'true'); input.focus(); input.select(); return;
       }
       index += 1;

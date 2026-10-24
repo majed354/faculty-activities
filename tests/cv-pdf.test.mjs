@@ -8,7 +8,8 @@ import { chartCsvRows, chartTable } from '../src/cv-chart-data.mjs';
 import { buildCvMetrics, sectionLayout, classifyThesis } from '../src/cv-metrics.mjs';
 import { term, hijriYear, bilingual } from '../src/cv-i18n.mjs';
 import { renderCvTypst, lit } from '../src/cv-typst.mjs';
-import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES } from '../src/cv-pdf-service.mjs';
+import { createCvPdfHandler, sanitizeDocument, contentDisposition, decodePortrait, planPdfBatches, MAX_DOCUMENTS, MAX_PORTRAIT_BYTES, MAX_BODY_BYTES } from '../src/cv-pdf-service.mjs';
+import { matchesSupervisorCode, matchesEmployeeId } from '../src/cv-access.mjs';
 
 const context = { university: 'جامعة الطائف', college: 'كلية الشريعة', formatDate: value => String(value || ''), yearLabel: value => `${value}هـ` };
 
@@ -477,4 +478,40 @@ test('Word and CSV follow the document language too', async () => {
 
   assert.ok(chartCsvRows(en.doc).some(row => /Supervision: 1/.test(row[3])));
   assert.ok(chartCsvRows(ar.doc).some(row => /إشراف: ١/.test(row[3])));
+});
+
+test('a whole roster is split into batches that fit the response cap, losing nothing', () => {
+  // A synchronous Netlify response is capped at 6 MB and measured output runs
+  // about 50 KB per document, so a department in both languages must be split.
+  const documents = Array.from({ length: 212 }, (_, index) => ({ name: `عضو ${index}`, filler: 'x'.repeat(9000) }));
+  const batches = planPdfBatches(documents);
+  assert.ok(batches.length > 1, 'a 212-document roster cannot go in one request');
+  assert.equal(batches.flat().length, documents.length, 'every document survives the split');
+  assert.deepEqual(batches.flat().map(row => row.name), documents.map(row => row.name), 'order is preserved');
+  for (const batch of batches) {
+    assert.ok(batch.length <= MAX_DOCUMENTS, 'a batch never exceeds the service document ceiling');
+    assert.ok(JSON.stringify(batch).length <= MAX_BODY_BYTES, 'a batch never exceeds the service byte ceiling');
+  }
+
+  // A small selection stays a single file; batching must not fragment it.
+  assert.equal(planPdfBatches(documents.slice(0, 3)).length, 1);
+  assert.equal(planPdfBatches([]).length, 0);
+
+  // One document larger than the budget still goes out, so the service can
+  // answer with a reason instead of the client silently dropping it.
+  const huge = [{ name: 'ضخم', filler: 'x'.repeat(2_000_000) }];
+  assert.equal(planPdfBatches(huge).flat().length, 1);
+});
+
+test('the supervisor code releases the whole selection; a wrong code does not', () => {
+  assert.ok(matchesSupervisorCode('2008'));
+  assert.ok(matchesSupervisorCode('٢٠٠٨'), 'Arabic-Indic digits are accepted');
+  assert.ok(matchesSupervisorCode(' 2008 '));
+  for (const wrong of ['', '2007', '20080', 'abcd', null, undefined]) {
+    assert.ok(!matchesSupervisorCode(wrong), `refused: ${wrong}`);
+  }
+  // The code is a convenience gate over a confirmation prompt, not an
+  // authorisation boundary: an employee id that happens to be 2008 still
+  // matches its own member, and the server session still governs access.
+  assert.ok(matchesEmployeeId('٢٠٠٨', '2008'));
 });
